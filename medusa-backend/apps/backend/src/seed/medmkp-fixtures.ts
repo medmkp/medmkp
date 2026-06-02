@@ -1,0 +1,127 @@
+export const medmkpSuppliers = [
+  {
+    id: "msup_integrated_medical",
+    name: "Integrated Medical",
+    slug: "integrated-medical",
+    website_url: "https://integratedmedicalonline.com",
+    support_email: "orders@integratedmedical.example",
+    onboarding_status: "approved",
+    ein_last_four: "4821",
+    certification_summary: "PT, rehab, and clinical therapy supplies distributor",
+    default_lead_time_days: 4,
+    ach_enabled: true,
+  },
+  {
+    id: "msup_therapy_direct",
+    name: "Therapy Direct Supply",
+    slug: "therapy-direct-supply",
+    website_url: "https://example.com/therapy-direct",
+    support_email: "quotes@therapydirect.example",
+    onboarding_status: "in_review",
+    ein_last_four: "1934",
+    certification_summary: "Rehab consumables and durable therapy equipment",
+    default_lead_time_days: 6,
+    ach_enabled: false,
+  },
+]
+
+export const medmkpCatalogItems = [
+  {
+    id: "mcat_resistance_bands_blue",
+    supplier_id: "msup_integrated_medical",
+    sku: "IM-THERA-BAND-BLUE-50YD",
+    manufacturer: "TheraBand",
+    brand: "TheraBand",
+    name: "Resistance Band Roll, Blue, 50 yd",
+    category: "Therapy Supplies",
+    unit_of_measure: "roll",
+    unit_price_cents: 5999,
+    comparable_score: 97,
+    lead_time_days: 3,
+    inventory_status: "in_stock",
+    exact_brand_required: false,
+  },
+  {
+    id: "mcat_cold_pack_standard",
+    supplier_id: "msup_integrated_medical",
+    sku: "IM-CP-STD-12",
+    manufacturer: "Core Products",
+    brand: "Core",
+    name: "Reusable Cold Pack, Standard, Case of 12",
+    category: "Hot & Cold Therapy",
+    unit_of_measure: "case",
+    unit_price_cents: 8425,
+    comparable_score: 91,
+    lead_time_days: 4,
+    inventory_status: "limited",
+    exact_brand_required: false,
+  },
+  {
+    id: "mcat_exam_gloves_nitrile",
+    supplier_id: "msup_therapy_direct",
+    sku: "TD-NITRILE-MED-1000",
+    manufacturer: "Aurelia",
+    brand: "Aurelia",
+    name: "Nitrile Exam Gloves, Medium, 1,000 ct",
+    category: "Clinical Consumables",
+    unit_of_measure: "case",
+    unit_price_cents: 11900,
+    comparable_score: 88,
+    lead_time_days: 6,
+    inventory_status: "in_stock",
+    exact_brand_required: true,
+  },
+]
+
+export const medmkpRequests = [
+  {
+    id: "mpr_northline_rehab_june",
+    buyer_name: "Northline Rehab",
+    buyer_facility_type: "rehab",
+    buyer_email: "ops@northlinerehab.example",
+    status: "quoted",
+    source_file_name: "northline-june-reorder.pdf",
+    item_count: 6,
+    target_savings_percent: 12,
+    notes: "Buyer is flexible on commodity therapy supplies but wants exact nitrile glove brand.",
+  },
+]
+
+export const medmkpQuotes = [
+  {
+    id: "mq_northline_best_value",
+    procurement_request_id: "mpr_northline_rehab_june",
+    supplier_id: "msup_integrated_medical",
+    status: "sent",
+    subtotal_cents: 128450,
+    estimated_shipping_cents: 1795,
+    platform_fee_cents: 3854,
+    estimated_savings_cents: 18420,
+    lead_time_days: 4,
+    replacement_policy: "concierge_recommended",
+  },
+]
+
+export const medmkpCategories = [
+  {
+    id: "therapy-supplies",
+    name: "Therapy Supplies",
+    best_value_item_id: "mcat_resistance_bands_blue",
+    supplier_count: 2,
+    reorder_frequency: "monthly",
+  },
+  {
+    id: "hot-cold-therapy",
+    name: "Hot & Cold Therapy",
+    best_value_item_id: "mcat_cold_pack_standard",
+    supplier_count: 1,
+    reorder_frequency: "monthly",
+  },
+  {
+    id: "clinical-consumables",
+    name: "Clinical Consumables",
+    best_value_item_id: "mcat_exam_gloves_nitrile",
+    supplier_count: 2,
+    reorder_frequency: "weekly",
+  },
+]

@@ -540,6 +540,7 @@ kbd {
 }
 
 .form-card input,
+.file-input,
 .form-card select {
   min-width: 0;
   min-height: 42px;
@@ -550,8 +551,30 @@ kbd {
   color: var(--ink);
 }
 
+.file-input {
+  width: min(420px, 100%);
+  padding: 10px;
+}
+
 .extracted-preview {
   margin-top: 18px;
+}
+
+.request-picker {
+  margin-top: 18px;
+}
+
+.request-picker label {
+  display: grid;
+  max-width: 520px;
+  gap: 6px;
+  color: #46536d;
+  font-weight: 800;
+}
+
+.request-picker select {
+  min-height: 42px;
+  padding: 0 10px;
 }
 
 .status-chip {

@@ -2,7 +2,13 @@
 
 MedMKP is an early B2B medical-supply marketplace prototype for PT, chiro, and rehab offices.
 
-The MVP currently runs as a dependency-free browser app:
+The MVP currently has three layers:
+
+- A dependency-free browser demo in `index.html`.
+- A Next.js prototype in `app/` with file-backed upload intake.
+- A Medusa v2 backend scaffold in `medusa-backend/` for the marketplace buildout.
+
+The clickable demo includes:
 
 - Six-screen concierge procurement flow based on Sean's sketch.
 - Landing page for the core promise: upload an invoice and get a better reorder quote.
@@ -23,6 +29,26 @@ python3 -m http.server 5173
 ```
 
 Then visit `http://localhost:5173`.
+
+Run the Next.js prototype:
+
+```bash
+npm run dev
+```
+
+Run or build the Medusa backend:
+
+```bash
+cd medusa-backend/apps/backend
+npm run build
+```
+
+The Medusa backend was scaffolded with database setup skipped. Its first MedMKP
+routes are fixture-backed until we add local Postgres migrations:
+
+- `GET /store/medmkp/categories`
+- `GET /admin/medmkp/requests`
+- `GET /admin/medmkp/quotes`
 
 ## Product Direction
 
