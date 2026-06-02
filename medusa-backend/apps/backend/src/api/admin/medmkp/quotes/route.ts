@@ -1,39 +1,53 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { MEDMKP_MODULE } from "../../../../modules/medmkp"
+import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import {
   medmkpCatalogItems,
   medmkpQuotes,
   medmkpSuppliers,
 } from "../../../../seed/medmkp-fixtures"
 
-export async function GET(_req: MedusaRequest, res: MedusaResponse) {
+export async function GET(req: MedusaRequest, res: MedusaResponse) {
+  const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
+  const [dbQuotes, dbItems, dbSuppliers] = await Promise.all([
+    medmkp.listQuotes(),
+    medmkp.listCatalogItems(),
+    medmkp.listSuppliers(),
+  ])
+  const quotes = dbQuotes.length ? dbQuotes : medmkpQuotes
+  const catalogItems = dbItems.length ? dbItems : medmkpCatalogItems
+  const suppliers = dbSuppliers.length ? dbSuppliers : medmkpSuppliers
+
   res.json({
-    quotes: medmkpQuotes.map((quote) => ({
+    quotes: quotes.map((quote) => ({
       ...quote,
-      supplier: medmkpSuppliers.find((supplier) => supplier.id === quote.supplier_id),
-      line_items: medmkpCatalogItems.slice(0, 3),
+      supplier: suppliers.find((supplier) => supplier.id === quote.supplier_id),
+      line_items: catalogItems.slice(0, 3),
     })),
   })
 }
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
+  const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
   const body = (req.body ?? {}) as {
     procurement_request_id?: string
     supplier_id?: string
   }
+  const quote = await medmkp.createQuotes({
+    id: `mq_demo_${Date.now()}`,
+    procurement_request_id:
+      body.procurement_request_id ?? "mpr_northline_rehab_june",
+    supplier_id: body.supplier_id ?? "msup_integrated_medical",
+    status: "draft",
+    subtotal_cents: 0,
+    estimated_shipping_cents: 0,
+    platform_fee_cents: 0,
+    estimated_savings_cents: 0,
+    lead_time_days: 0,
+    replacement_policy: "buyer_flexible",
+  })
 
   res.status(202).json({
-    quote: {
-      id: `mq_demo_${Date.now()}`,
-      procurement_request_id:
-        body.procurement_request_id ?? "mpr_northline_rehab_june",
-      supplier_id: body.supplier_id ?? "msup_integrated_medical",
-      status: "draft",
-      subtotal_cents: 0,
-      estimated_shipping_cents: 0,
-      platform_fee_cents: 0,
-      estimated_savings_cents: 0,
-      lead_time_days: 0,
-      replacement_policy: "buyer_flexible",
-    },
+    quote,
   })
 }

@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: medmkp-medusa
+    runtime: node
+    repo: https://github.com/demuizon/medmkp-demo
+    branch: main
+    rootDir: medusa-backend
+    plan: starter
+    buildCommand: npm install && npm run build --workspace=@dtc/backend
+    preDeployCommand: npm run db:migrate --workspace=@dtc/backend
+    startCommand: npm run start:render --workspace=@dtc/backend
+    healthCheckPath: /medmkp/categories
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MEDUSA_ADMIN_ONBOARDING_TYPE
+        value: default
+      - key: DATABASE_URL
+        fromDatabase:
+          name: medmkp-postgres
+          property: connectionString
+      - key: STORE_CORS
+        value: https://medmkp-demo.vercel.app,http://localhost:3000,http://localhost:3001
+      - key: ADMIN_CORS
+        value: https://medmkp-medusa.onrender.com,https://medmkp-demo.vercel.app,http://localhost:9000,http://localhost:3000,http://localhost:3001
+      - key: AUTH_CORS
+        value: https://medmkp-medusa.onrender.com,https://medmkp-demo.vercel.app,http://localhost:9000,http://localhost:3000,http://localhost:3001
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: AUTH_MFA_ENCRYPTION_KEY
+        generateValue: true
+
+databases:
+  - name: medmkp-postgres
+    plan: basic-256mb
+    databaseName: medmkp_medusa
+    user: medmkp
+    postgresMajorVersion: "16"

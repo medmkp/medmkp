@@ -112,6 +112,9 @@ export default function Home() {
   const [orderStep, setOrderStep] = useState(1);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [catalog, setCatalog] = useState([]);
+  const [catalogSource, setCatalogSource] = useState("loading");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetch("/api/requests")
@@ -119,6 +122,19 @@ export default function Home() {
       .then(({ requests: nextRequests }) => {
         setRequests(nextRequests);
         setSelectedRequestId(nextRequests[0]?.id || null);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/catalog")
+      .then((response) => response.json())
+      .then(({ categories, source }) => {
+        setCatalog(categories || []);
+        setCatalogSource(source || "unknown");
+      })
+      .catch(() => {
+        setCatalog([]);
+        setCatalogSource("unavailable");
       });
   }, []);
 
@@ -130,6 +146,20 @@ export default function Home() {
   const quoteTotal = sumSelected(lineItems);
   const previousTotal = sumPrevious(lineItems);
   const savings = Math.max(previousTotal - quoteTotal, 0);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const catalogMatches = useMemo(() => {
+    if (!catalog.length) return [];
+
+    if (!normalizedSearch) return catalog.slice(0, 5);
+
+    return catalog.filter((category) => {
+      const item = category.best_value_item || {};
+      return [category.name, item.name, item.supplier_name, item.sku]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+    });
+  }, [catalog, normalizedSearch]);
+  const catalogViewItems = normalizedSearch ? catalogMatches : catalog;
 
   function setView(nextView) {
     setViewState(nextView);
@@ -170,6 +200,7 @@ export default function Home() {
 
   const navItems = [
     ["landing", "icon-home", "Dashboard"],
+    ["catalog", "icon-search", "Catalog"],
     ["upload", "icon-file-plus", "Requests"],
     ["quote", "icon-file-text", "Quotes"],
     ["order", "icon-clipboard", "Orders"],
@@ -199,7 +230,7 @@ export default function Home() {
 
           <nav className="nav-tabs" aria-label="Primary navigation">
             {navItems.map(([target, icon, label], index) => (
-              <button key={`${label}-${index}`} className={`nav-tab ${view === target && index < 6 ? "active" : ""}`} onClick={() => setView(target)}>
+              <button key={`${label}-${index}`} className={`nav-tab ${view === target ? "active" : ""}`} onClick={() => setView(target)}>
                 <Icon name={icon} />
                 <strong>{label}</strong>
               </button>
@@ -224,10 +255,22 @@ export default function Home() {
           <section className="topbar">
             <label className="global-search">
               <Icon name="icon-search" className="search-icon" />
-              <input type="search" placeholder="Search requests, buyers, suppliers, invoices..." />
+              <input
+                type="search"
+                placeholder="Search therapy bands, gloves, electrodes..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
               <kbd>⌘ K</kbd>
             </label>
+            {normalizedSearch && (
+              <SearchResults
+                results={catalogMatches}
+                onViewCatalog={() => setView("catalog")}
+              />
+            )}
             <div className="topbar-actions">
+              <button className="secondary-action compact" onClick={() => setView("catalog")}>Catalog</button>
               <button className="secondary-action compact" onClick={() => setView("admin")}>Admin Queue</button>
               <button className="primary-action compact" data-testid="topbar-new-upload" onClick={() => setView("upload")}>New Upload</button>
             </div>
@@ -283,6 +326,23 @@ export default function Home() {
                 <div><strong>3</strong><span>Suppliers respond</span></div>
                 <div><strong>4</strong><span>Buyer approves</span></div>
               </div>
+
+              <CatalogExplorer
+                catalog={catalogMatches}
+                source={catalogSource}
+                hasSearch={Boolean(normalizedSearch)}
+              />
+            </section>
+          )}
+
+          {view === "catalog" && (
+            <section className="view active" aria-labelledby="catalogPageHeading">
+              <CatalogExplorer
+                catalog={catalogViewItems}
+                source={catalogSource}
+                hasSearch={Boolean(normalizedSearch)}
+                titleId="catalogPageHeading"
+              />
             </section>
           )}
 
@@ -554,6 +614,88 @@ function RequestPicker({ requests, selectedRequestId, onSelect }) {
           ))}
         </select>
       </label>
+    </div>
+  );
+}
+
+function CatalogExplorer({ catalog, source, hasSearch, titleId = "catalogHeading" }) {
+  return (
+    <section className="catalog-panel" aria-labelledby={titleId}>
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Canonical Catalog</p>
+          <h2 id={titleId}>{hasSearch ? "Search results" : "PT/Rehab reorder categories"}</h2>
+          <p>Buyer-facing products are canonical. Supplier-specific SKUs sit underneath as best-value offers.</p>
+        </div>
+        <span className={`status-chip ${source === "medusa" ? "success" : "warning"}`}>
+          {source === "medusa" ? "Medusa live" : "Fallback catalog"}
+        </span>
+      </div>
+
+      <div className="catalog-grid">
+        {catalog.map((category) => {
+          const item = category.best_value_item || {};
+          const price = typeof item.unit_price_cents === "number"
+            ? money.format(item.unit_price_cents / 100)
+            : "Price pending";
+
+          return (
+            <article className="catalog-card" key={category.id}>
+              <div>
+                <span className="catalog-category">{category.name}</span>
+                <h3>{item.name || category.name}</h3>
+              </div>
+              <div className="catalog-meta">
+                <span>{category.supplier_count || 0} supplier{category.supplier_count === 1 ? "" : "s"}</span>
+                <span>{item.inventory_status?.replace("_", " ") || "stock unknown"}</span>
+                <span>{item.lead_time_days ? `${item.lead_time_days} days` : "lead time pending"}</span>
+              </div>
+              <div className="catalog-offer">
+                <span>Best value</span>
+                <strong>{price}</strong>
+              </div>
+              <p>{item.supplier_name || "Supplier pending"}</p>
+            </article>
+          );
+        })}
+      </div>
+
+      {!catalog.length && (
+        <div className="empty-state">
+          <strong>No matching products</strong>
+          <span>Try therapy bands, gloves, tape, electrodes, or foam rollers.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SearchResults({ results, onViewCatalog }) {
+  return (
+    <div className="search-results" role="region" aria-label="Catalog search results">
+      <div className="search-results-header">
+        <strong>{results.length ? "Matching catalog products" : "No catalog matches"}</strong>
+        <button type="button" onClick={onViewCatalog}>View catalog</button>
+      </div>
+      {results.slice(0, 5).map((category) => {
+        const item = category.best_value_item || {};
+        const price = typeof item.unit_price_cents === "number"
+          ? money.format(item.unit_price_cents / 100)
+          : "Price pending";
+
+        return (
+          <button className="search-result" type="button" key={category.id} onClick={onViewCatalog}>
+            <span>
+              <strong>{item.name || category.name}</strong>
+              <small>{category.name} · {item.supplier_name || "Supplier pending"}</small>
+            </span>
+            <em>{price}</em>
+          </button>
+        );
+      })}
+      {!results.length && (
+        <p>Try therapy bands, gloves, tape, electrodes, or foam rollers.</p>
+      )}
     </div>
   );
 }

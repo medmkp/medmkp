@@ -3,6 +3,9 @@ import { model } from "@medusajs/framework/utils"
 const CatalogItem = model.define("medmkp_catalog_item", {
   id: model.id({ prefix: "mcat" }).primaryKey(),
   supplier_id: model.text().searchable(),
+  medusa_product_handle: model.text().searchable(),
+  canonical_name: model.text().searchable(),
+  canonical_category: model.text().searchable(),
   sku: model.text().searchable(),
   manufacturer: model.text().searchable(),
   brand: model.text().searchable(),
