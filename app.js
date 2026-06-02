@@ -155,7 +155,13 @@ function setView(view) {
 
   document.querySelectorAll(".view").forEach((section) => section.classList.remove("active"));
   byId(`${view}View`).classList.add("active");
+  closeMobileMenu();
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function closeMobileMenu() {
+  document.body.classList.remove("menu-open");
+  document.querySelector("[data-menu-toggle]")?.setAttribute("aria-expanded", "false");
 }
 
 function renderExtractedRows() {
@@ -263,6 +269,11 @@ function showToast(message) {
 }
 
 function bindEvents() {
+  document.querySelector("[data-menu-toggle]").addEventListener("click", () => {
+    const isOpen = document.body.classList.toggle("menu-open");
+    document.querySelector("[data-menu-toggle]").setAttribute("aria-expanded", String(isOpen));
+  });
+
   document.querySelectorAll("[data-view], [data-view-link]").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view || button.dataset.viewLink));
   });
