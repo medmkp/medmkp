@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MedMKP MVP</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div>
+            <h1>MedMKP</h1>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Primary">
+          <button class="nav-tab active" data-view="buyer" title="Buyer marketplace">
+            <span>⌂</span>
+            <strong>Dashboard</strong>
+          </button>
+          <button class="nav-tab" data-view="seller" title="Seller workspace">
+            <span>▦</span>
+            <strong>Suppliers</strong>
+          </button>
+          <button class="nav-tab" data-view="admin" title="Catalog operations">
+            <span>□</span>
+            <strong>Catalog Ops</strong>
+          </button>
+        </nav>
+
+        <button class="upload-button" title="Upload invoice">⇧ Upload Invoice</button>
+
+        <div class="org-panel">
+          <div class="avatar">AK</div>
+          <div>
+            <h2>Alex Kim</h2>
+            <p>Operations Director</p>
+          </div>
+        </div>
+      </aside>
+
+      <main>
+        <section class="topbar">
+          <label class="global-search">
+            <span>⌕</span>
+            <input type="search" placeholder="Search requests, buyers, suppliers, invoices..." />
+            <kbd>⌘ K</kbd>
+          </label>
+          <div class="topbar-actions">
+            <button class="icon-button" id="clearCart" title="Clear cart">⌫</button>
+            <button class="cart-button" data-view-link="buyer" title="Cart">
+              <span>Cart</span>
+              <strong id="cartCount">0</strong>
+            </button>
+          </div>
+        </section>
+
+        <section class="view active" id="buyerView" aria-labelledby="buyerHeading">
+          <div class="section-heading first">
+            <div>
+              <h2 id="viewTitle">Find the best clinical supplies</h2>
+              <p>Compare vetted supplier offers and draft cleaner buy orders.</p>
+            </div>
+            <button class="primary-action compact">+ New Request</button>
+          </div>
+          <div class="buyer-layout">
+            <section class="market-column">
+              <div class="search-row">
+                <label class="search-box">
+                  <span>⌕</span>
+                  <input id="searchInput" type="search" placeholder="Search tape, bands, electrodes..." />
+                </label>
+                <select id="categoryFilter" aria-label="Category filter"></select>
+                <select id="sortSelect" aria-label="Sort products">
+                  <option value="best">Best match</option>
+                  <option value="price">Lowest price</option>
+                  <option value="delivery">Fastest delivery</option>
+                  <option value="rating">Seller rating</option>
+                </select>
+              </div>
+
+              <div class="signal-strip">
+                <div>
+                  <strong id="resultCount">0</strong>
+                  <span>matched products</span>
+                </div>
+                <div>
+                  <strong>18%</strong>
+                  <span>avg savings vs last order</span>
+                </div>
+                <div>
+                  <strong>2.1d</strong>
+                  <span>median delivery</span>
+                </div>
+              </div>
+
+              <div id="productGrid" class="product-grid"></div>
+            </section>
+
+            <aside class="decision-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Request Builder</p>
+                  <h3>Draft cart</h3>
+                </div>
+                <span id="cartTotal">$0.00</span>
+              </div>
+              <div id="cartItems" class="cart-items"></div>
+              <div class="approval-box">
+                <div>
+                  <strong>Approval rule</strong>
+                  <p>Orders over $500 require clinic manager approval.</p>
+                </div>
+                <span id="approvalState">Ready</span>
+              </div>
+              <button class="primary-action" id="submitOrder">Submit buy order</button>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="sellerView" aria-labelledby="sellerHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="sellerHeading">Manage offers and fulfillment</h2>
+              <p>Monitor active offers, delivery promises, and catalog review status.</p>
+            </div>
+            <button class="primary-action compact" id="addOffer">Add offer</button>
+          </div>
+          <div class="seller-grid">
+            <div class="metric-band">
+              <div><strong>$18.4k</strong><span>30-day GMV</span></div>
+              <div><strong>97%</strong><span>on-time shipments</span></div>
+              <div><strong>14</strong><span>active offers</span></div>
+              <div><strong>3</strong><span>catalog fixes needed</span></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Offer</th>
+                    <th>Stock</th>
+                    <th>Price</th>
+                    <th>Delivery</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="sellerRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="adminView" aria-labelledby="adminHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="adminHeading">Normalize products before they go live</h2>
+              <p>Keep seller SKUs mapped to canonical products so buyers can compare cleanly.</p>
+            </div>
+            <button class="secondary-action" id="approveAll">Approve clean matches</button>
+          </div>
+          <div class="admin-layout">
+            <div class="queue-list" id="adminQueue"></div>
+            <div class="ops-panel">
+              <p class="eyebrow">Marketplace Rule</p>
+              <h3>Canonical product first</h3>
+              <p>
+                Buyers compare offers against one normalized product record. Sellers own price,
+                stock, delivery promises, and compliance documents.
+              </p>
+              <div class="flow-diagram">
+                <span>Seller SKU</span>
+                <span>→</span>
+                <span>Canonical Product</span>
+                <span>→</span>
+                <span>Comparable Offer</span>
+                <span>→</span>
+                <span>Buy Order</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
