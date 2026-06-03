@@ -289,7 +289,7 @@ use one of these matching configurations:
 
 ```text
 Root directory: medusa-backend
-Build command: npm install && npm run build --workspace=@dtc/backend
+Build command: npm ci --include=dev && npm run build --workspace=@dtc/backend
 Start command: npm run start --workspace=@dtc/backend
 ```
 
@@ -311,6 +311,10 @@ medusa start --host 0.0.0.0 --port ${PORT:-9000}
 If the Render deploy builds successfully but the web service times out, check
 the start command first. A plain `medusa start` defaults to port `9000`, while
 Render expects the process to listen on its injected `$PORT`.
+
+The Medusa backend is pinned to Node `20.x`. If Render logs show Node `26.x`,
+redeploy from the latest `main` commit or set `NODE_VERSION=20` on the Render
+web service.
 
 Create a Medusa admin user after the first deploy:
 

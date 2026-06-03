@@ -59,7 +59,7 @@
     "yalc": "^1.0.0-pre.53"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "packageManager": "npm@11.12.1"
 }
