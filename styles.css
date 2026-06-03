@@ -953,6 +953,97 @@ kbd {
   white-space: nowrap;
 }
 
+.recommendation-panel {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.recommendation-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: start;
+}
+
+.recommendation-hero h3 {
+  max-width: 760px;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.recommendation-hero p {
+  max-width: 760px;
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.recommendation-total {
+  display: grid;
+  min-width: 190px;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.recommendation-total span,
+.recommendation-stats span,
+.recommendation-path span {
+  color: var(--muted);
+}
+
+.recommendation-total strong {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+
+.recommendation-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recommendation-stats div,
+.recommendation-path div {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.recommendation-stats strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 24px;
+}
+
+.recommendation-path {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recommendation-path strong {
+  display: block;
+  font-size: 22px;
+}
+
+.recommendation-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .draft-review {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
@@ -991,7 +1082,29 @@ kbd {
 
 .draft-item > div:first-child {
   display: grid;
-  gap: 4px;
+  gap: 5px;
+}
+
+.draft-item-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.draft-item-title .status-chip {
+  flex: 0 0 auto;
+}
+
+.draft-item small,
+.draft-item em {
+  color: var(--muted);
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.draft-item em {
+  font-size: 12px;
 }
 
 .draft-item span,
@@ -1821,6 +1934,16 @@ th {
 
   .draft-confirm {
     align-items: stretch;
+  }
+
+  .recommendation-hero,
+  .recommendation-stats,
+  .recommendation-path {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendation-actions {
+    justify-content: stretch;
   }
 
   .draft-submitted {

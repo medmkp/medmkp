@@ -7,9 +7,9 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const PROCESSING_DURATION_MS = 3000;
 const UPLOAD_WIZARD_STEPS = [
   { key: "upload", label: "Upload" },
+  { key: "recommendation", label: "Recommendation" },
   { key: "review", label: "Review" },
-  { key: "confirm", label: "Confirm" },
-  { key: "submitted", label: "Submitted" },
+  { key: "submit", label: "Submit" },
 ];
 
 const suppliers = [
@@ -42,6 +42,19 @@ function sumSelected(lineItems) {
 
 function sumPrevious(lineItems) {
   return lineItems.reduce((total, item) => total + item.oldUnitPrice * item.qty, 0);
+}
+
+function recommendationLabel(matchType) {
+  if (matchType === "exact") return "Exact match";
+  if (matchType === "equivalent") return "Equivalent match";
+  if (matchType === "substitute") return "Better-value substitute";
+  return "Needs decision";
+}
+
+function recommendationClass(matchType) {
+  if (matchType === "needs_review") return "warning";
+  if (matchType === "substitute" || matchType === "equivalent") return "info";
+  return "success";
 }
 
 function wait(ms) {
@@ -141,6 +154,7 @@ export default function Home() {
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [showInvoiceSources, setShowInvoiceSources] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [orderSubmitted, setOrderSubmitted] = useState(false);
   const [draftItems, setDraftItems] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [catalogSource, setCatalogSource] = useState("loading");
@@ -201,6 +215,18 @@ export default function Home() {
   const visibleDraftItems = draftItems.filter((item) => item.documentIds.some((documentId) => uploadedDocs.some((doc) => doc.id === documentId)));
   const activeDraftItems = visibleDraftItems.filter((item) => item.included);
   const draftTotal = activeDraftItems.reduce((total, item) => total + item.draftQty * item.selected.unitPrice, 0);
+  const draftPreviousTotal = activeDraftItems.reduce((total, item) => total + item.draftQty * item.oldUnitPrice, 0);
+  const draftSavings = Math.max(draftPreviousTotal - draftTotal, 0);
+  const recommendationStats = {
+    matchedItems: visibleDraftItems.length,
+    exactMatches: visibleDraftItems.filter((item) => item.recommendation?.matchType === "exact").length,
+    substitutions: visibleDraftItems.filter((item) => ["equivalent", "substitute"].includes(item.recommendation?.matchType)).length,
+    needsReview: visibleDraftItems.filter((item) => item.recommendation?.matchType === "needs_review").length,
+    averageConfidence: visibleDraftItems.length
+      ? Math.round(visibleDraftItems.reduce((total, item) => total + (item.recommendation?.confidence || 0), 0) / visibleDraftItems.length * 100)
+      : 0,
+    deliveryEstimate: visibleDraftItems.some((item) => item.recommendation?.matchType === "needs_review") ? "3-5 days" : "2-4 days",
+  };
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const catalogMatches = useMemo(() => {
     if (!catalog.length) return [];
@@ -276,7 +302,8 @@ export default function Home() {
     setRequests((current) => [request, ...current]);
     setSelectedRequestId(request.id);
     setHasUploadedInvoice(true);
-    setUploadStep("review");
+    setOrderSubmitted(false);
+    setUploadStep("recommendation");
     setUploadedDocs((docs) => [
       ...docs,
       {
@@ -365,7 +392,7 @@ export default function Home() {
       setUploadStep("upload");
       setSelectedInvoiceName("");
       setShowInvoiceSources(false);
-    } else if (uploadStep === "confirm") {
+    } else if (uploadStep === "submit") {
       setUploadStep("review");
     }
   }
@@ -378,6 +405,7 @@ export default function Home() {
     setSelectedInvoiceName("");
     setShowInvoiceSources(false);
     setSubmittingOrder(false);
+    setOrderSubmitted(false);
     uploadFormRef.current?.reset();
   }
 
@@ -387,7 +415,7 @@ export default function Home() {
     setSubmittingOrder(true);
     window.setTimeout(() => {
       setSubmittingOrder(false);
-      setUploadStep("submitted");
+      setOrderSubmitted(true);
       setOrderStep(2);
       showToast("Order submitted");
     }, 900);
@@ -552,7 +580,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {uploadStep !== "submitted" && (
+              {!orderSubmitted && (
                 <>
                   <form ref={uploadFormRef} onSubmit={handleUpload} className={`upload-layout ${hasUploadedInvoice ? "compact-upload" : ""}`}>
                     <div
@@ -609,14 +637,24 @@ export default function Home() {
                 </>
               )}
 
+              {uploadStep === "recommendation" && (
+                <RecommendationSummary
+                  stats={recommendationStats}
+                  total={draftTotal}
+                  savings={draftSavings}
+                  sourceCount={uploadedDocs.length}
+                  onReview={() => setUploadStep("review")}
+                />
+              )}
+
               {uploadStep === "review" && (
                 <DraftOrderReview
                   items={visibleDraftItems}
                   activeItems={activeDraftItems}
                   total={draftTotal}
-                  onBack={() => setUploadStep("upload")}
+                  onBack={() => setUploadStep("recommendation")}
                   onApprove={() => {
-                    setUploadStep("confirm");
+                    setUploadStep("submit");
                     showToast("Draft order ready");
                   }}
                   onRemove={removeDraftItem}
@@ -624,7 +662,7 @@ export default function Home() {
                 />
               )}
 
-              {uploadStep === "confirm" && (
+              {uploadStep === "submit" && !orderSubmitted && (
                 <DraftOrderConfirm
                   activeItems={activeDraftItems}
                   total={draftTotal}
@@ -635,7 +673,7 @@ export default function Home() {
                 />
               )}
 
-              {uploadStep === "submitted" && (
+              {orderSubmitted && (
                 <DraftOrderSubmitted
                   activeItems={activeDraftItems}
                   total={draftTotal}
@@ -995,6 +1033,63 @@ function SearchResults({ results, onViewCatalog }) {
   );
 }
 
+function RecommendationSummary({ stats, total, savings, sourceCount, onReview }) {
+  const hasSavings = savings > 0;
+  const summaryCards = [
+    { label: "items matched", value: stats.matchedItems },
+    { label: "estimated savings", value: hasSavings ? money.format(savings) : "Best price" },
+    { label: "recommendation confidence", value: `${stats.averageConfidence}%` },
+    { label: "delivery estimate", value: stats.deliveryEstimate },
+  ];
+
+  return (
+    <section className="recommendation-panel" aria-labelledby="recommendationHeading">
+      <div className="recommendation-hero">
+        <div>
+          <p className="eyebrow">Recommendation Built</p>
+          <h3 id="recommendationHeading">We found the best reorder path from {sourceCount} invoice source{sourceCount === 1 ? "" : "s"}.</h3>
+          <p>
+            medMKP matched your prior purchases, found better-value options where appropriate,
+            and kept the items needing attention separate.
+          </p>
+        </div>
+        <div className="recommendation-total">
+          <span>Recommended total</span>
+          <strong>{money.format(total)}</strong>
+        </div>
+      </div>
+
+      <div className="recommendation-stats">
+        {summaryCards.map((card) => (
+          <div key={card.label}>
+            <strong>{card.value}</strong>
+            <span>{card.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="recommendation-path">
+        <div>
+          <strong>{stats.exactMatches}</strong>
+          <span>exact product match{stats.exactMatches === 1 ? "" : "es"}</span>
+        </div>
+        <div>
+          <strong>{stats.substitutions}</strong>
+          <span>recommended lower-cost equivalent{stats.substitutions === 1 ? "" : "s"}</span>
+        </div>
+        <div>
+          <strong>{stats.needsReview}</strong>
+          <span>item{stats.needsReview === 1 ? "" : "s"} needing buyer decision</span>
+        </div>
+      </div>
+
+      <div className="recommendation-actions">
+        <button className="primary-action compact" type="button" onClick={onReview}>Review recommendation</button>
+      </div>
+    </section>
+  );
+}
+
 function InvoiceSourcesModal({ docs, onClose, onRemove }) {
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -1043,8 +1138,15 @@ function DraftOrderReview({ items, activeItems, total, onBack, onApprove, onRemo
           {items.map((item) => (
             <article className={`draft-item ${item.included ? "" : "removed"}`} key={item.product}>
               <div>
-                <strong>{item.product}</strong>
-                <span>{item.extractedFrom} · {item.selected.supplier}</span>
+                <div className="draft-item-title">
+                  <strong>{item.product}</strong>
+                  <span className={`status-chip ${recommendationClass(item.recommendation?.matchType)}`}>
+                    {recommendationLabel(item.recommendation?.matchType)}
+                  </span>
+                </div>
+                <span>{item.recommendation?.priorProductName || item.extractedFrom} → {item.recommendation?.recommendedProductName || item.product}</span>
+                <small>{item.recommendation?.recommendationReason || item.selected.reason}</small>
+                <em>{item.recommendation?.shippingEstimate || "2-4 days"} · {item.recommendation?.supplierReliability || "95% on-time"} · {item.recommendation?.qualitySignal || "Vetted product"}</em>
               </div>
               <div className="qty-control">
                 <button type="button" disabled={!item.included} onClick={() => onQtyChange(item.product, item.draftQty - 1)} aria-label={`Decrease ${item.product} quantity`}>-</button>
@@ -1082,7 +1184,7 @@ function DraftOrderConfirm({ activeItems, total, sourceCount, onBack, onSubmit, 
   return (
     <div className="draft-confirm">
       <div>
-        <p className="eyebrow">Confirm Order</p>
+        <p className="eyebrow">Submit Order</p>
         <h3>Order assembled from {sourceCount} invoice{sourceCount === 1 ? "" : "s"}</h3>
         <p>Review the final total, then submit this order to medMKP for supplier fulfillment.</p>
       </div>
