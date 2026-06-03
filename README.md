@@ -289,7 +289,7 @@ use one of these matching configurations:
 
 ```text
 Root directory: medusa-backend
-Build command: npm ci --include=dev --no-audit --no-fund --loglevel=info && npm run build --workspace=@dtc/backend
+Build command: npm ci --include=dev --no-audit --no-fund --loglevel=info --foreground-scripts && npm run build --workspace=@dtc/backend
 Start command: npm run start --workspace=@dtc/backend
 ```
 

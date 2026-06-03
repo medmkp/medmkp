@@ -6,7 +6,7 @@ services:
     branch: main
     rootDir: medusa-backend
     plan: starter
-    buildCommand: npm ci --include=dev --no-audit --no-fund --loglevel=info && npm run build --workspace=@dtc/backend
+    buildCommand: npm ci --include=dev --no-audit --no-fund --loglevel=info --foreground-scripts && npm run build --workspace=@dtc/backend
     preDeployCommand: npm run db:migrate --workspace=@dtc/backend
     startCommand: npm run start:render --workspace=@dtc/backend
     healthCheckPath: /medmkp/categories
