@@ -31,6 +31,43 @@ const orderSteps = [
   { label: "Reorder reminder", detail: "Scheduled for 30 days" },
 ];
 
+const routeByView = {
+  landing: "/dashboard",
+  upload: "/uploads",
+  catalog: "/catalog",
+  admin: "/admin",
+  quote: "/quotes",
+  quoteBuilder: "/quotes/Q-2024-0517/build",
+  approval: "/quotes/Q-2024-0517/review",
+  order: "/orders",
+  orderDetail: "/orders/ORD-20481",
+  supplier: "/suppliers",
+  settings: "/settings",
+};
+
+function viewFromPath(pathname = "/") {
+  const path = pathname.replace(/\/+$/, "") || "/";
+
+  if (path === "/") return { view: "landing", isLoggedIn: false };
+  if (path === "/dashboard") return { view: "landing", isLoggedIn: true };
+  if (path === "/uploads") return { view: "upload", isLoggedIn: true };
+  if (path === "/catalog") return { view: "catalog", isLoggedIn: true };
+  if (path === "/admin") return { view: "admin", isLoggedIn: true };
+  if (path === "/quotes") return { view: "quote", isLoggedIn: true };
+  if (path.startsWith("/quotes/") && path.endsWith("/review")) return { view: "approval", isLoggedIn: true };
+  if (path.startsWith("/quotes/") && path.endsWith("/build")) return { view: "quoteBuilder", isLoggedIn: true };
+  if (path === "/orders") return { view: "order", isLoggedIn: true };
+  if (path.startsWith("/orders/")) return { view: "orderDetail", isLoggedIn: true };
+  if (path === "/suppliers") return { view: "supplier", isLoggedIn: true };
+  if (path === "/settings") return { view: "settings", isLoggedIn: true };
+
+  return { view: "landing", isLoggedIn: true };
+}
+
+function pathForView(view) {
+  return routeByView[view] || "/dashboard";
+}
+
 function statusClass(status) {
   if (status === "Parsed") return "success";
   if (status === "Alternative" || status === "Needs review") return "warning";
@@ -109,6 +146,30 @@ function IconSprite() {
         <path d="M8 18.5H6.8a4.3 4.3 0 0 1-.8-8.5 6 6 0 0 1 11.4-1.8A4.8 4.8 0 0 1 18 18.5h-2" />
         <path d="M12 19V11" />
         <path d="m8.5 14.5 3.5-3.5 3.5 3.5" />
+      </symbol>
+      <symbol id="icon-shield-check" viewBox="0 0 24 24">
+        <path d="M12 3.2 19 6v5.2c0 4.6-2.8 8.2-7 9.6-4.2-1.4-7-5-7-9.6V6l7-2.8Z" />
+        <path d="m8.7 12.2 2.1 2.1 4.5-4.8" />
+      </symbol>
+      <symbol id="icon-dollar-circle" viewBox="0 0 24 24">
+        <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+        <path d="M14.7 8.7c-.6-.5-1.5-.8-2.6-.8-1.7 0-2.8.8-2.8 2s1 1.7 2.8 2.1c1.8.4 2.8.9 2.8 2.2s-1.1 2.1-2.9 2.1c-1.2 0-2.2-.3-3-1" />
+        <path d="M12 6.5v11" />
+      </symbol>
+      <symbol id="icon-calendar" viewBox="0 0 24 24">
+        <path d="M6.5 4.5v3M17.5 4.5v3" />
+        <path d="M5 6.5h14A1.5 1.5 0 0 1 20.5 8v11A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V8A1.5 1.5 0 0 1 5 6.5Z" />
+        <path d="M3.5 10.5h17" />
+      </symbol>
+      <symbol id="icon-headset" viewBox="0 0 24 24">
+        <path d="M4.5 13.5V12a7.5 7.5 0 0 1 15 0v1.5" />
+        <path d="M6.5 12.8h-1A1.5 1.5 0 0 0 4 14.3V17a1.5 1.5 0 0 0 1.5 1.5h1v-5.7Z" />
+        <path d="M17.5 12.8h1A1.5 1.5 0 0 1 20 14.3V17a1.5 1.5 0 0 1-1.5 1.5h-1v-5.7Z" />
+        <path d="M17.5 18.5c0 1.3-1.1 2-2.4 2H13" />
+      </symbol>
+      <symbol id="icon-arrow-right" viewBox="0 0 24 24">
+        <path d="M5 12h14" />
+        <path d="m13 6 6 6-6 6" />
       </symbol>
       <symbol id="icon-store" viewBox="0 0 24 24">
         <path d="M4 10.5h16l-1.5-6h-13L4 10.5Z" />
@@ -285,6 +346,8 @@ export default function Home() {
   const [isDraggingInvoice, setIsDraggingInvoice] = useState(false);
   const [selectedInvoiceName, setSelectedInvoiceName] = useState("");
   const [hasUploadedInvoice, setHasUploadedInvoice] = useState(false);
+  const [uploadRailCollapsed, setUploadRailCollapsed] = useState(false);
+  const [neededByDate, setNeededByDate] = useState("");
   const [uploadStep, setUploadStep] = useState("upload");
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [showInvoiceSources, setShowInvoiceSources] = useState(false);
@@ -294,6 +357,20 @@ export default function Home() {
   const [catalog, setCatalog] = useState([]);
   const [catalogSource, setCatalogSource] = useState("loading");
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    function syncViewFromLocation() {
+      const nextRoute = viewFromPath(window.location.pathname);
+      setIsLoggedIn(nextRoute.isLoggedIn);
+      setViewState(nextRoute.view);
+      setMenuOpen(false);
+    }
+
+    syncViewFromLocation();
+    window.addEventListener("popstate", syncViewFromLocation);
+
+    return () => window.removeEventListener("popstate", syncViewFromLocation);
+  }, []);
 
   useEffect(() => {
     fetch("/api/requests")
@@ -377,17 +454,20 @@ export default function Home() {
   }, [catalog, normalizedSearch]);
   const catalogViewItems = normalizedSearch ? catalogMatches : catalog;
 
-  function setView(nextView) {
+  function setView(nextView, options = {}) {
     setViewState(nextView);
     setMenuOpen(false);
+    const nextPath = pathForView(nextView);
+    if (window.location.pathname !== nextPath) {
+      const historyMethod = options.replace ? "replaceState" : "pushState";
+      window.history[historyMethod]({}, "", nextPath);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function enterBuyerPortal(nextView = "landing") {
     setIsLoggedIn(true);
-    setViewState(nextView);
-    setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setView(nextView);
   }
 
   function showToast(message) {
@@ -445,7 +525,7 @@ export default function Home() {
     setSelectedRequestId(request.id);
     setHasUploadedInvoice(true);
     setOrderSubmitted(false);
-    setUploadStep("recommendation");
+    setUploadStep("upload");
     setUploadedDocs((docs) => [
       ...docs,
       {
@@ -488,11 +568,19 @@ export default function Home() {
       return Array.from(byProduct.values());
     });
     setOrderStep(1);
-    setViewState("quote");
     setUploading(false);
     setSelectedInvoiceName("");
     form.reset();
-    showToast("Invoice matched. Quote builder ready.");
+    showToast("Invoice matched. Review extracted items, then submit for quote.");
+  }
+
+  function submitForQuote() {
+    if (!hasUploadedInvoice) {
+      uploadFormRef.current?.requestSubmit();
+      return;
+    }
+
+    setView("quoteBuilder");
   }
 
   function updateDraftQty(product, nextQty) {
@@ -546,6 +634,7 @@ export default function Home() {
     setHasUploadedInvoice(false);
     setUploadStep("upload");
     setSelectedInvoiceName("");
+    setNeededByDate("");
     setShowInvoiceSources(false);
     setSubmittingOrder(false);
     setOrderSubmitted(false);
@@ -601,7 +690,7 @@ export default function Home() {
 
           <nav className="nav-tabs" aria-label="Primary navigation">
             {navItems.map(([target, icon, label], index) => (
-              <button key={`${label}-${index}`} className={`nav-tab ${(view === target || (view === "approval" && target === "quote")) ? "active" : ""}`} onClick={() => setView(target)}>
+              <button key={`${label}-${index}`} className={`nav-tab ${(view === target || ((view === "quoteBuilder" || view === "approval") && target === "quote") || (view === "orderDetail" && target === "order")) ? "active" : ""}`} onClick={() => setView(target)}>
                 <Icon name={icon} />
                 <strong>{label}</strong>
               </button>
@@ -665,12 +754,21 @@ export default function Home() {
           {view === "upload" && (
             <section className="view active" data-testid="upload-view" aria-labelledby="uploadHeading">
               <div className="upload-page-heading">
-                <h2 id="uploadHeading">Upload invoice or reorder list</h2>
-                <p>Upload a supplier invoice or reorder list and we will extract line items for quick quoting.</p>
+                <div>
+                  <h2 id="uploadHeading">Upload invoice or reorder list</h2>
+                  <p>Upload a supplier invoice or reorder list and we will extract line items for quick quoting.</p>
+                </div>
+                <button
+                  className="secondary-action compact"
+                  type="button"
+                  onClick={() => setUploadRailCollapsed((isCollapsed) => !isCollapsed)}
+                >
+                  {uploadRailCollapsed ? "Show details" : "Hide details"}
+                </button>
               </div>
 
               {!orderSubmitted && (
-                <div className="upload-workspace">
+                <div className={`upload-workspace ${uploadRailCollapsed ? "rail-collapsed" : ""}`}>
                   <form ref={uploadFormRef} onSubmit={handleUpload} className={`upload-layout ${hasUploadedInvoice ? "compact-upload" : ""}`}>
                     <div
                       className={`upload-dropzone ${isDraggingInvoice ? "dragging" : ""}`}
@@ -716,7 +814,7 @@ export default function Home() {
                     </div>
 
                     <div className="upload-fields">
-                      <label>Supplier name <span>*</span>
+                      <label><span className="field-label">Supplier name <b>*</b></span>
                         <select name="supplierName" defaultValue="">
                           <option value="" disabled>Search or select supplier</option>
                           <option>Integrated Medical</option>
@@ -734,99 +832,82 @@ export default function Home() {
                         </select>
                       </label>
                       <label>Needed by date
-                        <input name="neededBy" type="text" placeholder="Select date" />
+                        <span className={`date-field ${neededByDate ? "has-value" : ""}`}>
+                          <input
+                            name="neededBy"
+                            type="date"
+                            aria-label="Needed by date"
+                            value={neededByDate}
+                            onChange={(event) => setNeededByDate(event.target.value)}
+                          />
+                          <span>Select date</span>
+                        </span>
                       </label>
                       <label className="toggle-field">This is a recurring order
                         <span><i></i></span>
                         <small>Yes, this is a recurring order</small>
                       </label>
-                      <label className="upload-notes">Notes <em>(optional)</em>
+                      <label className="upload-notes"><span className="field-label">Notes <em>(optional)</em></span>
                         <textarea name="notes" maxLength="500" placeholder="Add any special instructions or details for this request..." />
                         <small>0/500</small>
                       </label>
                     </div>
                   </form>
 
+                  {hasUploadedInvoice && (
+                    <section className="extracted-line-preview" aria-labelledby="extractedPreviewHeading">
+                      <div className="extracted-preview-header">
+                        <h3 id="extractedPreviewHeading">Extracted line items preview</h3>
+                        <span>3 items detected</span>
+                      </div>
+                      <div className="extracted-preview-table">
+                        <div className="extracted-preview-head">
+                          <span>#</span><span>Item description</span><span>SKU / Part #</span><span>Qty</span><span>Unit</span><span>Est. Price</span>
+                        </div>
+                        {[
+                          ["1", "Surgical Gown, Sterile, XL", "GWN-XL-STRL", "50", "Each", "-"],
+                          ["2", "Nitrile Exam Gloves, Medium", "GLV-NTR-M", "200", "Box", "-"],
+                          ["3", "Face Mask, Earloop, Blue", "MSK-EL-BLU", "100", "Box", "-"],
+                        ].map(([index, description, sku, qty, unit, price]) => (
+                          <div className="extracted-preview-row" key={sku}>
+                            <span>{index}</span><strong>{description}</strong><span>{sku}</span><span>{qty}</span><span>{unit}</span><span>{price}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="extracted-preview-actions">
+                        <button className="secondary-action compact" type="button">View all 3 items</button>
+                        <span>Items look wrong?</span>
+                        <button className="secondary-action compact" type="button">Edit items</button>
+                      </div>
+                    </section>
+                  )}
+
                   <aside className="upload-help-rail">
                     <div className="next-card">
                       <h3>What happens next</h3>
                       <div className="next-step"><span><Icon name="icon-cloud-upload" className="button-icon" /></span><div><strong>1. We extract line items</strong><p>Our system reads your file and identifies the items and quantities.</p></div></div>
                       <div className="next-step"><span><Icon name="icon-users" className="button-icon" /></span><div><strong>2. We compare suppliers</strong><p>We compare vetted supplier options for price, speed, and product fit.</p></div></div>
-                      <div className="next-step"><span><Icon name="icon-chart" className="button-icon" /></span><div><strong>3. You get the best quote</strong><p>Review recommendations and approve with confidence.</p></div></div>
+                      <div className="next-step"><span><Icon name="icon-dollar-circle" className="button-icon" /></span><div><strong>3. You get the best quote</strong><p>Review recommendations and approve with confidence.</p></div></div>
                     </div>
                     <div className="support-card">
-                      <Icon name="icon-settings" className="button-icon" />
+                      <Icon name="icon-shield-check" className="button-icon" />
                       <div><strong>Secure & private</strong><p>Your data is encrypted and never shared with suppliers without approval.</p><span>HIPAA-aware · SOC 2 aligned</span></div>
                     </div>
                     <div className="support-card">
-                      <Icon name="icon-users" className="button-icon" />
-                      <div><strong>Need help?</strong><p>Our team can help you upload and get the right quotes.</p><button type="button">Contact support</button></div>
+                      <div><strong>Need help?</strong><p>Our team can help you upload and get the right quotes.</p><button type="button"><Icon name="icon-headset" className="button-icon" />Contact support</button></div>
                     </div>
                   </aside>
 
                   <div className="upload-submit-bar">
                     <button className="secondary-action compact" type="button" onClick={() => showToast("Draft saved")}>Save draft</button>
-                    <button className="primary-action compact" type="button" onClick={() => uploadFormRef.current?.requestSubmit()} disabled={uploading}>
+                    <button className="primary-action compact" type="button" onClick={submitForQuote} disabled={uploading}>
                       {uploading ? "Processing..." : "Submit for quote"}
+                      {!uploading && <Icon name="icon-arrow-right" className="button-icon" />}
                     </button>
                   </div>
                 </div>
               )}
 
-              {uploadedDocs.length > 0 && !orderSubmitted && (
-                <div className="invoice-sources-bar">
-                  <button className="secondary-action compact" type="button" onClick={() => setShowInvoiceSources(true)}>
-                    <Icon name="icon-file-text" className="button-icon" />
-                    {uploadedDocs.length} invoice source{uploadedDocs.length === 1 ? "" : "s"}
-                  </button>
-                  <button className="text-action clear-order-action" type="button" onClick={resetDraftOrder}>Start over</button>
-                </div>
-              )}
-
-              {uploadStep === "recommendation" && (
-                <RecommendationSummary
-                  stats={recommendationStats}
-                  total={draftTotal}
-                  savings={draftSavings}
-                  sourceCount={uploadedDocs.length}
-                  onReview={() => setUploadStep("review")}
-                />
-              )}
-
-              {uploadStep === "review" && (
-                <DraftOrderReview
-                  items={visibleDraftItems}
-                  activeItems={activeDraftItems}
-                  total={draftTotal}
-                  onBack={() => setUploadStep("recommendation")}
-                  onApprove={() => {
-                    setUploadStep("submit");
-                    showToast("Draft order ready");
-                  }}
-                  onRemove={removeDraftItem}
-                  onQtyChange={updateDraftQty}
-                />
-              )}
-
-              {uploadStep === "submit" && !orderSubmitted && (
-                <DraftOrderConfirm
-                  activeItems={activeDraftItems}
-                  total={draftTotal}
-                  sourceCount={uploadedDocs.length}
-                  onBack={() => setUploadStep("review")}
-                  onSubmit={submitDraftOrder}
-                  submitting={submittingOrder}
-                />
-              )}
-
-              {orderSubmitted && (
-                <DraftOrderSubmitted
-                  activeItems={activeDraftItems}
-                  total={draftTotal}
-                  sourceCount={uploadedDocs.length}
-                  onStartOver={resetDraftOrder}
-                />
-              )}
             </section>
           )}
 
@@ -889,6 +970,20 @@ export default function Home() {
           )}
 
           {view === "quote" && (
+            <section className="view active" aria-labelledby="quoteListHeading">
+              <QuoteListPage
+                quoteTotal={quoteTotal}
+                savings={savings}
+                hasUploadedQuote={lineItems.length > 0}
+                onNewUpload={() => setView("upload")}
+                onOpenBuilder={() => setView("quoteBuilder")}
+                onReview={() => setView("approval")}
+                onViewOrder={() => setView("orderDetail")}
+              />
+            </section>
+          )}
+
+          {view === "quoteBuilder" && (
             <section className="view active quote-builder-view" aria-labelledby="quoteHeading">
               <QuoteBuilderPage
                 lineItems={lineItems}
@@ -916,7 +1011,7 @@ export default function Home() {
                 onApprove={() => {
                   setOrderStep(1);
                   showToast("Quote approved. Order placed.");
-                  setView("order");
+                  setView("orderDetail");
                 }}
                 onRevision={() => {
                   showToast("Revision request noted.");
@@ -927,6 +1022,15 @@ export default function Home() {
           )}
 
           {view === "order" && (
+            <section className="view active" aria-labelledby="ordersInboxHeading">
+              <OrdersInboxPage
+                onOpenOrder={() => setView("orderDetail")}
+                onNewUpload={() => setView("upload")}
+              />
+            </section>
+          )}
+
+          {view === "orderDetail" && (
             <section className="view active order-detail-view" aria-labelledby="orderHeading">
               <OrderDetailPage
                 lineItems={lineItems}
@@ -1236,6 +1340,157 @@ function DashboardMetric({ icon, label, value, delta, tone, featured = false }) 
         <small className={tone}>{tone === "down" ? "↓" : "↑"} {delta} vs last 7 days</small>
       </div>
     </article>
+  );
+}
+
+const quoteListItems = [
+  {
+    id: "Q-2024-0517",
+    clinic: "Northline Rehab",
+    source: "INV-2024-0517.pdf",
+    status: "Draft",
+    statusTone: "draft",
+    total: 21049.04,
+    savings: 6128.8,
+    suppliers: 3,
+    items: 32,
+    updated: "Ready for builder review",
+    next: "Continue build",
+  },
+  {
+    id: "Q-2024-0430",
+    clinic: "Downtown Medical Clinic",
+    source: "april_reorder.pdf",
+    status: "Ready for review",
+    statusTone: "ready",
+    total: 19845.2,
+    savings: 4804.8,
+    suppliers: 3,
+    items: 28,
+    updated: "Buyer can approve",
+    next: "Review quote",
+  },
+  {
+    id: "Q-2024-0408",
+    clinic: "PrimeCare Partners",
+    source: "supply_list_may.pdf",
+    status: "Revision requested",
+    statusTone: "revision",
+    total: 14850.75,
+    savings: 2190.4,
+    suppliers: 2,
+    items: 18,
+    updated: "Substitution preference changed",
+    next: "Resolve notes",
+  },
+  {
+    id: "Q-2024-0322",
+    clinic: "GoodHealth Systems",
+    source: "therapy_reorder.xlsx",
+    status: "Approved",
+    statusTone: "approved",
+    total: 329.68,
+    savings: 26.4,
+    suppliers: 1,
+    items: 3,
+    updated: "Converted to order",
+    next: "View order",
+  },
+];
+
+function QuoteListPage({ quoteTotal, savings, hasUploadedQuote, onNewUpload, onOpenBuilder, onReview, onViewOrder }) {
+  const activeQuote = {
+    ...quoteListItems[0],
+    total: quoteTotal || quoteListItems[0].total,
+    savings: savings || quoteListItems[0].savings,
+  };
+  const quotes = hasUploadedQuote ? [activeQuote, ...quoteListItems.slice(1)] : quoteListItems;
+
+  function handleQuoteAction(quote) {
+    if (quote.statusTone === "ready") onReview();
+    else if (quote.statusTone === "approved") onViewOrder();
+    else onOpenBuilder();
+  }
+
+  return (
+    <div className="quote-list-page">
+      <div className="dashboard-heading quote-list-heading">
+        <div>
+          <h2 id="quoteListHeading">Quotes</h2>
+          <p>Track draft quotes, review-ready recommendations, and approved quote history.</p>
+        </div>
+        <button className="primary-action compact" type="button" onClick={onNewUpload}>
+          <Icon name="icon-cloud-upload" className="button-icon" />
+          Upload Invoice
+        </button>
+      </div>
+
+      <div className="quote-list-metrics">
+        <DashboardMetric label="Draft quotes" value="4" delta="2 need attention" tone="up" icon="icon-file-text" />
+        <DashboardMetric label="Avg. savings" value="19%" delta="vs current spend" tone="up" icon="icon-chart" />
+        <DashboardMetric label="Ready to approve" value="2" delta="buyer review queue" tone="up" icon="icon-clipboard" />
+      </div>
+
+      <div className="quote-list-layout">
+        <section className="dashboard-card quote-inbox-card">
+          <div className="dashboard-card-header">
+            <div>
+              <h3>Quote inbox</h3>
+              <p>Most recent quote activity from uploaded invoices and reorder lists.</p>
+            </div>
+            <div className="dashboard-card-actions">
+              <button className="secondary-action compact" type="button">Filters</button>
+              <button className="secondary-action compact" type="button">Export</button>
+            </div>
+          </div>
+
+          <div className="quote-inbox-table">
+            <div className="quote-inbox-head">
+              <span>Quote</span><span>Status</span><span>Suppliers</span><span>Total</span><span>Savings</span><span>Next step</span>
+            </div>
+            {quotes.map((quote, index) => (
+              <article className="quote-inbox-row" key={quote.id}>
+                <div>
+                  <strong>{quote.id}</strong>
+                  <small>{quote.clinic}</small>
+                  <small>{quote.items} line items</small>
+                </div>
+                <span className={`quote-status ${quote.statusTone}`}>{quote.status}</span>
+                <span className="quote-supplier-count">{quote.suppliers} vetted</span>
+                <span>{money.format(quote.total)}</span>
+                <span className="positive">{money.format(quote.savings)}</span>
+                <button
+                  className={index === 0 ? "primary-action compact" : "secondary-action compact"}
+                  type="button"
+                  onClick={() => handleQuoteAction(quote)}
+                >
+                  {quote.next}
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <aside className="quote-list-rail">
+          <section className="dashboard-card quote-highlight-card">
+            <p className="eyebrow">Active quote</p>
+            <h3>{activeQuote.id}</h3>
+            <strong>{money.format(activeQuote.total)}</strong>
+            <span>{money.format(activeQuote.savings)} estimated savings</span>
+            <button className="primary-action" type="button" onClick={onOpenBuilder}>Open quote builder</button>
+          </section>
+          <section className="dashboard-card quote-flow-card">
+            <h3>Quote workflow</h3>
+            {["Invoice uploaded", "Supplier comparison", "Quote review", "Order placed"].map((step, index) => (
+              <div className={index < 2 ? "done" : ""} key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+              </div>
+            ))}
+          </section>
+        </aside>
+      </div>
+    </div>
   );
 }
 
@@ -1549,6 +1804,87 @@ const orderFallbackItems = [
   ["Surgical Face Masks", "3-Ply · Ear Loop · 50/Box", "SM-3P-50", "HealthPro Supplies", 10, "boxes", 6.4, "Approved"],
   ["Disinfectant Wipes", "6 x 7 · 160/Canister", "DW-160", "PrimeMed Distributors", 6, "canisters", 7.95, "Approved"],
 ];
+
+const ordersInboxItems = [
+  ["ORD-20481", "Cityview Medical Center", "MediCore Medical", "Approved", "approved", "$329.68", "May 24, 2024", "PO sent"],
+  ["ORD-20472", "Downtown Medical Clinic", "HealthPro Supplies", "Supplier confirmed", "confirmed", "$19,845.20", "May 22, 2024", "Tracking soon"],
+  ["ORD-20461", "PrimeCare Partners", "PrimeMed Distributors", "Shipped", "shipped", "$14,850.75", "May 19, 2024", "In transit"],
+  ["ORD-20438", "Northline Rehab", "MediCore Medical", "Delivered", "delivered", "$1,284.30", "May 10, 2024", "Completed"],
+];
+
+function OrdersInboxPage({ onOpenOrder, onNewUpload }) {
+  return (
+    <div className="orders-inbox-page">
+      <div className="dashboard-heading quote-list-heading">
+        <div>
+          <h2 id="ordersInboxHeading">Orders</h2>
+          <p>Track approved supply orders, fulfillment status, and reorder opportunities.</p>
+        </div>
+        <button className="primary-action compact" type="button" onClick={onNewUpload}>
+          <Icon name="icon-cloud-upload" className="button-icon" />
+          Upload Invoice
+        </button>
+      </div>
+
+      <div className="quote-list-metrics">
+        <DashboardMetric label="Open orders" value="12" delta="4 updated" tone="up" icon="icon-clipboard" />
+        <DashboardMetric label="Pending shipment" value="5" delta="needs tracking" tone="up" icon="icon-package" />
+        <DashboardMetric label="Delivered" value="28" delta="this month" tone="up" icon="icon-store" />
+      </div>
+
+      <div className="orders-inbox-layout">
+        <section className="dashboard-card orders-table-card">
+          <div className="dashboard-card-header">
+            <div>
+              <h3>Order inbox</h3>
+              <p>Recently placed and active clinic orders.</p>
+            </div>
+            <div className="dashboard-card-actions">
+              <button className="secondary-action compact" type="button">Filters</button>
+              <button className="secondary-action compact" type="button">Export</button>
+            </div>
+          </div>
+
+          <div className="orders-inbox-table">
+            <div className="orders-inbox-head">
+              <span>Order</span><span>Status</span><span>Supplier</span><span>Total</span><span>Delivery</span><span>Next update</span><span></span>
+            </div>
+            {ordersInboxItems.map(([id, clinic, supplier, status, tone, total, delivery, update], index) => (
+              <article className="orders-inbox-row" key={id}>
+                <div><strong>#{id}</strong><small>{clinic}</small></div>
+                <span className={`order-status ${tone}`}>{status}</span>
+                <span>{supplier}</span>
+                <span>{total}</span>
+                <span>{delivery}</span>
+                <span>{update}</span>
+                <button className={index === 0 ? "primary-action compact" : "secondary-action compact"} type="button" onClick={onOpenOrder}>View order</button>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <aside className="orders-inbox-rail">
+          <section className="dashboard-card order-highlight-card">
+            <p className="eyebrow">Latest order</p>
+            <h3>#ORD-20481</h3>
+            <strong>PO sent</strong>
+            <span>Estimated delivery May 24, 2024</span>
+            <button className="primary-action" type="button" onClick={onOpenOrder}>Open order</button>
+          </section>
+          <section className="dashboard-card quote-flow-card">
+            <h3>Fulfillment flow</h3>
+            {["Approved", "PO sent", "Supplier confirmed", "Shipped", "Delivered"].map((step, index) => (
+              <div className={index < 2 ? "done" : ""} key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+              </div>
+            ))}
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
 
 function OrderDetailPage({ lineItems, onDownload, onReorder }) {
   const orderedItems = lineItems.length

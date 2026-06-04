@@ -11,6 +11,10 @@ import {
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
 import {
+  buildIntegratedMedicalSupplierCatalogSeed,
+  medmkpSeedCanonicalProducts,
+} from "../seed/catalog-normalization"
+import {
   medmkpCatalogItems,
   medmkpCanonicalProducts,
   medmkpQuotes,
@@ -39,6 +43,9 @@ export default async function seedMedMKP({
   const existingRequests = await medmkp.listProcurementRequests()
   const existingItems = await medmkp.listCatalogItems()
   const existingSuppliers = await medmkp.listSuppliers()
+  const existingCanonicalMatches = await medmkp.listCanonicalProductMatches()
+  const existingSupplierProducts = await medmkp.listSupplierProducts()
+  const existingCanonicalProducts = await medmkp.listCanonicalProducts()
 
   if (existingQuotes.length) {
     await medmkp.deleteQuotes(existingQuotes.map((quote) => quote.id))
@@ -56,8 +63,34 @@ export default async function seedMedMKP({
       existingSuppliers.map((supplier) => supplier.id)
     )
   }
+  if (existingCanonicalMatches.length) {
+    await medmkp.deleteCanonicalProductMatches(
+      existingCanonicalMatches.map((match) => match.id)
+    )
+  }
+  if (existingSupplierProducts.length) {
+    await medmkp.deleteSupplierProducts(
+      existingSupplierProducts.map((product) => product.id)
+    )
+  }
+  if (existingCanonicalProducts.length) {
+    await medmkp.deleteCanonicalProducts(
+      existingCanonicalProducts.map((product) => product.id)
+    )
+  }
 
   await medmkp.createSuppliers(medmkpSuppliers as Parameters<typeof medmkp.createSuppliers>[0])
+  await medmkp.createCanonicalProducts(
+    medmkpSeedCanonicalProducts as Parameters<typeof medmkp.createCanonicalProducts>[0]
+  )
+  const { supplierProducts, canonicalProductMatches } =
+    buildIntegratedMedicalSupplierCatalogSeed()
+  await medmkp.createSupplierProducts(
+    supplierProducts as Parameters<typeof medmkp.createSupplierProducts>[0]
+  )
+  await medmkp.createCanonicalProductMatches(
+    canonicalProductMatches as Parameters<typeof medmkp.createCanonicalProductMatches>[0]
+  )
   await medmkp.createCatalogItems(
     medmkpCatalogItems as Parameters<typeof medmkp.createCatalogItems>[0]
   )
@@ -65,6 +98,10 @@ export default async function seedMedMKP({
     medmkpRequests as Parameters<typeof medmkp.createProcurementRequests>[0]
   )
   await medmkp.createQuotes(medmkpQuotes as Parameters<typeof medmkp.createQuotes>[0])
+
+  logger.info(
+    `Seeded ${supplierProducts.length} supplier products and ${canonicalProductMatches.length} canonical match candidates.`
+  )
 
   logger.info("Resetting Medusa product catalog for MedMKP demo...")
 
