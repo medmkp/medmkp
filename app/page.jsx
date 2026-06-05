@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import medmkpLogo from "../logo/Blue Logo Vertical Large - MedMKP.png";
+import medmkpLogo from "../logo/Blue Logo Vertical Large - MedMKP.svg";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
