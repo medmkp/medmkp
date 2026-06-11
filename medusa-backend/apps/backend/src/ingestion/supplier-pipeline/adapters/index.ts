@@ -3,6 +3,7 @@ import { dcDentalAdapter } from "./dcdental"
 import { genericAdapter } from "./generic"
 import { pearsonAdapter } from "./pearson"
 import { shopifyAdapter } from "./shopify"
+import { skyDentalAdapter } from "./skydental"
 import type {
   ProductPageCandidate,
   SupplierProductAdapter,
@@ -13,6 +14,7 @@ const adapters: SupplierProductAdapter[] = [
   dentalCityAdapter,
   pearsonAdapter,
   shopifyAdapter,
+  skyDentalAdapter,
   genericAdapter,
 ]
 
