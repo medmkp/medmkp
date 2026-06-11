@@ -1,0 +1,28 @@
+[
+  {
+    "supplier_id": "msup_skydentalsupply_com",
+    "supplier_name": "Sky Dental Supply",
+    "slug": "skydentalsupply-com",
+    "website_url": "https://www.skydentalsupply.com",
+    "source_catalog": "skydentalsupply-com-website-public",
+    "source_type": "website",
+    "source_url": "https://www.skydentalsupply.com",
+    "classification": "catalog_candidate",
+    "confidence_score": 0.95,
+    "source_company_name": "Sky Dental Supply",
+    "notes": "Supplier-specific adapter (adapters/skydental.ts). Single sitemap.xml with ~7,600 product URLs; schema.org Product JSON-LD on product pages. Verified live 2026-06-11: 48/50 sample rows extracted."
+  },
+  {
+    "supplier_id": "msup_shastadentalsupply_com",
+    "supplier_name": "Shasta Dental Supply",
+    "slug": "shastadentalsupply-com",
+    "website_url": "https://www.shastadentalsupply.com",
+    "source_catalog": "shastadentalsupply-com-website-public",
+    "source_type": "website",
+    "source_url": "https://www.shastadentalsupply.com",
+    "classification": "catalog_candidate",
+    "confidence_score": 0.95,
+    "source_company_name": "Shasta Dental Supply",
+    "notes": "Supplier-specific adapter (adapters/shasta.ts) plus catalog crawl (shasta-catalog-discovery.ts); no sitemap. Cap crawl with --max-shasta-catalog-pages. Verified live 2026-06-11: 40/40 sample rows extracted."
+  }
+]

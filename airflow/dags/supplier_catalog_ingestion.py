@@ -53,6 +53,25 @@ SUPPLIERS = [
             "--timeout-ms=30000",
         ],
     },
+    {
+        "task_id": "ingest_sky_dental",
+        "supplier_id": "msup_skydentalsupply_com",
+        "args": [
+            "--max-sitemaps-per-supplier=3",
+            "--sitemap-concurrency=4",
+            "--product-concurrency=12",
+            "--timeout-ms=30000",
+        ],
+    },
+    {
+        "task_id": "ingest_shasta_dental",
+        "supplier_id": "msup_shastadentalsupply_com",
+        "args": [
+            "--max-shasta-catalog-pages=5000",
+            "--product-concurrency=6",
+            "--timeout-ms=45000",
+        ],
+    },
 ]
 
 

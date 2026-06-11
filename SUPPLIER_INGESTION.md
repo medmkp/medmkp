@@ -234,6 +234,24 @@ Use CSV imports for:
 
 Do not use generated debug CSVs as long-term source files.
 
+## Scheduled Refresh (Airflow)
+
+`airflow/dags/supplier_catalog_ingestion.py` refreshes proven-adapter suppliers
+weekly (Sunday 03:00) by running `supplier:ingest:db --commit` per supplier with
+tuned concurrency flags. It needs the `medmkp_backend_dir` Airflow Variable and a
+backend `.env` with `DATABASE_URL` (Render Postgres: `DB_SSL=true`).
+
+Before a supplier can be scheduled it must exist in `medmkp_supplier`. Sky
+Dental and Shasta Dental seed rows are tracked in
+`medusa-backend/apps/backend/data/supplier-vetting/sky-shasta-catalog-sources.json`:
+
+```bash
+cd medusa-backend/apps/backend
+npm run supplier:seed-usable -- ./data/supplier-vetting/sky-shasta-catalog-sources.json
+```
+
+The seed is idempotent: it replaces only the suppliers listed in the file.
+
 ## Current Known Adapter
 
 Pearson Dental has a supplier-specific adapter.
