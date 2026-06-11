@@ -1,0 +1,58 @@
+# Airflow for MedMKP supplier ingestion (NUC / single-host deployment).
+#
+# From the repo's airflow/ directory:
+#
+#   docker compose up -d --build
+#   docker compose exec airflow cat standalone_admin_password.txt   # UI login (admin)
+#
+# One-time setup inside the container (backend deps for the DAG's npm commands):
+#
+#   docker compose exec airflow bash -c \
+#     "cd /opt/medmkp/medusa-backend/apps/backend && npm install"
+#
+# The repo is bind-mounted at /opt/medmkp; the backend .env (DATABASE_URL,
+# DB_SSL=true for Render Postgres) lives in the mounted checkout. Flip
+# AIRFLOW_VAR_MEDMKP_SUPPLIER_INGEST_COMMIT to "true" once dry runs look good.
+
+services:
+  airflow-db:
+    image: postgres:16-alpine
+    container_name: medmkp-airflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - medmkp-airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  airflow:
+    build: .
+    container_name: medmkp-airflow
+    restart: unless-stopped
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/medmkp/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Los_Angeles
+      AIRFLOW_VAR_MEDMKP_BACKEND_DIR: /opt/medmkp/medusa-backend/apps/backend
+      AIRFLOW_VAR_MEDMKP_SUPPLIER_INGEST_COMMIT: "false"
+    volumes:
+      - ..:/opt/medmkp
+      - medmkp-airflow-logs:/opt/airflow/logs
+    command: standalone
+
+volumes:
+  medmkp-airflow-db-data:
+  medmkp-airflow-logs:

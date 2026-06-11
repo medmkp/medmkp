@@ -241,6 +241,13 @@ weekly (Sunday 03:00) by running `supplier:ingest:db --commit` per supplier with
 tuned concurrency flags. It needs the `medmkp_backend_dir` Airflow Variable and a
 backend `.env` with `DATABASE_URL` (Render Postgres: `DB_SSL=true`).
 
+The supported deployment is Docker: `airflow/docker-compose.yml` runs Airflow
+standalone (LocalExecutor + Postgres metadata DB) from a custom image with
+Node 20 (`airflow/Dockerfile`), bind-mounts the repo at `/opt/medmkp`, and sets
+the DAG's Airflow Variables via `AIRFLOW_VAR_*` environment entries — commits
+are disabled by default until `AIRFLOW_VAR_MEDMKP_SUPPLIER_INGEST_COMMIT` is
+flipped to `true`. Setup commands are documented at the top of the compose file.
+
 Before a supplier can be scheduled it must exist in `medmkp_supplier`. Sky
 Dental and Shasta Dental seed rows are tracked in
 `medusa-backend/apps/backend/data/supplier-vetting/sky-shasta-catalog-sources.json`:
