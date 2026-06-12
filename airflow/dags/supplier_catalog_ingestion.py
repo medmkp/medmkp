@@ -313,7 +313,7 @@ export NODE_OPTIONS="${{NODE_OPTIONS:---max-old-space-size=8192}}"
 
 def build_supplier_dag(supplier: dict[str, object]) -> DAG:
     with DAG(
-        dag_id=f"medmkp_ingest_{supplier['name']}",
+        dag_id=supplier["name"],
         description=f"Import the {supplier['supplier_id']} catalog and public price snapshot into MedMKP.",
         start_date=datetime(2026, 1, 1),
         schedule=supplier["schedule"],
@@ -345,7 +345,7 @@ def build_product_matching_dag() -> DAG:
     match_args = " -- --commit" if MATCHING_COMMIT_ENABLED else ""
 
     with DAG(
-        dag_id="medmkp_match_products",
+        dag_id="match_products",
         description="Rebuild auto canonical products and cross-supplier product matches after catalog ingestion.",
         start_date=datetime(2026, 1, 1),
         schedule="0 23 * * 0",
@@ -364,6 +364,6 @@ def build_product_matching_dag() -> DAG:
 
 
 for supplier in SUPPLIERS:
-    globals()[f"medmkp_ingest_{supplier['name']}"] = build_supplier_dag(supplier)
+    globals()[supplier["name"]] = build_supplier_dag(supplier)
 
-medmkp_match_products = build_product_matching_dag()
+match_products = build_product_matching_dag()

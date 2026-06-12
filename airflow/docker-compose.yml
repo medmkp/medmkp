@@ -76,6 +76,7 @@ services:
       AIRFLOW__CORE__DAGS_FOLDER: /opt/medmkp/airflow/dags
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Los_Angeles
+      AIRFLOW__WEBSERVER__INSTANCE_NAME: medmkp
       # Small-host trims: the webserver defaults to 4 gunicorn workers and the
       # scheduler to 2 DAG parsing processes — halve both.
       AIRFLOW__WEBSERVER__WORKERS: "2"
