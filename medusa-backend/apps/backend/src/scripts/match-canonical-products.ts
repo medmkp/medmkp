@@ -5,6 +5,7 @@ import { commitMatchRun, loadSupplierProducts } from "../matching/db"
 import { runMatching } from "../matching/engine"
 import { normalizeProduct } from "../matching/normalize"
 import { writeReports } from "../matching/report"
+import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 
 function resolveDatabaseUrl(): string {
   if (process.env.DATABASE_URL) {
@@ -27,6 +28,12 @@ async function main() {
   const outputDir = path.resolve(__dirname, "../../.medmkp/matching/latest")
 
   const databaseUrl = resolveDatabaseUrl()
+  if (commit) {
+    assertDestructiveDbOperationAllowed(
+      "products:match --commit (resets auto-generated matches)",
+      databaseUrl
+    )
+  }
   const client = new Client({
     connectionString: databaseUrl,
     ssl: /localhost|127\.0\.0\.1/.test(databaseUrl) ? undefined : { rejectUnauthorized: false },

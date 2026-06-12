@@ -155,7 +155,8 @@ npm run products:match -- --commit
 ```
 
 `DATABASE_URL` is taken from the environment or from
-`medusa-backend/apps/backend/.env`.
+`medusa-backend/apps/backend/.env` (local dev; use
+`NODE_ENV=production` to load `.env.production` for the remote database).
 
 Order matters only in one direction: run matching *after* ingestion
 commits. If an ingestion lands mid-run, just re-run with `--commit`; the

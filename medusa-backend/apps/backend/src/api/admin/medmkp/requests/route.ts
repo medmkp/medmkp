@@ -1,22 +1,14 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
-import {
-  medmkpCatalogItems,
-  medmkpQuotes,
-  medmkpRequests,
-} from "../../../../seed/medmkp-fixtures"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
-  const [dbRequests, dbItems, dbQuotes] = await Promise.all([
+  const [requests, catalogItems, quotes] = await Promise.all([
     medmkp.listProcurementRequests(),
     medmkp.listCatalogItems(),
     medmkp.listQuotes(),
   ])
-  const requests = dbRequests.length ? dbRequests : medmkpRequests
-  const catalogItems = dbItems.length ? dbItems : medmkpCatalogItems
-  const quotes = dbQuotes.length ? dbQuotes : medmkpQuotes
 
   res.json({
     requests: requests.map((request) => ({

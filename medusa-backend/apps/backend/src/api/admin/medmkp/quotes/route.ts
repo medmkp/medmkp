@@ -1,22 +1,14 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
-import {
-  medmkpCatalogItems,
-  medmkpQuotes,
-  medmkpSuppliers,
-} from "../../../../seed/medmkp-fixtures"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
-  const [dbQuotes, dbItems, dbSuppliers] = await Promise.all([
+  const [quotes, catalogItems, suppliers] = await Promise.all([
     medmkp.listQuotes(),
     medmkp.listCatalogItems(),
     medmkp.listSuppliers(),
   ])
-  const quotes = dbQuotes.length ? dbQuotes : medmkpQuotes
-  const catalogItems = dbItems.length ? dbItems : medmkpCatalogItems
-  const suppliers = dbSuppliers.length ? dbSuppliers : medmkpSuppliers
 
   res.json({
     quotes: quotes.map((quote) => ({
@@ -35,9 +27,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
   const quote = await medmkp.createQuotes({
     id: `mq_demo_${Date.now()}`,
-    procurement_request_id:
-      body.procurement_request_id ?? "mpr_northline_rehab_june",
-    supplier_id: body.supplier_id ?? "msup_integrated_medical",
+    procurement_request_id: body.procurement_request_id ?? "",
+    supplier_id: body.supplier_id ?? "",
     status: "draft",
     subtotal_cents: 0,
     estimated_shipping_cents: 0,

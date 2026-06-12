@@ -3,6 +3,7 @@ import type { MedusaContainer } from "@medusajs/framework"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
 import type { UsableSupplierCatalogSource } from "../ingestion/supplier-vetting"
+import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 
 const defaultInputPath = "./data/supplier-vetting/usable-catalog-sources.json"
 
@@ -11,6 +12,10 @@ export default async function seedUsableDentalSuppliers({
 }: {
   container: MedusaContainer
 }) {
+  assertDestructiveDbOperationAllowed(
+    "supplier:seed-usable (deletes and recreates suppliers)"
+  )
+
   const medmkp = container.resolve<MedMKPModuleService>(MEDMKP_MODULE)
   const inputPath =
     [...process.argv].reverse().find((arg) => arg.endsWith(".json")) ??

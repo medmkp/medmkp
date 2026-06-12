@@ -17,6 +17,7 @@ import type {
 } from "../ingestion/supplier-pipeline/types"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
+import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 
 const CLI_STAGES = ["discover", "index", "extract", "commit"] as const
 
@@ -438,6 +439,10 @@ export default async function ingestSupplierCatalogs({
 }: {
   container: MedusaContainer
 }) {
+  assertDestructiveDbOperationAllowed(
+    "supplier:ingest:db (replaces supplier catalogs)"
+  )
+
   const options = parseOptions()
   const stages = options.stages ?? [...CLI_STAGES]
   const pipelineStages = stages.filter(

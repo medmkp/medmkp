@@ -8,6 +8,7 @@ import {
 } from "../ingestion/supplier-catalog"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
+import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 
 type CliOptions = {
   csv?: string
@@ -102,6 +103,10 @@ export default async function importSupplierCatalogCsv({
 }: {
   container: MedusaContainer
 }) {
+  assertDestructiveDbOperationAllowed(
+    "supplier:import-csv (replaces a supplier catalog)"
+  )
+
   const options = readCliOptions()
 
   if (!options.csv || !options.supplier || !options.sourceCatalog) {

@@ -238,8 +238,12 @@ Do not use generated debug CSVs as long-term source files.
 
 `airflow/dags/supplier_catalog_ingestion.py` refreshes proven-adapter suppliers
 weekly (Sunday 03:00) by running `supplier:ingest:db --commit` per supplier with
-tuned concurrency flags. It needs the `medmkp_backend_dir` Airflow Variable and a
-backend `.env` with `DATABASE_URL` (Render Postgres: `DB_SSL=true`).
+tuned concurrency flags. It needs the `medmkp_backend_dir` Airflow Variable and an
+env file with the target `DATABASE_URL` (Render Postgres: `DB_SSL=true`) — set the
+`medmkp_env_file` Variable to `.env.production` on hosts that target the remote
+database (`.env` is reserved for local development). Ingestion commands export
+`ALLOW_REMOTE_DB_DESTRUCTIVE=true` to pass the db-safety guard that otherwise
+blocks destructive scripts on non-local databases.
 
 The supported deployment is Docker: `airflow/docker-compose.yml` runs Airflow
 standalone (LocalExecutor + Postgres metadata DB) from a custom image with

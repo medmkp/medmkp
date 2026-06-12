@@ -17,6 +17,8 @@ the run succeeds (it is kept on failure for debugging).
 Expected Airflow Variables:
 - medmkp_backend_dir: absolute path to medusa-backend/apps/backend
 - medmkp_env_file: optional env file to source before running npm, defaults to .env
+  (use .env.production on hosts that target the remote database; ingestion
+  commands export ALLOW_REMOTE_DB_DESTRUCTIVE=true to pass the db-safety guard)
 - medmkp_supplier_ingest_pool: optional Airflow pool, defaults to default_pool
 - medmkp_supplier_ingest_commit: set to "false" for dry-run tasks, defaults to true
 - medmkp_supplier_ingest_state_root: directory for inter-stage state files,
@@ -292,6 +294,7 @@ if [ -f "{ENV_FILE}" ]; then
 fi
 export DB_SSL="${{DB_SSL:-true}}"
 export NODE_OPTIONS="${{NODE_OPTIONS:---max-old-space-size=8192}}"
+export ALLOW_REMOTE_DB_DESTRUCTIVE="${{ALLOW_REMOTE_DB_DESTRUCTIVE:-true}}"
 npm run supplier:ingest:db -- {arg_string}
 """.strip()
 
@@ -307,6 +310,7 @@ if [ -f "{ENV_FILE}" ]; then
 fi
 export DB_SSL="${{DB_SSL:-true}}"
 export NODE_OPTIONS="${{NODE_OPTIONS:---max-old-space-size=8192}}"
+export ALLOW_REMOTE_DB_DESTRUCTIVE="${{ALLOW_REMOTE_DB_DESTRUCTIVE:-true}}"
 {command}
 """.strip()
 
