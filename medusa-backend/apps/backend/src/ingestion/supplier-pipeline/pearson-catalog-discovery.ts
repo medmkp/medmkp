@@ -325,7 +325,7 @@ export async function discoverPearsonCatalogUrls(
       }
     }
 
-    if (pagesFetched % 100 === 0) {
+    if (pagesFetched % 25 === 0) {
       debugLog(
         options.debug,
         `Pearson catalog discovery progress: ${pagesFetched} page(s), ${products.size} product URL(s), ${queue.length} queued`

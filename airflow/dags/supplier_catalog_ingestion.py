@@ -208,7 +208,9 @@ SUPPLIERS = [
         "schedule": "0 15 * * 0",
         "args": [
             "--max-sitemaps-per-supplier=3",
-            "--max-pearson-catalog-pages=5000",
+            # Pearson's legacy catalog crawl is broad; keep the scheduled job
+            # bounded so it reaches extraction in a reasonable window.
+            "--max-pearson-catalog-pages=1000",
             "--source-concurrency=3",
             "--sitemap-concurrency=4",
             "--product-concurrency=6",
