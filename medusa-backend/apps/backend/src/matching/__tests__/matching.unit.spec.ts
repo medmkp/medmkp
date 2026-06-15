@@ -23,6 +23,7 @@ function product(partial: Partial<SupplierProductRow>): SupplierProductRow {
     pack_size: "",
     unit_of_measure: "",
     product_url: "",
+    image_url: "",
     price_cents: null,
     price_basis: null,
     ...partial,

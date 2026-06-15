@@ -1,7 +1,7 @@
 import "../styles.css";
 
 export const metadata = {
-  title: "MedMKP MVP",
+  title: "MedMKP",
   description: "Concierge procurement MVP for healthcare supply reorders.",
 };
 

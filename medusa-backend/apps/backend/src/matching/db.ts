@@ -4,7 +4,7 @@ import type { Cluster, MatchRunResult, SupplierProductRow } from "./types"
 export async function loadSupplierProducts(client: Client): Promise<SupplierProductRow[]> {
   const products = await client.query(
     `SELECT id, supplier_id, sku, manufacturer_sku, brand, name, category,
-            pack_size, unit_of_measure, product_url
+            pack_size, unit_of_measure, product_url, image_url
      FROM medmkp_supplier_product
      WHERE deleted_at IS NULL`
   )

@@ -71,6 +71,11 @@ function toUiLineItem(match, vendor, neededBy) {
   const item = match.input;
   const oldUnitPrice = (item.unit_price_cents ?? 0) / 100;
   const best = match.best_offer;
+  const imageUrl = match.display_image_url ||
+    best?.image_url ||
+    match.offers?.find((offer) => offer.image_url)?.image_url ||
+    match.matched_supplier_product?.image_url ||
+    "";
   const selectedUnitPrice = best ? Math.min(best.comparable_price_cents / 100, oldUnitPrice || Infinity) : oldUnitPrice;
   const unitPrice = best ? best.comparable_price_cents / 100 : oldUnitPrice;
   const useOffer = Boolean(best) && (oldUnitPrice === 0 || unitPrice <= oldUnitPrice);
@@ -81,6 +86,7 @@ function toUiLineItem(match, vendor, neededBy) {
 
   return {
     product: match.canonical_product?.name || best?.name || item.description,
+    imageUrl,
     extractedFrom: item.description,
     sku: item.sku || "",
     qty: item.qty || 1,
@@ -94,6 +100,7 @@ function toUiLineItem(match, vendor, neededBy) {
       confidence: (match.confidence || 0) / 100,
       priorProductName: item.description,
       recommendedProductName: useOffer ? best.name : item.description,
+      imageUrl,
       recommendationReason: describeMatch(match, savingsPerUnit),
       savingsPerUnit,
       matchReason: match.match_reason,
@@ -102,6 +109,7 @@ function toUiLineItem(match, vendor, neededBy) {
     selected: {
       supplier: useOffer ? best.supplier_name : vendor || "Current supplier",
       sku: useOffer ? best.sku : item.sku || "",
+      image_url: useOffer ? best.image_url || imageUrl : imageUrl,
       unitPrice: finalUnitPrice,
       total: Number((finalUnitPrice * (item.qty || 1)).toFixed(2)),
       reason: useOffer

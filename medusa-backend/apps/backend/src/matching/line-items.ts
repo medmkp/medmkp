@@ -41,6 +41,7 @@ export type OfferView = {
   comparable_price_cents: number
   pack_size: string
   product_url: string
+  image_url: string
 }
 
 export type LineItemMatch = {
@@ -54,8 +55,10 @@ export type LineItemMatch = {
     supplier_name: string
     sku: string
     name: string
+    image_url: string
   } | null
   canonical_product: { id: string; name: string; category: string } | null
+  display_image_url: string
   offers: OfferView[]
   best_offer: OfferView | null
   savings_cents: number
@@ -203,6 +206,7 @@ function toPseudoProduct(input: LineItemInput): NormalizedProduct {
     pack_size: input.pack_size ?? "",
     unit_of_measure: input.unit ?? "",
     product_url: "",
+    image_url: "",
     price_cents: input.unit_price_cents ?? null,
     price_basis: null,
   }
@@ -261,6 +265,7 @@ function buildOffers(
       comparable_price_cents: comparablePrice(item, product),
       pack_size: product.row.pack_size,
       product_url: product.row.product_url,
+      image_url: product.row.image_url,
     })
   }
   return offers.sort((a, b) => a.comparable_price_cents - b.comparable_price_cents)
@@ -283,6 +288,11 @@ function finalize(
     : [matched.row.id]
   const offers = buildOffers(index, item, memberIds)
   const bestOffer = offers[0] ?? null
+  const displayImageUrl =
+    bestOffer?.image_url ||
+    offers.find((offer) => offer.image_url)?.image_url ||
+    matched.row.image_url ||
+    ""
 
   const qty = input.qty ?? 1
   const invoicePrice = input.unit_price_cents ?? null
@@ -302,8 +312,10 @@ function finalize(
       supplier_name: index.supplierNameById.get(matched.row.supplier_id) ?? "Unknown supplier",
       sku: matched.row.sku,
       name: matched.row.name,
+      image_url: matched.row.image_url,
     },
     canonical_product: canonical,
+    display_image_url: displayImageUrl,
     offers: offers.slice(0, 5),
     best_offer: bestOffer,
     savings_cents: savings,
@@ -318,6 +330,7 @@ function unmatched(input: LineItemInput, reason: string): LineItemMatch {
     match_reason: reason,
     matched_supplier_product: null,
     canonical_product: null,
+    display_image_url: "",
     offers: [],
     best_offer: null,
     savings_cents: 0,

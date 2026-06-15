@@ -6,12 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
 const PROCESSING_DURATION_MS = 3000;
-const UPLOAD_WIZARD_STEPS = [
-  { key: "upload", label: "Upload" },
-  { key: "recommendation", label: "Recommendations" },
-  { key: "savings", label: "Savings" },
-];
-
 const suppliers = [
   { name: "Dental City", signal: "Public catalog · commodity dental supplies" },
   { name: "Net32", signal: "Price benchmarks · dental marketplace data" },
@@ -718,7 +712,7 @@ export default function Home() {
   return (
     <>
       <div className={`app-shell ${menuOpen ? "menu-open" : ""}`}>
-        <aside className="sidebar">
+        <header className="app-header app-accountbar">
           <div className="brand-block">
             <BrandMark />
             <button
@@ -732,6 +726,34 @@ export default function Home() {
             </button>
           </div>
 
+          <label className="global-search">
+            <Icon name="icon-search" className="search-icon" />
+            <input
+              type="search"
+              placeholder="Search canonical products..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+            <kbd>⌘ K</kbd>
+          </label>
+          {normalizedSearch && (
+            <SearchResults
+              results={searchResults}
+              searchHref={`/catalog/search?q=${encodeURIComponent(searchTerm.trim())}`}
+            />
+          )}
+          <button className="icon-button account-bell" type="button" aria-label="Notifications">
+            <Icon name="icon-settings" className="button-icon" />
+          </button>
+          <button className="account-menu" type="button" aria-label="Account menu">
+            <span className="avatar">AK</span>
+            <span><strong>Alex Kim</strong><small>Buyer</small></span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+        </header>
+
+        <div className="app-body">
+        <aside className="sidebar">
           <nav className="nav-tabs" aria-label="Primary navigation">
             {navItems.map(([target, icon, label], index) => (
               <button key={`${label}-${index}`} className={`nav-tab ${(view === target || ((view === "quoteBuilder" || view === "approval") && target === "quote") || (view === "orderDetail" && target === "order")) ? "active" : ""}`} onClick={() => setView(target)}>
@@ -751,33 +773,6 @@ export default function Home() {
         </aside>
 
         <main>
-          <section className="topbar app-accountbar">
-            <label className="global-search">
-              <Icon name="icon-search" className="search-icon" />
-              <input
-                type="search"
-                placeholder="Search canonical products..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-              <kbd>⌘ K</kbd>
-            </label>
-            {normalizedSearch && (
-              <SearchResults
-                results={searchResults}
-                searchHref={`/catalog/search?q=${encodeURIComponent(searchTerm.trim())}`}
-              />
-            )}
-            <button className="icon-button account-bell" type="button" aria-label="Notifications">
-              <Icon name="icon-settings" className="button-icon" />
-            </button>
-            <button className="account-menu" type="button" aria-label="Account menu">
-              <span className="avatar">AK</span>
-              <span><strong>Alex Kim</strong><small>Buyer</small></span>
-              <span aria-hidden="true">⌄</span>
-            </button>
-          </section>
-
           {view === "landing" && (
             <section className="view active" aria-labelledby="landingHeading">
               <DashboardPage onNewRequest={() => setView("upload")} />
@@ -809,21 +804,6 @@ export default function Home() {
                 >
                   {uploadRailCollapsed ? "Show details" : "Hide details"}
                 </button>
-              </div>
-
-              <div className="wizard-header">
-                <div className="wizard-steps" aria-label="Upload progress">
-                  {UPLOAD_WIZARD_STEPS.map((step, index) => {
-                    const currentIndex = UPLOAD_WIZARD_STEPS.findIndex((candidate) => candidate.key === uploadStep);
-                    const stateClass = index < currentIndex ? "done" : index === currentIndex ? "active" : "";
-                    return (
-                      <span className={stateClass} key={step.key}>
-                        <i>{index + 1}</i>
-                        <strong>{step.label}</strong>
-                      </span>
-                    );
-                  })}
-                </div>
               </div>
 
               {uploadStep === "upload" && (
@@ -1116,6 +1096,7 @@ export default function Home() {
             </section>
           )}
         </main>
+        </div>
       </div>
 
       <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
@@ -1285,7 +1266,7 @@ function DashboardPage({ onNewRequest }) {
               <div className="work-table-head">
                 <span>Buyer</span><span>File</span><span>Status</span><span>Supplier outreach</span><span>Needed by</span><span></span>
               </div>
-              {dashboardQueue.map(([initials, buyer, contact, file, status, outreach, progress, needed, due]) => (
+              {dashboardQueue.slice(0, 4).map(([initials, buyer, contact, file, status, outreach, progress, needed, due]) => (
                 <article className="work-row" key={file}>
                   <div className="buyer-cell"><span>{initials}</span><strong>{buyer}</strong><small>{contact}</small></div>
                   <a href="#">{file}</a>
@@ -1338,7 +1319,7 @@ function DashboardPage({ onNewRequest }) {
 
           <section className="dashboard-card activity-card">
             <div className="dashboard-card-header"><h3>Supplier activity</h3><button className="text-action" type="button">View all</button></div>
-            {supplierActivity.map(([name, detail, time]) => (
+            {supplierActivity.slice(0, 3).map(([name, detail, time]) => (
               <article className="activity-row" key={`${name}-${time}`}>
                 <span>{name.slice(0, 2).toUpperCase()}</span>
                 <div><strong>{name}</strong><small>{detail}</small></div>
@@ -2099,6 +2080,7 @@ function RecommendationSummary({
             const confidence = Math.round((item.recommendation?.confidence || 0) * 100);
             const itemSavings = Math.max((item.oldUnitPrice - item.selected.unitPrice) * item.draftQty, 0);
             const offers = item.recommendation?.offers || [];
+            const imageUrl = item.imageUrl || item.recommendation?.imageUrl || item.selected?.image_url || offers.find((offer) => offer.image_url)?.image_url || "";
             const selectedOffer = offers.find((offer) => (
               offer.supplier_name === item.selected.supplier &&
               (offer.sku || "") === (item.selected.sku || "")
@@ -2109,6 +2091,7 @@ function RecommendationSummary({
               comparable_price_cents: Math.round((item.selected.unitPrice || 0) * 100),
               unit_price_cents: Math.round((item.selected.unitPrice || 0) * 100),
               product_url: item.selected.product_url,
+              image_url: imageUrl,
             };
             const remainingOffers = offers.filter((offer) => !(
               offer.supplier_name === item.selected.supplier &&
@@ -2119,6 +2102,13 @@ function RecommendationSummary({
             return (
               <details className="recommendation-row" key={item.product}>
                 <summary>
+                  <span className="recommendation-thumb" aria-hidden="true">
+                    {imageUrl ? (
+                      <img src={imageUrl} alt="" loading="lazy" />
+                    ) : (
+                      <span />
+                    )}
+                  </span>
                   <span className="recommendation-title">
                     <strong>{item.product}</strong>
                     <span className={`status-chip ${recommendationClass(matchType)}`}>
@@ -2208,8 +2198,7 @@ function UploadExtractionPanel({ items, total, editMode, onToggleEditMode, onRem
     <section className={`extracted-line-preview ${editMode ? "editing" : ""}`} aria-labelledby="extractedPreviewHeading">
       <div className="extracted-preview-header">
         <div className="extracted-preview-copy">
-          <h3 id="extractedPreviewHeading">Extracted line items</h3>
-          <p>Review the parsed rows before moving to recommendations.</p>
+          <h3 id="extractedPreviewHeading">Extracted line items preview</h3>
         </div>
         <div className="extracted-preview-header-actions">
           <div className="extracted-preview-actions">
@@ -2229,7 +2218,7 @@ function UploadExtractionPanel({ items, total, editMode, onToggleEditMode, onRem
       <div className="extracted-preview-table">
         <div className="extracted-preview-head">
           <span>#</span>
-          <span>Description</span>
+          <span>Item description</span>
           <span>SKU / Part #</span>
           <span>Qty</span>
           <span>Unit</span>

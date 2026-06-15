@@ -9,6 +9,7 @@ export type SupplierProductRow = {
   pack_size: string
   unit_of_measure: string
   product_url: string
+  image_url: string
   price_cents: number | null
   price_basis: string | null
 }

@@ -1,4 +1,4 @@
-# MedMKP MVP
+# MedMKP
 
 MedMKP is an early B2B dental-supply spend optimization prototype for dental practices and DSOs.
 
