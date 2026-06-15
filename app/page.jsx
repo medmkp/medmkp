@@ -249,6 +249,41 @@ function IconSprite() {
         <path d="m4.5 16 4-4 3 3 4-5 4.5 4.5" />
         <path d="M9 9.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" />
       </symbol>
+      <symbol id="icon-link" viewBox="0 0 24 24">
+        <path d="M10 13a5 5 0 0 0 7.07 0l2.5-2.5a5 5 0 0 0-7.07-7.07L11 5" />
+        <path d="M14 11a5 5 0 0 0-7.07 0l-2.5 2.5a5 5 0 0 0 7.07 7.07L13 19" />
+      </symbol>
+      <symbol id="icon-alert-triangle" viewBox="0 0 24 24">
+        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+        <path d="M12 9v4.5M12 17h.01" />
+      </symbol>
+      <symbol id="icon-x-circle" viewBox="0 0 24 24">
+        <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+        <path d="m15 9-6 6M9 9l6 6" />
+      </symbol>
+      <symbol id="icon-cart" viewBox="0 0 24 24">
+        <path d="M9 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM18 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" />
+        <path d="M2.5 3h2.2l2.3 12.2a1.6 1.6 0 0 0 1.6 1.3h9a1.6 1.6 0 0 0 1.6-1.3L21 7H6" />
+      </symbol>
+      <symbol id="icon-map-pin" viewBox="0 0 24 24">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+        <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+      </symbol>
+      <symbol id="icon-chevron-down" viewBox="0 0 24 24">
+        <path d="m6 9 6 6 6-6" />
+      </symbol>
+      <symbol id="icon-chevron-right" viewBox="0 0 24 24">
+        <path d="m9 6 6 6-6 6" />
+      </symbol>
+      <symbol id="icon-plus-circle" viewBox="0 0 24 24">
+        <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+        <path d="M12 8.5v7M8.5 12h7" />
+      </symbol>
+      <symbol id="icon-truck" viewBox="0 0 24 24">
+        <path d="M2.5 7.5h11v9H2.5Z" />
+        <path d="M13.5 10.5h4l3 3v3H13.5Z" />
+        <path d="M7 19a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2ZM17 19a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z" />
+      </symbol>
     </svg>
   );
 }
@@ -763,10 +798,11 @@ export default function Home() {
 
   const navItems = [
     ["landing", "icon-home", "Dashboard"],
-    ["upload", "icon-cloud-upload", "Uploads"],
-    ["quote", "icon-file-text", "Savings"],
-    ["order", "icon-clipboard", "Reports"],
-    ["supplier", "icon-users", "Suppliers"],
+    ["upload", "icon-plus-circle", "Add Items"],
+    ["catalog", "icon-list", "Master Reorder List"],
+    ["quote", "icon-cart", "Reorder Run"],
+    ["supplier", "icon-truck", "Supplier Handoff"],
+    ["order", "icon-chart", "Reports"],
     ["settings", "icon-settings", "Settings"],
   ];
 
@@ -834,14 +870,6 @@ export default function Home() {
               </button>
             ))}
           </nav>
-
-          <div className="org-panel">
-            <div className="avatar">AK</div>
-            <div>
-              <h2>Alex Kim</h2>
-              <p>Operations Director</p>
-            </div>
-          </div>
         </aside>
 
         <main>
@@ -1281,125 +1309,161 @@ function SearchResults({ results, searchHref }) {
   );
 }
 
-const dashboardQueue = [
-  ["HM", "HealthCo Medical", "John Smith", "INV-2024-0521.pdf", "New", "0 / 6", 0, "May 24, 2024", "3 days left"],
-  ["PC", "PrimeCare Partners", "Emily Davis", "supply_list_may.pdf", "Reviewing", "2 / 6", 34, "May 28, 2024", "7 days left"],
-  ["NW", "Northwest Hospital", "Michael Lee", "implants_quote.xlsx", "Outreaching", "4 / 7", 58, "May 30, 2024", "9 days left"],
-  ["GH", "GoodHealth Systems", "Sarah Johnson", "reorder_request.pdf", "Reviewing", "1 / 5", 20, "Jun 2, 2024", "12 days left"],
-  ["BC", "BayCare Medical", "David Brown", "disposables_list.pdf", "New", "0 / 5", 0, "Jun 3, 2024", "13 days left"],
-  ["MV", "MetroView Health", "Jessica Miller", "equipment_needs.pdf", "Outreaching", "3 / 6", 50, "Jun 4, 2024", "14 days left"],
+const dashboardActivity = [
+  ["icon-cloud-upload", "Imported order history", "Hygiene", "hygiene", "May Orders.csv · 142 items", "Alex Kim", "1 hour ago"],
+  ["icon-scan", "Scanned new product", "Restorative", "restorative", "3M Filtek Easy Match Shade A2", "Sarah J.", "3 hours ago"],
+  ["icon-edit", "Updated reorder quantity", "Sterilization", "sterilization", "CaviWipes XL · 2 → 3 each", "Alex Kim", "Yesterday"],
+  ["icon-check-circle", "Resolved product match", "Restorative", "restorative", "Bond+ Self Etch → Henry Schein", "Sarah J.", "Yesterday"],
 ];
 
-const priorities = [
-  ["HealthCo Medical request due", "INV-2024-0521.pdf", "3 days left", "urgent"],
-  ["PrimeCare Partners follow up", "2 quotes pending", "Today", "today"],
-  ["Northwest Hospital outreach", "3 suppliers not yet contacted", "Today", "today"],
-  ["BayCare Medical new request", "Disposables & supplies", "Tomorrow", "normal"],
-];
-
-const supplierActivity = [
-  ["MediCore Medical", "Responded to HealthCo Medical", "10m ago"],
-  ["HealthPro Supplies", "Submitted a new quote", "25m ago"],
-  ["PrimeMed Distributors", "Responded to Northwest Hospital", "1h ago"],
-  ["SurgiMax Solutions", "Viewed request details", "2h ago"],
-  ["MedLine Industries", "Submitted a new quote", "2h ago"],
+const dashboardPriorities = [
+  ["icon-list", "blue", "Review 12 unmatched items", "Find supplier matches", "Due May 9"],
+  ["icon-cart", "green", "Approve May hygiene reorder", "126 items · Est. $2,485", "Due May 12"],
+  ["icon-link", "amber", "Update supplier links for 4 items", "Links expired or missing", "Due May 14"],
+  ["icon-tag", "red", "Check price increase on gloves", "2 items with upcoming increases", "Due May 15"],
 ];
 
 function DashboardPage({ onNewRequest }) {
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-heading">
+    <div className="dash">
+      <div className="dash-heading">
         <div>
           <h2 id="landingHeading">Dashboard</h2>
-          <p>Overview of procurement activity and priorities</p>
+          <p>Overview of your dental supply reordering priorities.</p>
         </div>
+        <button className="dash-location" type="button">
+          <Icon name="icon-map-pin" className="button-icon" />
+          <span>Bright Smiles Dental - Main Office</span>
+          <Icon name="icon-chevron-down" className="button-icon" />
+        </button>
       </div>
 
-      <div className="dashboard-layout">
-        <div className="dashboard-main">
-          <div className="dashboard-metrics">
-            <DashboardMetric icon="icon-file-plus" label="New requests" value="18" delta="12%" tone="up" />
-            <DashboardMetric icon="icon-file-text" label="Quotes in progress" value="36" delta="8%" tone="up" />
-            <DashboardMetric icon="icon-package" label="Orders pending" value="24" delta="4%" tone="down" />
-          </div>
+      <div className="dash-stats">
+        <article className="dash-stat">
+          <span className="dash-stat-icon blue"><Icon name="icon-calendar" className="button-icon" /></span>
+          <span className="dash-stat-label">Next Reorder Due</span>
+          <strong className="dash-stat-value">May 16, 2024</strong>
+          <span className="dash-stat-sub">Full office reorder</span>
+          <a className="dash-stat-link" href="#">View calendar</a>
+        </article>
+        <article className="dash-stat">
+          <span className="dash-stat-icon amber"><Icon name="icon-clipboard" className="button-icon" /></span>
+          <span className="dash-stat-label">Items to Review</span>
+          <strong className="dash-stat-value">18</strong>
+          <span className="dash-stat-sub">Across 4 categories</span>
+          <a className="dash-stat-link" href="#">View items</a>
+        </article>
+        <article className="dash-stat">
+          <span className="dash-stat-icon red"><Icon name="icon-tag" className="button-icon" /></span>
+          <span className="dash-stat-label">Price Alerts</span>
+          <strong className="dash-stat-value">7</strong>
+          <span className="dash-stat-sub">May impact 3 categories</span>
+          <a className="dash-stat-link" href="#">View alerts</a>
+        </article>
+        <article className="dash-stat">
+          <span className="dash-stat-icon green"><Icon name="icon-package" className="button-icon" /></span>
+          <span className="dash-stat-label">Items Due This Month</span>
+          <strong className="dash-stat-value">132</strong>
+          <span className="dash-stat-sub">Est. $5,842</span>
+          <a className="dash-stat-link" href="#">View details</a>
+        </article>
+      </div>
 
-          <section className="dashboard-card work-queue-card">
-            <div className="dashboard-card-header">
-              <div>
-                <h3>Work queue</h3>
-                <p>Incoming buyer requests</p>
+      <div className="dash-layout">
+        <div className="dash-col-main">
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <div className="dash-card-title">
+                <h3>Master Reorder List Health</h3>
+                <Icon name="icon-info" className="button-icon" />
               </div>
-              <div className="dashboard-card-actions">
-                <button className="secondary-action compact" type="button">Filters</button>
-                <button className="primary-action compact" type="button" onClick={onNewRequest}>New Request</button>
+              <a className="dash-link" href="#">View full list</a>
+            </div>
+            <p className="dash-muted">312 total saved items</p>
+            <div className="dash-health-bar">
+              <span className="seg-green" style={{ width: "76%" }}></span>
+              <span className="seg-amber" style={{ width: "15%" }}></span>
+              <span className="seg-red" style={{ width: "9%" }}></span>
+            </div>
+            <div className="dash-health-grid">
+              <div className="dash-health-cell">
+                <div className="dash-health-top">
+                  <Icon name="icon-check-circle" className="dash-health-icon green" />
+                  <div><strong>236</strong><span>Matched Items</span></div>
+                </div>
+                <div className="dash-health-foot"><b className="green">76%</b><small>Actively linked</small></div>
+              </div>
+              <div className="dash-health-cell">
+                <div className="dash-health-top">
+                  <Icon name="icon-link" className="dash-health-icon amber" />
+                  <div><strong>48</strong><span>Missing Supplier Links</span></div>
+                </div>
+                <div className="dash-health-foot"><b className="amber">15%</b><small>Need attention</small></div>
+              </div>
+              <div className="dash-health-cell">
+                <div className="dash-health-top">
+                  <Icon name="icon-alert-triangle" className="dash-health-icon amber" />
+                  <div><strong>20</strong><span>Needs Review</span></div>
+                </div>
+                <div className="dash-health-foot"><b className="amber">6%</b><small>Review details</small></div>
+              </div>
+              <div className="dash-health-cell">
+                <div className="dash-health-top">
+                  <Icon name="icon-x-circle" className="dash-health-icon red" />
+                  <div><strong>8</strong><span>Duplicate Items</span></div>
+                </div>
+                <div className="dash-health-foot"><b className="red">3%</b><small>Clean up list</small></div>
               </div>
             </div>
-            <div className="work-table">
-              <div className="work-table-head">
-                <span>Buyer</span><span>File</span><span>Status</span><span>Supplier outreach</span><span>Needed by</span><span></span>
-              </div>
-              {dashboardQueue.slice(0, 4).map(([initials, buyer, contact, file, status, outreach, progress, needed, due]) => (
-                <article className="work-row" key={file}>
-                  <div className="buyer-cell"><span>{initials}</span><strong>{buyer}</strong><small>{contact}</small></div>
-                  <a href="#">{file}</a>
-                  <span className={`queue-status ${status.toLowerCase()}`}>{status}</span>
-                  <div className="outreach-cell"><strong>{outreach}</strong><i><b style={{ width: `${progress}%` }}></b></i></div>
-                  <div className="needed-cell"><strong>{needed}</strong><small>{due}</small></div>
-                  <button className="text-action" type="button">•••</button>
-                </article>
-              ))}
-            </div>
-            <button className="text-action dashboard-link" type="button">View all requests</button>
           </section>
 
-          <section className="dashboard-card request-chart-card">
-            <div className="dashboard-card-header">
-              <div>
-                <h3>Request volume</h3>
-                <p>Number of new requests by week</p>
+          <section className="dash-card">
+            <h3 className="dash-card-h3">Recent Activity</h3>
+            <div className="dash-activity">
+              <div className="dash-activity-head">
+                <span>Activity</span><span>Category</span><span>Details</span><span>By</span><span>When</span>
               </div>
-              <div className="dashboard-card-actions">
-                <button className="secondary-action compact" type="button">Last 8 weeks</button>
-                <button className="secondary-action compact" type="button">Export</button>
-              </div>
+              {dashboardActivity.map(([icon, activity, category, categoryTone, details, by, when]) => (
+                <div className="dash-activity-row" key={activity}>
+                  <span className="dash-activity-name"><Icon name={icon} className="button-icon" />{activity}</span>
+                  <span><span className={`dash-badge ${categoryTone}`}>{category}</span></span>
+                  <span className="dash-activity-details">{details}</span>
+                  <span>{by}</span>
+                  <span className="dash-muted">{when}</span>
+                </div>
+              ))}
             </div>
-            <div className="line-chart" aria-label="Request volume chart">
-              <svg viewBox="0 0 760 190" role="img">
-                <path d="M20 150H740M20 110H740M20 70H740M20 30H740" />
-                <polyline points="28,145 132,108 236,130 340,85 444,70 548,112 652,58 736,96" />
-                {[["28","145"],["132","108"],["236","130"],["340","85"],["444","70"],["548","112"],["652","58"],["736","96"]].map(([cx, cy]) => <circle cx={cx} cy={cy} r="5" key={`${cx}-${cy}`} />)}
-              </svg>
-              <div className="chart-labels"><span>Mar 25-31</span><span>Apr 1-7</span><span>Apr 8-14</span><span>Apr 15-21</span><span>Apr 22-28</span><span>Apr 29-May 5</span><span>May 6-12</span><span>May 13-19</span></div>
-            </div>
-            <div className="chart-legend"><span></span>New requests</div>
+            <a className="dash-link" href="#">View all activity</a>
           </section>
         </div>
 
-        <aside className="dashboard-rail">
-          <DashboardMetric icon="icon-chart" label="Month's GMV" value="$1.24M" delta="15%" tone="up" featured />
-          <section className="dashboard-card priority-card">
-            <div className="dashboard-card-header"><h3>Today's priorities</h3><span className="count-pill">6</span></div>
-            {priorities.map(([title, detail, due, tone]) => (
-              <article className={`priority-row ${tone}`} key={title}>
-                <Icon name="icon-file-plus" className="button-icon" />
-                <span><strong>{title}</strong><small>{detail}</small></span>
-                <em>{due}</em>
-              </article>
-            ))}
-            <button className="text-action dashboard-link" type="button">View all tasks</button>
+        <aside className="dash-col-rail">
+          <section className="dash-card">
+            <div className="dash-card-head">
+              <h3 className="dash-card-h3">This Month's Priorities</h3>
+              <span className="dash-count">4</span>
+            </div>
+            <div className="dash-priorities">
+              {dashboardPriorities.map(([icon, tone, title, detail, due]) => (
+                <button className="dash-priority" type="button" key={title}>
+                  <span className={`dash-priority-icon ${tone}`}><Icon name={icon} className="button-icon" /></span>
+                  <span className="dash-priority-body"><strong>{title}</strong><small>{detail}</small></span>
+                  <span className="dash-priority-due">{due}</span>
+                  <Icon name="icon-chevron-right" className="button-icon dash-priority-chevron" />
+                </button>
+              ))}
+            </div>
+            <a className="dash-link" href="#">View all priorities</a>
           </section>
 
-          <section className="dashboard-card activity-card">
-            <div className="dashboard-card-header"><h3>Supplier activity</h3><button className="text-action" type="button">View all</button></div>
-            {supplierActivity.slice(0, 3).map(([name, detail, time]) => (
-              <article className="activity-row" key={`${name}-${time}`}>
-                <span>{name.slice(0, 2).toUpperCase()}</span>
-                <div><strong>{name}</strong><small>{detail}</small></div>
-                <em>{time}</em>
-              </article>
-            ))}
-            <button className="text-action dashboard-link" type="button">View all activity</button>
-          </section>
+          <button className="dash-cta primary" type="button" onClick={onNewRequest}>
+            <Icon name="icon-cart" className="button-icon" />
+            <span><strong>Start Reorder Run</strong><small>Review, optimize, and build your order</small></span>
+          </button>
+          <button className="dash-cta" type="button" onClick={onNewRequest}>
+            <Icon name="icon-plus" className="button-icon" />
+            <span><strong>Add Items</strong><small>Scan, search, or add from catalog</small></span>
+          </button>
         </aside>
       </div>
     </div>
