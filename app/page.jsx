@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -33,7 +33,6 @@ const uploadStepRoutes = {
 const routeByView = {
   landing: "/dashboard",
   upload: "/add-items",
-  matchReview: "/match-review",
   catalog: "/catalog",
   admin: "/admin",
   quote: "/quotes",
@@ -55,7 +54,6 @@ function viewFromPath(pathname = "/") {
   if (path === "/add-items/review") return { view: "upload", isLoggedIn: true, uploadStep: "upload" };
   if (path === "/add-items/recommendations") return { view: "upload", isLoggedIn: true, uploadStep: "recommendation" };
   if (path === "/add-items/savings") return { view: "upload", isLoggedIn: true, uploadStep: "savings" };
-  if (path === "/match-review") return { view: "matchReview", isLoggedIn: true };
   if (path === "/catalog") return { view: "catalog", isLoggedIn: true };
   if (path === "/admin") return { view: "admin", isLoggedIn: true };
   if (path === "/quotes") return { view: "quote", isLoggedIn: true };
@@ -321,17 +319,55 @@ function Icon({ name, className = "nav-icon" }) {
   );
 }
 
-function MobileScanItemView({ onBack }) {
+// Opens the rear camera and, where the browser supports the BarcodeDetector API
+// (Chrome/Edge on Android, ChromeOS, and macOS), continuously scans frames and
+// auto-fires onScan the moment a barcode lands in view — like a grocery scanner.
+// Everywhere else (notably iOS Safari) the live preview still works and the
+// returned capture() lets the shutter button trigger a scan on demand.
+function useBarcodeScanner({ active, onScan }) {
   const videoRef = useRef(null);
   const [cameraStatus, setCameraStatus] = useState("requesting");
+  const [autoDetect, setAutoDetect] = useState(false);
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
+  const captureRef = useRef(() => {});
 
   useEffect(() => {
-    if (!window.matchMedia("(max-width: 767px)").matches) {
+    if (!active) {
       return undefined;
     }
 
     let stream;
     let isMounted = true;
+    let intervalId;
+    let detector = null;
+    let done = false;
+
+    function finish(code) {
+      if (done) return;
+      done = true;
+      window.clearInterval(intervalId);
+      if (navigator.vibrate) navigator.vibrate(60);
+      onScanRef.current?.(code || null);
+    }
+
+    async function detectFrame() {
+      const video = videoRef.current;
+      if (!video || !detector || video.readyState < 2) return null;
+      try {
+        const codes = await detector.detect(video);
+        return codes && codes.length ? codes[0].rawValue : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    // Shutter press: read the current frame; proceed even if no barcode is
+    // decoded so the manual capture path always advances the flow.
+    captureRef.current = async () => {
+      if (done) return;
+      finish(await detectFrame());
+    };
 
     async function openCamera() {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -359,6 +395,19 @@ function MobileScanItemView({ onBack }) {
           await videoRef.current.play().catch(() => undefined);
         }
         setCameraStatus("ready");
+
+        if ("BarcodeDetector" in window) {
+          try {
+            detector = new window.BarcodeDetector();
+            setAutoDetect(true);
+            intervalId = window.setInterval(async () => {
+              const code = await detectFrame();
+              if (code) finish(code);
+            }, 350);
+          } catch (error) {
+            detector = null;
+          }
+        }
       } catch (error) {
         setCameraStatus("denied");
       }
@@ -368,9 +417,31 @@ function MobileScanItemView({ onBack }) {
 
     return () => {
       isMounted = false;
+      window.clearInterval(intervalId);
       stream?.getTracks().forEach((track) => track.stop());
+      captureRef.current = () => {};
     };
+  }, [active]);
+
+  const capture = useCallback(() => captureRef.current(), []);
+  return { videoRef, cameraStatus, autoDetect, capture };
+}
+
+function MobileScanItemView({ onBack, onScan }) {
+  const [isMobile, setIsMobile] = useState(false);
+  const [captured, setCaptured] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(window.matchMedia("(max-width: 767px)").matches);
   }, []);
+
+  const { videoRef, cameraStatus, autoDetect, capture } = useBarcodeScanner({
+    active: isMobile,
+    onScan: (code) => {
+      setCaptured(true);
+      window.setTimeout(() => onScan?.(code), 650);
+    },
+  });
 
   return (
     <section className="mobile-scan-screen" aria-labelledby="mobileScanHeading">
@@ -399,7 +470,7 @@ function MobileScanItemView({ onBack }) {
         </button>
       </nav>
 
-      <div className="mobile-camera-stage">
+      <div className={`mobile-camera-stage ${captured ? "scan-captured" : ""}`}>
         <video ref={videoRef} className="mobile-camera-video" playsInline muted autoPlay aria-label="Live camera preview"></video>
         {cameraStatus !== "ready" && (
           <div className="camera-permission-state">
@@ -412,7 +483,13 @@ function MobileScanItemView({ onBack }) {
             </p>
           </div>
         )}
-        <div className="scan-instruction">Align barcode inside the frame</div>
+        <div className="scan-instruction">
+          {captured
+            ? "Barcode captured"
+            : autoDetect
+              ? "Point at a barcode — we capture it automatically"
+              : "Align barcode in the frame, then tap to scan"}
+        </div>
         <div className="scan-frame" aria-hidden="true">
           <span className="corner top-left"></span>
           <span className="corner top-right"></span>
@@ -424,7 +501,7 @@ function MobileScanItemView({ onBack }) {
           <button type="button" aria-label="Toggle flashlight">
             <Icon name="icon-bolt" className="mobile-control-icon" />
           </button>
-          <button className="shutter" type="button" aria-label="Scan item"></button>
+          <button className="shutter" type="button" aria-label="Scan item" onClick={capture} disabled={cameraStatus !== "ready" || captured}></button>
           <button type="button" aria-label="Open photo library">
             <Icon name="icon-image" className="mobile-control-icon" />
           </button>
@@ -659,7 +736,8 @@ export default function Home() {
   const [neededByDate, setNeededByDate] = useState("");
   const [uploadStep, setUploadStep] = useState("upload");
   const [mobileAddItemRoute, setMobileAddItemRoute] = useState(false);
-  const [addItemsTab, setAddItemsTab] = useState("history");
+  const [addItemsTab, setAddItemsTab] = useState("upload");
+  const [addItemsStep, setAddItemsStep] = useState("add");
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [draftItems, setDraftItems] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -857,6 +935,22 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function goToMatchReview() {
+    setMobileAddItemRoute(false);
+    setViewState("upload");
+    setAddItemsStep("match");
+    setMenuOpen(false);
+    if (window.location.pathname !== "/add-items") {
+      window.history.pushState({}, "", "/add-items");
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleScanComplete(code) {
+    showToast(code ? `Scanned barcode ${code}` : "Item scanned");
+    goToMatchReview();
+  }
+
   function goToUploadStep(step) {
     setUploadStep(step);
     const nextPath = uploadStepRoutes[step] || uploadStepRoutes.upload;
@@ -936,6 +1030,7 @@ export default function Home() {
     setSelectedRequestId(request.id);
     setHasUploadedInvoice(true);
     setUploadItemsEditMode(false);
+    setAddItemsStep("match");
     goToUploadStep("upload");
     setUploadedDocs((docs) => [
       ...docs,
@@ -1026,6 +1121,8 @@ export default function Home() {
     ["settings", "icon-settings", "Settings"],
   ];
 
+  const reachableSteps = hasUploadedInvoice ? ["add", "match", "complete"] : ["add", "match"];
+
   if (!isLoggedIn) {
     return (
       <>
@@ -1083,12 +1180,23 @@ export default function Home() {
         <div className="app-body">
         <aside className="sidebar">
           <nav className="nav-tabs" aria-label="Primary navigation">
-            {navItems.map(([target, icon, label], index) => (
-              <button key={`${label}-${index}`} className={`nav-tab ${(view === target || ((view === "quoteBuilder" || view === "approval") && target === "quote") || (view === "orderDetail" && target === "order")) ? "active" : ""}`} onClick={() => setView(target)}>
-                <Icon name={icon} />
-                <strong>{label}</strong>
-              </button>
-            ))}
+            {navItems.map(([target, icon, label], index) => {
+              const isActive =
+                target === "matchReview" ? (view === "upload" && addItemsStep === "match")
+                : target === "upload" ? (view === "upload" && addItemsStep !== "match")
+                : (view === target || ((view === "quoteBuilder" || view === "approval") && target === "quote") || (view === "orderDetail" && target === "order"));
+              const handleClick = () => {
+                if (target === "matchReview") { goToMatchReview(); }
+                else if (target === "upload") { setView("upload"); setAddItemsStep("add"); }
+                else { setView(target); }
+              };
+              return (
+                <button key={`${label}-${index}`} className={`nav-tab ${isActive ? "active" : ""}`} onClick={handleClick}>
+                  <Icon name={icon} />
+                  <strong>{label}</strong>
+                </button>
+              );
+            })}
           </nav>
         </aside>
 
@@ -1110,24 +1218,17 @@ export default function Home() {
             </section>
           )}
 
-          {view === "matchReview" && (
-            <section className="view active" aria-labelledby="matchReviewHeading">
-              <MatchReviewPage
-                items={visibleDraftItems}
-                sourceName={uploadedDocs[0]?.name}
-                onGoToAddItems={() => setView("upload")}
-              />
-            </section>
-          )}
-
           {view === "upload" && (
             <section className={`view active upload-view ${mobileAddItemRoute ? "mobile-add-item-route" : ""}`} data-testid="upload-view" aria-labelledby="uploadHeading">
               {mobileAddItemRoute && (
                 <MobileScanItemView
                   onBack={() => setView("upload")}
+                  onScan={handleScanComplete}
                 />
               )}
               <div className="desktop-upload-content">
+              {addItemsStep === "add" && (
+              <>
               <div className="upload-page-heading">
                 <div>
                   <h2 id="uploadHeading">Add / Import Items</h2>
@@ -1142,15 +1243,13 @@ export default function Home() {
                 </button>
               </div>
 
-              {uploadStep === "upload" && (
                 <div className={`upload-workspace ${hasUploadedInvoice ? "has-uploaded-invoice" : "empty-workspace"} ${uploadRailCollapsed ? "rail-collapsed" : ""}`}>
                   <div className="upload-main-col">
+                  <WizardStepper current="add" reachable={reachableSteps} onStep={setAddItemsStep} />
                   <nav className="add-items-tabs" aria-label="Add items methods">
                     {[
-                      ["history", "icon-cloud-upload", "Upload Order History"],
-                      ["invoice", "icon-file-text", "Upload Invoice"],
+                      ["upload", "icon-cloud-upload", "Upload"],
                       ["barcode", "icon-scan", "Barcode Scan"],
-                      ["csv", "icon-table", "CSV Import"],
                     ].map(([id, icon, label]) => (
                       <button
                         key={id}
@@ -1163,6 +1262,9 @@ export default function Home() {
                       </button>
                     ))}
                   </nav>
+                  {addItemsTab === "barcode" ? (
+                    <DesktopBarcodeScan onAdd={() => showToast("Added to reorder list")} onScan={handleScanComplete} />
+                  ) : (
                   <form ref={uploadFormRef} onSubmit={handleUpload} className={`upload-layout ${hasUploadedInvoice ? "compact-upload" : ""}`}>
                     <div
                       className={`upload-dropzone ${isDraggingInvoice ? "dragging" : ""}`}
@@ -1249,25 +1351,7 @@ export default function Home() {
                     )}
 
                   </form>
-
-                  {hasUploadedInvoice && activeDraftItems.length > 0 && (
-                    <UploadExtractionPanel
-                      items={activeDraftItems}
-                      editMode={uploadItemsEditMode}
-                      onToggleEditMode={setUploadItemsEditMode}
-                      onQtyChange={updateDraftQty}
-                      onItemChange={updateDraftItem}
-                      onRemove={removeDraftItem}
-                    />
                   )}
-
-                  <div className="upload-submit-bar">
-                    <button className="secondary-action compact" type="button" onClick={() => showToast("Draft saved")}>Save draft</button>
-                    <button className="primary-action compact" type="button" onClick={submitForQuote} disabled={uploading || !hasUploadedInvoice}>
-                      {uploading ? "Processing..." : "Submit for quote"}
-                      {!uploading && <Icon name="icon-arrow-right" className="button-icon" />}
-                    </button>
-                  </div>
                   </div>
 
                   <aside className="upload-help-rail">
@@ -1287,29 +1371,24 @@ export default function Home() {
                     </div>
                   </aside>
                 </div>
+              </>
               )}
 
-              {uploadStep === "recommendation" && (
-                <RecommendationSummary
-                  stats={recommendationStats}
-                  items={activeDraftItems}
-                  total={draftTotal}
-                  previousTotal={draftPreviousTotal}
-                  savings={draftSavings}
-                  neededByDate={neededByDate}
-                  onNeededByDateChange={setNeededByDate}
-                  onBack={() => goToUploadStep("upload")}
-                  onContinue={() => goToUploadStep("savings")}
+              {addItemsStep === "match" && (
+                <MatchReviewPage
+                  items={visibleDraftItems}
+                  sourceName={uploadedDocs[0]?.name}
+                  stepper={<WizardStepper current="match" reachable={reachableSteps} onStep={setAddItemsStep} />}
+                  onContinue={() => setAddItemsStep("complete")}
                 />
               )}
 
-              {uploadStep === "savings" && (
-                <SavingsSummary
-                  activeItems={activeDraftItems}
-                  total={draftTotal}
-                  sourceCount={uploadedDocs.length}
-                  onBack={() => goToUploadStep("recommendation")}
-                  savings={draftSavings}
+              {addItemsStep === "complete" && (
+                <CompleteStep
+                  items={activeDraftItems}
+                  stepper={<WizardStepper current="complete" reachable={reachableSteps} onStep={setAddItemsStep} />}
+                  onDone={() => setView("catalog")}
+                  onAddMore={() => { setAddItemsStep("add"); setAddItemsTab("upload"); }}
                 />
               )}
               </div>
@@ -1818,7 +1897,141 @@ function MatchReviewDetail({ row }) {
   );
 }
 
-function MatchReviewPage({ items, sourceName, onGoToAddItems }) {
+const WIZARD_STEPS = [
+  ["add", "Add Items"],
+  ["match", "Match Review"],
+  ["complete", "Complete"],
+];
+
+function WizardStepper({ current, reachable, onStep }) {
+  const currentIndex = WIZARD_STEPS.findIndex(([id]) => id === current);
+  return (
+    <div className="mr-stepper wizard-stepper">
+      {WIZARD_STEPS.map(([id, label], index) => {
+        const state = index < currentIndex ? "done" : index === currentIndex ? "active" : "todo";
+        const isCurrent = id === current;
+        // Previous steps are always navigable backwards; forward steps only when reachable.
+        const canClick = !isCurrent && (index < currentIndex || reachable.includes(id));
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`mr-step ${state}`}
+            disabled={!canClick && !isCurrent}
+            aria-current={isCurrent ? "step" : undefined}
+            onClick={() => canClick && onStep(id)}
+          >
+            <span className="mr-step-dot">{state === "done" ? <Icon name="icon-check" className="button-icon" /> : index + 1}</span>
+            <span className="mr-step-label">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DesktopBarcodeScan({ onAdd, onScan }) {
+  const [captured, setCaptured] = useState(false);
+  const { videoRef, cameraStatus, autoDetect, capture } = useBarcodeScanner({
+    active: true,
+    onScan: (code) => {
+      setCaptured(true);
+      window.setTimeout(() => onScan?.(code), 650);
+    },
+  });
+
+  return (
+    <div className="desktop-scan">
+      <div className={`desktop-scan-stage ${captured ? "scan-captured" : ""}`}>
+        <video ref={videoRef} className="desktop-scan-video" playsInline muted autoPlay aria-label="Live camera preview"></video>
+        {cameraStatus !== "ready" && (
+          <div className="desktop-scan-permission">
+            <Icon name="icon-scan" className="desktop-scan-permission-icon" />
+            <strong>{cameraStatus === "requesting" ? "Camera access needed" : "Camera unavailable"}</strong>
+            <p>
+              {cameraStatus === "requesting"
+                ? "Allow camera access to scan item barcodes, or use another import method."
+                : "Enable camera permissions for this site, or use Upload or CSV import instead."}
+            </p>
+          </div>
+        )}
+        <div className="desktop-scan-frame" aria-hidden="true">
+          <span className="corner top-left"></span>
+          <span className="corner top-right"></span>
+          <span className="corner bottom-left"></span>
+          <span className="corner bottom-right"></span>
+          <span className="scan-line"></span>
+        </div>
+        <div className="desktop-scan-hint">
+          <Icon name="icon-scan" className="button-icon" />
+          {captured
+            ? "Barcode captured"
+            : autoDetect
+              ? "Point at a barcode — we capture it automatically"
+              : "Align barcode in the frame, then click Scan"}
+        </div>
+        <button
+          className="desktop-scan-shutter"
+          type="button"
+          onClick={capture}
+          disabled={cameraStatus !== "ready" || captured}
+        >
+          <Icon name="icon-scan" className="button-icon" />
+          Scan barcode
+        </button>
+      </div>
+      <aside className="desktop-scan-result">
+        <div className="desktop-scan-result-head">
+          <span className="desktop-scan-check"><Icon name="icon-check-circle" className="button-icon" /></span>
+          <div><strong>Item recognized</strong><small>We found a match in your catalog.</small></div>
+        </div>
+        <div className="desktop-scan-product">
+          <div className="desktop-scan-thumb"><Icon name="icon-image" className="button-icon" /></div>
+          <div>
+            <strong>Microbrush Regular Superfine Blue</strong>
+            <span>100/Bag · MBRREG-BLU-100</span>
+            <span className="desktop-scan-supplier"><img src="/schein-logo.png" alt="" />Henry Schein</span>
+          </div>
+        </div>
+        <dl className="desktop-scan-meta">
+          <div><dt>UOM</dt><dd>Bag</dd></div>
+          <div><dt>Unit price</dt><dd>$12.45</dd></div>
+          <div><dt>Per each</dt><dd>$0.1245 / ea</dd></div>
+        </dl>
+        <button className="primary-action" type="button" onClick={onAdd}><Icon name="icon-plus" className="button-icon" />Add to reorder list</button>
+        <button className="secondary-action" type="button"><Icon name="icon-search" className="button-icon" />View item details</button>
+        <button className="text-action desktop-scan-nomatch" type="button">This isn&rsquo;t a match</button>
+      </aside>
+    </div>
+  );
+}
+
+function CompleteStep({ items, stepper, onDone, onAddMore }) {
+  const derived = deriveMatchRows(items).filter((r) => r.status !== "Not found");
+  const count = derived.length || matchReviewSample.filter((r) => r.status !== "Not found").length;
+  return (
+    <div className="match-review wizard-step">
+      <div className="mr-heading">
+        <div>
+          <h2>Complete</h2>
+          <p>Your items have been added to your master reorder list.</p>
+        </div>
+      </div>
+      {stepper}
+      <div className="complete-card">
+        <span className="complete-check"><Icon name="icon-check-circle" className="complete-check-icon" /></span>
+        <h3>All set!</h3>
+        <p>{count} items were added to your master reorder list and are ready for your next reorder run.</p>
+        <div className="complete-actions">
+          <button className="primary-action" type="button" onClick={onDone}>Go to Reorder List</button>
+          <button className="secondary-action" type="button" onClick={onAddMore}>Add more items</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MatchReviewPage({ items, sourceName, stepper, onContinue }) {
   const realRows = deriveMatchRows(items);
   const usingReal = realRows.length > 0;
   const rows = usingReal ? realRows : matchReviewSample;
@@ -1856,7 +2069,6 @@ function MatchReviewPage({ items, sourceName, onGoToAddItems }) {
   }
 
   const confMax = Math.max(stats.high, stats.med, stats.low, 1);
-  const steps = [["Add / Import", "done"], ["Match Review", "active"], ["Reorder List", "todo"], ["Complete", "todo"]];
 
   return (
     <div className="match-review">
@@ -1867,23 +2079,11 @@ function MatchReviewPage({ items, sourceName, onGoToAddItems }) {
         </div>
         <div className="mr-heading-actions">
           <button className="secondary-action compact" type="button">Import summary</button>
-          <button className="secondary-action compact" type="button">Actions <Icon name="icon-chevron-down" className="button-icon" /></button>
+          <button className="primary-action compact" type="button" onClick={onContinue}>Continue <Icon name="icon-arrow-right" className="button-icon" /></button>
         </div>
       </div>
 
-      <div className="mr-stepper">
-        {steps.map(([label, state], index) => (
-          <button
-            key={label}
-            type="button"
-            className={`mr-step ${state}`}
-            onClick={() => { if (label === "Add / Import") onGoToAddItems(); }}
-          >
-            <span className="mr-step-dot">{state === "done" ? <Icon name="icon-check" className="button-icon" /> : index + 1}</span>
-            <span className="mr-step-label">{label}</span>
-          </button>
-        ))}
-      </div>
+      {stepper}
 
       <div className="mr-stats">
         <div className="mr-stat-card">
