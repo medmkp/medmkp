@@ -257,10 +257,52 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     add("#", match[1])
   }
 
+  // Apparel/glove sizing (gloves, gowns, masks, lab coats are size-differentiated
+  // but carry no measured unit). Disjoint sizes are a hard conflict, like 25mm
+  // vs 31mm. Only worded forms and the X-prefixed family are matched; bare
+  // single letters (S/M/L) are too ambiguous to trust.
+  const sizeRe = /\b(?:(xxx|xx|3x|2x|x|extra)[\s-]?)?(small|medium|large)\b/g
+  while ((match = sizeRe.exec(lowered))) {
+    const prefix = match[1]
+    const base = match[2]
+    let value: string
+    if (base === "medium") {
+      value = "M"
+    } else if (base === "small") {
+      value = prefix ? "XS" : "S"
+    } else if (!prefix) {
+      value = "L"
+    } else if (prefix === "x" || prefix === "extra") {
+      value = "XL"
+    } else if (prefix === "xx" || prefix === "2x") {
+      value = "2XL"
+    } else {
+      value = "3XL"
+    }
+    add("size", value)
+  }
+  const letterSizeRe = /\b(xs|xl|xxl|2xl|3xl|xxxl)\b/g
+  const letterSizeMap: Record<string, string> = {
+    xs: "XS",
+    xl: "XL",
+    xxl: "2XL",
+    "2xl": "2XL",
+    "3xl": "3XL",
+    xxxl: "3XL",
+  }
+  while ((match = letterSizeRe.exec(lowered))) {
+    add("size", letterSizeMap[match[1]])
+  }
+
   return attrs
 }
 
 function stem(token: string): string {
+  // Never stem tokens containing a digit: they are catalog/pattern codes
+  // (e.g. "151AS" must stay distinct from "151A"), not plural English words.
+  if (/[0-9]/.test(token)) {
+    return token
+  }
   if (token.length > 3 && token.endsWith("s") && !token.endsWith("ss")) {
     return token.slice(0, -1)
   }

@@ -5,6 +5,7 @@ import {
   normalizeProduct,
   parsePackQty,
   skuStrength,
+  tokenizeName,
 } from "../normalize"
 import { scorePair } from "../score"
 import type { SupplierProductRow } from "../types"
@@ -64,6 +65,13 @@ describe("normalization", () => {
     const tokens = extractSkuLikeTokens("Alpen Flame 5/Pack Medium 852-012")
     expect(tokens).toContain("852012")
     expect(extractSkuLikeTokens("Glove Nitrile 100/Box 25mm")).toHaveLength(0)
+  })
+
+  it("stems plural words but never alphanumeric pattern codes", () => {
+    expect(tokenizeName("Premier Elevators")).toContain("elevator")
+    // "151AS" is an instrument pattern, not a plural of "151A" — keep distinct.
+    expect(tokenizeName("Extracting Forceps 151AS")).toContain("151as")
+    expect(tokenizeName("Extracting Forceps 151A")).toContain("151a")
   })
 })
 
@@ -223,7 +231,121 @@ describe("identity matching (golden pairs from production data)", () => {
   })
 })
 
+describe("name+brand matching (no shared catalog code)", () => {
+  it("matches the same branded product across distributor catalogs", () => {
+    // Same maker name listed by two distributors under different internal
+    // SKUs — no catalog code to join on, so the brand+name path must carry it.
+    const decision = score(
+      {
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "DC0001",
+        brand: "Kuraray America",
+        name: "PANAVIA Veneer LC Cement Intro Kit",
+      },
+      {
+        supplier_id: "msup_carolinadental_com",
+        manufacturer_sku: "CD9999",
+        brand: "Kuraray",
+        name: "PANAVIA Veneer LC Cement Intro Kit",
+      }
+    )
+    expect(["exact", "variant"]).toContain(decision.status)
+    expect(decision.skuScore).toBe(0)
+  })
+
+  it("holds a marginal brand-prefix-only difference for review, not auto-merge", () => {
+    const decision = score(
+      {
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "DC0002",
+        brand: "Kuraray America",
+        name: "PANAVIA Veneer LC Cement Intro Kit",
+      },
+      {
+        supplier_id: "msup_carolinadental_com",
+        manufacturer_sku: "CD9998",
+        brand: "Kuraray",
+        name: "Kuraray - PANAVIA Veneer LC Cement Intro Kit",
+      }
+    )
+    expect(decision.status).toBe("needs_review")
+  })
+
+  it("does not merge same-name products from a conflicting brand", () => {
+    const decision = score(
+      {
+        manufacturer_sku: "P1",
+        brand: "Acme",
+        name: "Universal Composite Syringe A2",
+      },
+      {
+        supplier_id: "msup_other_com",
+        manufacturer_sku: "P2",
+        brand: "Globex",
+        name: "Universal Composite Syringe A2",
+      }
+    )
+    expect(decision.status).toBe("reject")
+  })
+
+  it("rejects same-brand glove listings that differ only on size", () => {
+    const decision = score(
+      {
+        manufacturer_sku: "MF1",
+        brand: "Microflex",
+        name: "Supreno EC PF Nitrile Glove XX-Large 50/Bx",
+      },
+      {
+        supplier_id: "msup_other_com",
+        manufacturer_sku: "MF2",
+        brand: "Microflex",
+        name: "Supreno EC PF Nitrile Glove X-Large 50/Bx",
+      }
+    )
+    expect(decision.status).toBe("reject")
+  })
+
+  it("does not treat an instrument pattern suffix as a plural (151A vs 151AS)", () => {
+    const decision = score(
+      {
+        manufacturer_sku: "MX1",
+        brand: "Miltex Instrument",
+        name: "Extracting Forceps 151A",
+      },
+      {
+        supplier_id: "msup_other_com",
+        manufacturer_sku: "MX2",
+        brand: "Miltex",
+        name: "Extracting Forceps 151AS",
+      }
+    )
+    expect(["exact", "variant"]).not.toContain(decision.status)
+  })
+})
+
 describe("end-to-end clustering", () => {
+  it("clusters a name+brand match across suppliers with no shared code", () => {
+    const rows = [
+      product({
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "DC0001",
+        brand: "Kuraray America",
+        name: "PANAVIA Veneer LC Cement Intro Kit",
+        price_cents: 9900,
+      }),
+      product({
+        supplier_id: "msup_carolinadental_com",
+        manufacturer_sku: "CD9999",
+        brand: "Kuraray",
+        name: "PANAVIA Veneer LC Cement Intro Kit",
+        price_cents: 10500,
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    expect(result.clusters).toHaveLength(1)
+    expect(result.clusters[0].supplierCount).toBe(2)
+  })
+
   it("clusters true matches and isolates impostors sharing a weak SKU", () => {
     const rows = [
       product({

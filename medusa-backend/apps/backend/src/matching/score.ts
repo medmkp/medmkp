@@ -189,6 +189,16 @@ export function scorePair(a: NormalizedProduct, b: NormalizedProduct): PairDecis
     } else if (nameSim >= 0.7) {
       review = true
     }
+  } else if (brandRel === "match" && !numeric.bareConflict) {
+    // No catalog code at all: rely on brand identity + very high name
+    // similarity. Stricter than the weak-SKU path (nothing corroborates the
+    // name), and a bare-number disagreement vetoes outright. This is what
+    // recovers the pure-distributor catalogs whose only join key is the name.
+    if (nameSim >= 0.92) {
+      accepted = true
+    } else if (nameSim >= 0.8) {
+      review = true
+    }
   }
 
   if (accepted) {
