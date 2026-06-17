@@ -10,6 +10,7 @@ type DCDentalApiItem = {
   custitem_category_facet?: string
   custitem_dc_specs?: string
   internalid?: number | string
+  upccode?: string
   isbackorderable?: boolean
   isinstock?: boolean
   itemid?: string
@@ -167,6 +168,11 @@ function availability(item: DCDentalApiItem | undefined) {
   return "unknown" as const
 }
 
+function normalizeBarcode(item: DCDentalApiItem | undefined) {
+  const value = String(item?.upccode ?? "").trim()
+  return /^\d{8,14}$/.test(value) ? value : ""
+}
+
 function packSize(value: string) {
   return firstMatch(value, [
     /([0-9][0-9,]*\s*\/\s*(?:bag|box|case|pack|pkg|bottle|tube|syringe|unit|cartridge)s?)/i,
@@ -190,6 +196,7 @@ export const dcDentalAdapter: SupplierProductAdapter = {
     return {
       sku,
       manufacturer_sku: sku,
+      barcode: normalizeBarcode(item),
       brand: item?.manufacturer || htmlManufacturer(html),
       name,
       description,

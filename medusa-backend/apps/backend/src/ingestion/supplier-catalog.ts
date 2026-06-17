@@ -17,6 +17,7 @@ export type CanonicalProductCandidate = {
 export type SupplierCatalogRow = {
   sku?: string
   manufacturer_sku?: string
+  barcode?: string
   brand?: string
   name?: string
   description?: string
@@ -216,6 +217,7 @@ export function buildSupplierCatalogIngestion(
       image_url: firstImageUrl(row),
       sku,
       manufacturer_sku: row.manufacturer_sku ?? "",
+      barcode: row.barcode?.trim() || null,
       brand: row.brand ?? "",
       name,
       description,

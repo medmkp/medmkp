@@ -70,6 +70,24 @@ function decodeBasicHtml(value: string) {
   return value.replace(/&amp;/g, "&").replace(/&quot;/g, "\"")
 }
 
+// Fields the DC Dental adapter reads, plus `upccode` (the GTIN/UPC barcode).
+// DC Dental's own page requests `fieldset=details`, which omits upccode and
+// ignores any `fields` param. Swapping in an explicit `fields` list returns
+// upccode while still carrying the nested price/image objects the adapter uses.
+const DC_DENTAL_API_FIELDS = [
+  "internalid", "itemid", "upccode", "manufacturer",
+  "storedisplayname2", "storedescription", "storedetaileddescription",
+  "custitem_category_facet", "custitem_quik_view_subcat2", "custitem_dc_specs",
+  "onlinecustomerprice_detail", "isinstock", "isbackorderable",
+  "quantityavailable", "urlcomponent", "itemimages_detail", "itemimages", "itemimage",
+]
+
+function requestUpcCode(apiUrl: URL) {
+  apiUrl.searchParams.delete("fieldset")
+  apiUrl.searchParams.set("fields", DC_DENTAL_API_FIELDS.join(","))
+  return apiUrl
+}
+
 function dcDentalApiUrl(productUrl: string, html: string) {
   try {
     if (!/dcdental\.com$/i.test(new URL(productUrl).hostname)) {
@@ -87,7 +105,7 @@ function dcDentalApiUrl(productUrl: string, html: string) {
   }
 
   try {
-    return new URL(decodeBasicHtml(source), productUrl).href
+    return requestUpcCode(new URL(decodeBasicHtml(source), productUrl)).href
   } catch {
     return ""
   }
