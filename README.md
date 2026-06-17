@@ -141,6 +141,14 @@ http://localhost:3000
 
 If port `3000` is busy, Next will print the alternate port, often `3001`.
 
+### 6. Password Reset
+
+The web app has a forgot/reset-password flow (`/forgot-password`, `/reset-password`)
+on top of Medusa's email/password auth. Set `MEDMKP_FRONTEND_URL` on the Medusa
+backend (local `.env` and Render) so reset links point at the web app. Until a
+notification provider is configured, the reset link is written to the Medusa logs
+by the `auth.password_reset` subscriber, so the flow can be completed in development.
+
 ### Quick Health Check
 
 With Docker and Medusa running:

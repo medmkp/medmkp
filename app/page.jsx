@@ -25,13 +25,15 @@ const routeByView = {
   about: "/about",
   login: "/login",
   signup: "/signup",
+  forgotPassword: "/forgot-password",
+  resetPassword: "/reset-password",
   home: "/app",
   history: "/app/history",
   settings: "/app/settings",
 };
 
 function viewFromPath(pathname = "/") {
-  const path = pathname.replace(/\/+$/, "") || "/";
+  const path = pathname.split("?")[0].split("#")[0].replace(/\/+$/, "") || "/";
 
   // Public site
   if (path === "/") return { view: "landing", isLoggedIn: false };
@@ -39,6 +41,8 @@ function viewFromPath(pathname = "/") {
   if (path === "/about") return { view: "about", isLoggedIn: false };
   if (path === "/login") return { view: "login", isLoggedIn: false };
   if (path === "/signup") return { view: "signup", isLoggedIn: false };
+  if (path === "/forgot-password") return { view: "forgotPassword", isLoggedIn: false };
+  if (path === "/reset-password") return { view: "resetPassword", isLoggedIn: false };
 
   // Authenticated app
   if (path === "/app") return { view: "home", isLoggedIn: true };
@@ -756,6 +760,7 @@ function LoginPage({ onNavigate, onAuthed }) {
         {error && <p className="auth-error" style={{ color: "#c0392b", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
         <button className="primary-action" type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
+      <p className="auth-alt"><a href="/forgot-password" onClick={(event) => { event.preventDefault(); onNavigate("/forgot-password"); }}>Forgot your password?</a></p>
       <p className="auth-alt">New to MedMKP? <a href="/signup" onClick={(event) => { event.preventDefault(); onNavigate("/signup"); }}>Create an account</a></p>
     </AuthShell>
   );
@@ -801,6 +806,122 @@ function SignupPage({ onNavigate, onAuthed }) {
         <button className="primary-action" type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create account"}</button>
       </form>
       <p className="auth-alt">Already have an account? <a href="/login" onClick={(event) => { event.preventDefault(); onNavigate("/login"); }}>Log in</a></p>
+    </AuthShell>
+  );
+}
+
+function ForgotPasswordPage({ onNavigate }) {
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      /* show the same neutral confirmation regardless of outcome */
+    } finally {
+      setSubmitting(false);
+      setSent(true);
+    }
+  }
+
+  return (
+    <AuthShell onNavigate={onNavigate}>
+      {sent ? (
+        <>
+          <h1>Check your email</h1>
+          <p className="auth-sub">
+            If an account exists for {email}, we&apos;ve sent a link to reset your password.
+            For your security, the link expires soon.
+          </p>
+          <button className="primary-action" type="button" style={{ marginTop: 20, width: "100%" }} onClick={() => onNavigate("/login")}>Back to sign in</button>
+        </>
+      ) : (
+        <>
+          <h1>Reset your password</h1>
+          <p className="auth-sub">Enter your email and we&apos;ll send you a secure reset link.</p>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <label><span>Email</span><input type="email" placeholder="you@practice.com" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+            <button className="primary-action" type="submit" disabled={submitting}>{submitting ? "Sending…" : "Send reset link"}</button>
+          </form>
+          <p className="auth-alt"><a href="/login" onClick={(event) => { event.preventDefault(); onNavigate("/login"); }}>Back to sign in</a></p>
+        </>
+      )}
+    </AuthShell>
+  );
+}
+
+function ResetPasswordPage({ onNavigate }) {
+  const [token, setToken] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setToken(params.get("token") || "");
+    setEmail((params.get("email") || "").toLowerCase());
+  }, []);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, email, password }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || "Could not reset your password.");
+        return;
+      }
+      onNavigate("/login");
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AuthShell onNavigate={onNavigate}>
+      <h1>Set a new password</h1>
+      {!token || !email ? (
+        <>
+          <p className="auth-sub">This reset link is invalid or incomplete. Please request a new one.</p>
+          <button className="primary-action" type="button" style={{ marginTop: 20, width: "100%" }} onClick={() => onNavigate("/forgot-password")}>Request a new link</button>
+        </>
+      ) : (
+        <>
+          <p className="auth-sub">Choose a strong password for your account.</p>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <label><span>New password</span><input type="password" placeholder="Create a password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+            <label><span>Confirm password</span><input type="password" placeholder="Re-enter password" value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></label>
+            {error && <p className="auth-error" style={{ color: "#c0392b", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
+            <button className="primary-action" type="submit" disabled={submitting}>{submitting ? "Updating…" : "Update password"}</button>
+          </form>
+        </>
+      )}
     </AuthShell>
   );
 }
@@ -1311,6 +1432,8 @@ export default function Home() {
           : view === "about" ? <AboutPage onNavigate={navigate} />
           : view === "login" ? <LoginPage onNavigate={navigate} onAuthed={handleAuthed} />
           : view === "signup" ? <SignupPage onNavigate={navigate} onAuthed={handleAuthed} />
+          : view === "forgotPassword" ? <ForgotPasswordPage onNavigate={navigate} />
+          : view === "resetPassword" ? <ResetPasswordPage onNavigate={navigate} />
           : <LoggedOutLanding onNavigate={navigate} />}
         <IconSprite />
       </>
