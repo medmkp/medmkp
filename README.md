@@ -217,7 +217,7 @@ Render Postgres: database for Medusa
 Create a Vercel project from this repo:
 
 ```text
-Repository: demuizon/medmkp-demo
+Repository: medmkp/medmkp-demo
 Root directory: ./
 Framework: Next.js
 Build command: npm run build
@@ -226,7 +226,7 @@ Build command: npm run build
 Set this Vercel environment variable after the Render backend exists:
 
 ```text
-MEDUSA_BACKEND_URL=https://medmkp-medusa.onrender.com
+MEDUSA_BACKEND_URL=https://medmkp.com
 ```
 
 The frontend does not call Medusa directly from browser code. It calls the local
@@ -239,7 +239,7 @@ The repo includes [render.yaml](./render.yaml) for a Render Blueprint.
 Create a Render Blueprint from this repo:
 
 ```text
-Repository: demuizon/medmkp-demo
+Repository: medmkp/medmkp-demo
 Blueprint file: render.yaml
 ```
 

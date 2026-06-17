@@ -2,7 +2,7 @@ services:
   - type: web
     name: medmkp-medusa
     runtime: node
-    repo: https://github.com/demuizon/medmkp
+    repo: https://github.com/medmkp/medmkp
     branch: main
     rootDir: medusa-backend/apps/backend
     plan: starter
@@ -25,11 +25,11 @@ services:
           type: keyvalue
           property: connectionString
       - key: STORE_CORS
-        value: https://medmkp-demo.vercel.app,http://localhost:3000,http://localhost:3001
+        value: https://medmkp.com,https://medmkp-demo.vercel.app,http://localhost:3000,http://localhost:3001
       - key: ADMIN_CORS
-        value: https://medmkp-medusa.onrender.com,https://medmkp-demo.vercel.app,http://localhost:9000,http://localhost:3000,http://localhost:3001
+        value: https://medmkp.com,https://medmkp-medusa.onrender.com,https://medmkp-demo.vercel.app,http://localhost:9000,http://localhost:3000,http://localhost:3001
       - key: AUTH_CORS
-        value: https://medmkp-medusa.onrender.com,https://medmkp-demo.vercel.app,http://localhost:9000,http://localhost:3000,http://localhost:3001
+        value: https://medmkp.com,https://medmkp-medusa.onrender.com,https://medmkp-demo.vercel.app,http://localhost:9000,http://localhost:3000,http://localhost:3001
       - key: JWT_SECRET
         generateValue: true
       - key: COOKIE_SECRET
