@@ -1,4 +1,5 @@
 import "../styles.css";
+import DevBadge from "./DevBadge";
 
 export const metadata = {
   title: "MedMKP",
@@ -8,7 +9,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <DevBadge />
+      </body>
     </html>
   );
 }

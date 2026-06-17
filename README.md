@@ -161,6 +161,65 @@ curl http://localhost:3000
 
 If all three respond, infrastructure, backend, and frontend are up.
 
+## Worktree Dev Instances
+
+Each git worktree can run its own isolated frontend `next dev` on a unique port,
+with an in-app badge showing which branch and database it is pointed at — so you
+can verify a feature in one worktree without it clashing with another.
+
+Once per clone, install the hook:
+
+```bash
+npm run wt:setup
+```
+
+From then on, every `git worktree add` auto-writes a gitignored `.env.local` for
+the new worktree with a unique port (range `3001`–`3099`), a backend target, and
+the branch name. To run it:
+
+```bash
+npm run dev        # next dev on this worktree's assigned port
+```
+
+A fixed badge appears in the bottom-left of the app:
+
+```text
+claude/my-feature · DB: PROD · :3042
+```
+
+It is **red** when the worktree points at the prod backend and **blue** when it
+points at local Medusa. New worktrees default to **prod** so `npm run dev` shows
+real data with no local Postgres/Medusa — which means writes hit prod data; the
+red badge is the reminder. Switch targets any time (restart `npm run dev` to
+apply):
+
+```bash
+npm run wt:local   # point at local Medusa (http://127.0.0.1:9000)
+npm run wt:prod    # point at the Render prod backend
+```
+
+List every worktree's instance:
+
+```bash
+npm run wt:list
+# PORT    DB     BRANCH                    PATH
+# 3042    prod   claude/my-feature         /Users/.../.claude/worktrees/...
+```
+
+Notes:
+
+- Isolation is **frontend-only**: the badge controls which backend (and thus
+  which DB) this worktree's frontend calls via `MEDUSA_BACKEND_URL`. The backend
+  is shared — local mode uses the single Medusa on `:9000` (start it per
+  [Run Locally](#run-locally) above); prod mode needs nothing local.
+- `.env.local` is read only by Next.js (the frontend); it does not affect the
+  Medusa backend, which reads only `.env`.
+- The main checkout is unaffected: it keeps running on `:3000` with no badge.
+- The hook lives in the shared `.git/hooks`, so `wt:setup` only needs running
+  once per clone. A worktree auto-provisions only if its branch contains these
+  scripts, so this must be on `main` for new worktrees to inherit it; retrofit an
+  existing worktree with `npm run wt:init`.
+
 ## Static Demo
 
 Build the Medusa backend:

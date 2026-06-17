@@ -1,9 +1,14 @@
 {
   "scripts": {
-    "dev": "next dev",
+    "dev": "bash scripts/worktree-dev.sh",
     "build": "next build",
     "start": "next start",
-    "deploy:airflow": "scripts/deploy-airflow-nuc.sh"
+    "deploy:airflow": "scripts/deploy-airflow-nuc.sh",
+    "wt:setup": "bash scripts/worktree-setup.sh",
+    "wt:init": "bash scripts/worktree-init.sh",
+    "wt:prod": "bash scripts/worktree-db.sh prod",
+    "wt:local": "bash scripts/worktree-db.sh local",
+    "wt:list": "bash scripts/worktree-list.sh"
   },
   "dependencies": {
     "next": "^16.2.7",

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fires on `git worktree add` (and fresh clones): a new worktree checkout passes
+# prev-HEAD = all-zeros. Provision an isolated frontend instance for it.
+# No-ops on ordinary branch switches and on branches without the script.
+[ "$3" = "1" ] || exit 0                                              # branch checkouts only
+[ "$1" = "0000000000000000000000000000000000000000" ] || exit 0      # fresh worktree only
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -x "$root/scripts/worktree-init.sh" ] && "$root/scripts/worktree-init.sh" >&2 || true
+exit 0
