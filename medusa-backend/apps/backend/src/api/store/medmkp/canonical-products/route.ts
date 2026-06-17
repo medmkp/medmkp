@@ -22,14 +22,6 @@ function normalize(value: string | null) {
   return value?.trim().toLowerCase() || ""
 }
 
-function includesText(haystack: string, needle: string) {
-  if (!needle) {
-    return true
-  }
-
-  return haystack.includes(needle)
-}
-
 function offerPriceRange(offers: {
   price_cents: number
 }[]) {
@@ -59,36 +51,36 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const offsetParam = Number(url.searchParams.get("offset"))
   const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0
 
-  const canonicalProducts = await medmkp.listCanonicalProducts()
-  const filteredCanonicalProducts = canonicalProducts.filter((product) => {
-    if (handle && normalize(product.handle) !== handle && normalize(product.id) !== handle) {
-      return false
-    }
+  // Filter at the database instead of loading the entire canonical catalog and
+  // filtering in memory. The previous approach fetched every canonical product
+  // on each request (~20s in production on the small Render instance), which
+  // made both this product page and search crawl. $ilike/$or/$and reproduce the
+  // earlier substring/equality matching, but the database does the work.
+  const where: Record<string, any>[] = []
+  if (handle) {
+    where.push({ $or: [{ handle: { $ilike: handle } }, { id: { $ilike: handle } }] })
+  }
+  if (q) {
+    const term = `%${q}%`
+    where.push({
+      $or: [
+        { name: { $ilike: term } },
+        { handle: { $ilike: term } },
+        { category: { $ilike: term } },
+        { description: { $ilike: term } },
+        { attributes_text: { $ilike: term } },
+        { unit_of_measure: { $ilike: term } },
+      ],
+    })
+  }
+  if (category) {
+    where.push({ category: { $ilike: category } })
+  }
 
-    if (q) {
-      const haystack = [
-        product.handle,
-        product.name,
-        product.category,
-        product.description,
-        product.attributes_text,
-        product.unit_of_measure,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
+  const productFilters =
+    where.length === 0 ? {} : where.length === 1 ? where[0] : { $and: where }
 
-      if (!includesText(haystack, q.toLowerCase())) {
-        return false
-      }
-    }
-
-    if (category && normalize(product.category) !== category) {
-      return false
-    }
-
-    return true
-  })
+  const filteredCanonicalProducts = await medmkp.listCanonicalProducts(productFilters as any)
 
   if (!filteredCanonicalProducts.length) {
     res.json({ count: 0, canonical_products: [] })
