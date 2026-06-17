@@ -70,7 +70,8 @@ Each supplier product is normalized into comparable features:
   "100/Box", trailing "(12)", "(1 x 8)" → 8, "Case of 12 x 160" → 1920).
   A parsed quantity that is really a catalog number ("Pkg 24746") is vetoed.
 - **Numeric attributes**: unit-qualified values — sizes (`25mm`), gauges
-  (`18ga`), shades (`A4`), tapers (`.04`), hash sizes (`#15`). Dental
+  (`18ga`), shades (`A4`), tapers (`.04`), hash sizes (`#15`), plus apparel
+  sizing (`Small`/`X-Large`/`2XL`, for gloves, gowns and masks). Dental
   products are differentiated by these, so they get special treatment in
   scoring.
 - **Brand**: junk brands are discarded (Pearson emits `1 x 6`, `lateral`,
@@ -82,10 +83,16 @@ Each supplier product is normalized into comparable features:
 ### Stage 2 — Block (`engine.ts`)
 
 Comparing all ~200K products pairwise is infeasible and unnecessary. Two
-products become a *candidate pair* only when they share a normalized catalog
-code: equal manufacturer SKUs, or a manufacturer SKU appearing as a
-name-embedded catalog number on the other side. Posting lists longer than
-100 products are skipped as junk hub keys.
+products become a *candidate pair* when they share either:
+
+1. **a normalized catalog code** — equal manufacturer SKUs, or a manufacturer
+   SKU appearing as a name-embedded catalog number on the other side; or
+2. **the same primary brand plus ≥2 shared core name tokens** — this recovers
+   the pure-distributor catalogs (DC Dental, Carolina) whose `manufacturer_sku`
+   is an internal code that never collides cross-supplier, so code-based
+   blocking is blind to them.
+
+Posting lists longer than 100 products are skipped as junk hub keys.
 
 ### Stage 3 — Score (`score.ts`)
 
@@ -100,13 +107,16 @@ Each candidate pair gets an explainable rule-based decision built from:
 
 The decision ladder:
 
-- Numeric attribute conflict (25mm vs 31mm, shade A2 vs B1) → **reject**,
-  always. Same-SKU listings that differ on a measured size are different
-  products.
+- Numeric attribute conflict (25mm vs 31mm, shade A2 vs B1, glove XL vs
+  XX-Large) → **reject**, always. Listings that differ on a measured or apparel
+  size are different products even when every other signal agrees.
 - Strong SKU evidence needs moderate name corroboration to accept; brand
   conflict downgrades to `needs_review`.
 - Weak SKU evidence (short numeric SKUs) needs strong name similarity and a
   non-conflicting brand.
+- No catalog code at all (the brand+name candidates): requires a matching
+  brand and *very* high name similarity (≥0.92) to accept as `exact`/`variant`;
+  0.80–0.92 is `needs_review`. A bare-number disagreement vetoes outright.
 - Accepted pairs with different pack counts become `variant` instead of
   `exact`.
 - Middle ground becomes `needs_review` (report-only).
