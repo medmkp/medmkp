@@ -8204,6 +8204,10 @@ th {
 /* Mobile list */
 .m-list { display: flex; flex-direction: column; gap: 16px; }
 .m-topbar { display: flex; align-items: center; justify-content: space-between; }
+.m-topbar-actions { display: flex; align-items: center; gap: 8px; }
+.m-menu-wrap { position: relative; }
+.m-actions-menu { left: auto; right: 0; }
+.m-iconbtn .crl-kebab-dots { width: 20px; height: 20px; color: var(--ink); }
 .m-topbar h1 { font-size: 20px; font-weight: 800; color: var(--ink); }
 .m-iconbtn { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
 .m-iconbtn .button-icon { width: 18px; height: 18px; }

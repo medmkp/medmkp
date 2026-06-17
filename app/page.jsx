@@ -480,16 +480,13 @@ function MobileBottomNav({ view, onNavigate, onAdd }) {
         <button className={view === "home" ? "active" : ""} type="button" onClick={() => onNavigate("home")}>
           <span><Icon name="icon-home" className="mobile-bottom-icon" /></span>Home
         </button>
-        <button className={view === "history" ? "active" : ""} type="button" onClick={() => onNavigate("history")}>
-          <span><Icon name="icon-clock" className="mobile-bottom-icon" /></span>History
-        </button>
       </div>
       <button className="m-nav-fab" type="button" aria-label="Add items" onClick={onAdd}>
         <Icon name="icon-plus" className="m-nav-fab-icon" />
       </button>
       <div className="m-nav-group">
-        <button className={view === "settings" ? "active" : ""} type="button" onClick={() => onNavigate("settings")}>
-          <span><Icon name="icon-list" className="mobile-bottom-icon" /></span>More
+        <button className={view === "history" ? "active" : ""} type="button" onClick={() => onNavigate("history")}>
+          <span><Icon name="icon-clock" className="mobile-bottom-icon" /></span>History
         </button>
       </div>
     </nav>
@@ -1640,7 +1637,8 @@ function rowMode(row) {
 
 // Mobile card list for the current reorder list (replaces the desktop table on
 // phones). Stats band + status tabs + tappable product cards.
-function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow }) {
+function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="m-list">
       <div className="m-brandbar">
@@ -1653,7 +1651,29 @@ function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenR
 
       <header className="m-topbar">
         <h1>{title}</h1>
-        <button className="m-iconbtn" type="button" aria-label="Filters"><Icon name="icon-filter" className="button-icon" /></button>
+        <div className="m-topbar-actions">
+          <button className="m-iconbtn" type="button" aria-label="Filters"><Icon name="icon-filter" className="button-icon" /></button>
+          <div className="m-menu-wrap">
+            <button className="m-iconbtn" type="button" aria-label="List actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+              <svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
+            </button>
+            {menuOpen && (
+              <>
+                <div className="crl-add-menu-backdrop" onClick={() => setMenuOpen(false)} />
+                <div className="crl-add-menu m-actions-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onToast("List archived"); }}>
+                    <Icon name="icon-clipboard" className="button-icon" />
+                    <span><strong>Archive list</strong><small>Move to list history</small></span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onToast("List cleared"); }}>
+                    <Icon name="icon-trash" className="button-icon crl-menu-danger" />
+                    <span><strong>Clear list</strong><small>Remove all items</small></span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </header>
 
       <nav className="m-tabs" aria-label="Item list filters">
@@ -1680,7 +1700,7 @@ function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenR
                 {row.price != null && <strong>{mrMoney(row.price)}</strong>}
                 {row.price != null && <small>${mrEa(row.perEa)} / ea</small>}
               </span>
-              <Icon name="icon-chevron-right" className="m-card-chev" />
+              <Icon name="icon-chevron-right" className="button-icon m-card-chev" />
             </button>
           );
         })}
@@ -1855,6 +1875,7 @@ function CurrentReorderList({
           tab={tab}
           onTab={setTab}
           onOpenRow={openRow}
+          onToast={onToast}
         />
         {detail && (
           <MobileItemDetail
