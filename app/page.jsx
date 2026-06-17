@@ -1123,9 +1123,6 @@ export default function Home() {
                 selectedInvoiceName={selectedInvoiceName}
                 hasUploadedInvoice={hasUploadedInvoice}
                 onScan={handleScanComplete}
-                searchTerm={searchTerm}
-                onSearchTerm={setSearchTerm}
-                searchResults={searchResults}
                 onToast={showToast}
               />
             )
@@ -1826,9 +1823,6 @@ function CurrentReorderList({
   selectedInvoiceName,
   hasUploadedInvoice,
   onScan,
-  searchTerm,
-  onSearchTerm,
-  searchResults,
   onToast,
 }) {
   const realRows = deriveMatchRows(items);
@@ -1843,7 +1837,6 @@ function CurrentReorderList({
   const [editingPrefs, setEditingPrefs] = useState(false);
   const [detail, setDetail] = useState(null);
   const [detailWide, setDetailWide] = useState(false);
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -1924,34 +1917,14 @@ function CurrentReorderList({
           >
             <Icon name="icon-scan" className="button-icon" />Scan Barcode
           </button>
-          <div className="crl-add-menu-wrap">
-            <button
-              type="button"
-              className="crl-add-btn"
-              aria-haspopup="menu"
-              aria-expanded={addMenuOpen}
-              onClick={() => setAddMenuOpen((open) => !open)}
-            >
-              <Icon name="icon-plus" className="button-icon" />
-              Add Item
-              <span className="crl-add-caret"><Icon name="icon-chevron-down" className="button-icon" /></span>
-            </button>
-            {addMenuOpen && (
-              <>
-                <div className="crl-add-menu-backdrop" onClick={() => setAddMenuOpen(false)} />
-                <div className="crl-add-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); onAddMode("upload"); }}>
-                    <Icon name="icon-cloud-upload" className="button-icon" />
-                    <span><strong>Upload</strong><small>Invoice or reorder sheet</small></span>
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => { setAddMenuOpen(false); onAddMode("search"); }}>
-                    <Icon name="icon-search" className="button-icon" />
-                    <span><strong>Search items</strong><small>Find products in the catalog</small></span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <button
+            type="button"
+            className="crl-add-btn"
+            onClick={() => onAddMode("upload")}
+          >
+            <Icon name="icon-cloud-upload" className="button-icon" />
+            Upload Invoice
+          </button>
           <div className="crl-more-wrap">
             <button className="crl-more crl-more-kebab" type="button" aria-haspopup="menu" aria-expanded={moreOpen} aria-label="More actions" onClick={() => setMoreOpen((open) => !open)}>
               <svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
@@ -1975,29 +1948,10 @@ function CurrentReorderList({
         </div>
       </header>
 
-      {(addMode === "scan" || addMode === "search") && (
+      {addMode === "scan" && (
         <section className="crl-add">
-            {addMode === "scan" && (
-              <div className="crl-add-panel"><DesktopBarcodeScan onScan={onScan} /></div>
-            )}
-            {addMode === "search" && (
-              <div className="crl-add-panel crl-search-panel">
-                <label className="crl-search">
-                  <Icon name="icon-search" className="button-icon" />
-                  <input
-                    type="search"
-                    placeholder="Search the catalog…"
-                    value={searchTerm}
-                    onChange={(event) => onSearchTerm(event.target.value)}
-                    autoFocus
-                  />
-                </label>
-                {searchTerm.trim() && (
-                  <SearchResults results={searchResults} searchHref={`/catalog/search?q=${encodeURIComponent(searchTerm.trim())}`} />
-                )}
-              </div>
-            )}
-          </section>
+          <div className="crl-add-panel"><DesktopBarcodeScan onScan={onScan} /></div>
+        </section>
       )}
 
       <div className={`crl-layout ${detail ? "has-detail" : ""} ${detail && detailWide ? "detail-wide" : ""}`}>
