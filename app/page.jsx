@@ -8,23 +8,38 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const PROCESSING_DURATION_MS = 2000;
 
 const routeByView = {
-  home: "/dashboard",
-  history: "/history",
-  settings: "/settings",
+  landing: "/",
+  pricing: "/pricing",
+  about: "/about",
+  login: "/login",
+  signup: "/signup",
+  home: "/app",
+  history: "/app/history",
+  settings: "/app/settings",
 };
 
 function viewFromPath(pathname = "/") {
   const path = pathname.replace(/\/+$/, "") || "/";
 
-  if (path === "/") return { view: "home", isLoggedIn: false };
-  if (path === "/history") return { view: "history", isLoggedIn: true };
-  if (path === "/settings") return { view: "settings", isLoggedIn: true };
+  // Public site
+  if (path === "/") return { view: "landing", isLoggedIn: false };
+  if (path === "/pricing") return { view: "pricing", isLoggedIn: false };
+  if (path === "/about") return { view: "about", isLoggedIn: false };
+  if (path === "/login") return { view: "login", isLoggedIn: false };
+  if (path === "/signup") return { view: "signup", isLoggedIn: false };
+
+  // Authenticated app
+  if (path === "/app") return { view: "home", isLoggedIn: true };
+  if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
+  if (path === "/app/history") return { view: "history", isLoggedIn: true };
+  if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
+  if (path === "/app/settings") return { view: "settings", isLoggedIn: true };
 
   return { view: "home", isLoggedIn: true };
 }
 
 function pathForView(view) {
-  return routeByView[view] || "/dashboard";
+  return routeByView[view] || "/app";
 }
 
 function wait(ms) {
@@ -481,24 +496,21 @@ function MobileBottomNav({ view, onNavigate, onAdd }) {
   );
 }
 
-function LoggedOutLanding({ onEnter }) {
+function LoggedOutLanding({ onNavigate }) {
   return (
     <main className="landing-page">
       <header className="landing-nav">
-        <a className="landing-brand" href="#" aria-label="MedMKP home">
+        <a className="landing-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
           <BrandMark />
         </a>
         <nav aria-label="Landing navigation">
           <a href="#how-it-works">How it works</a>
-          <a href="#what-you-get">What you get</a>
-          <button type="button" onClick={() => onEnter("supplier")}>For dental offices</button>
+          <a href="/pricing" onClick={(event) => { event.preventDefault(); onNavigate("/pricing"); }}>Pricing</a>
+          <a href="/about" onClick={(event) => { event.preventDefault(); onNavigate("/about"); }}>About</a>
         </nav>
         <div className="landing-nav-actions">
-          <button className="secondary-action compact" type="button" onClick={() => onEnter("upload")}>Enter SKU</button>
-          <button className="primary-action compact" type="button" onClick={() => onEnter("upload")}>
-            <Icon name="icon-scan" className="button-icon" />
-            Scan an item
-          </button>
+          <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
+          <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
         </div>
       </header>
 
@@ -508,11 +520,11 @@ function LoggedOutLanding({ onEnter }) {
             <h1>Scan your dental supplies and spot <span>possible savings</span> in seconds</h1>
             <p>Point your phone at a barcode or enter a SKU to identify the item, compare typical price ranges, and save it to a free starter reorder list. No login required to try it.</p>
             <div className="landing-actions">
-              <button className="primary-action" type="button" onClick={() => onEnter("upload")}>
+              <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>
                 <Icon name="icon-scan" className="button-icon" />
                 Scan 1 item free
               </button>
-              <button className="secondary-action" type="button" onClick={() => onEnter("matchReview")}>
+              <button className="secondary-action" type="button" onClick={() => onNavigate("/app")}>
                 <Icon name="icon-play" className="button-icon" />
                 See sample result
               </button>
@@ -591,11 +603,11 @@ function LoggedOutLanding({ onEnter }) {
               <h2>Want office-specific savings?</h2>
               <p>Upload one invoice or tell us your last paid price to unlock exact savings comparisons, reorder memory, and supplier-aware recommendations.</p>
               <div className="landing-actions">
-                <button className="primary-action" type="button" onClick={() => onEnter("upload")}>
+                <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>
                   <Icon name="icon-cloud-upload" className="button-icon" />
                   Start free
                 </button>
-                <button className="secondary-action" type="button" onClick={() => onEnter("supplier")}>
+                <button className="secondary-action" type="button" onClick={() => onNavigate("/about")}>
                   <Icon name="icon-chat" className="button-icon" />
                   Talk to us
                 </button>
@@ -617,10 +629,123 @@ function LoggedOutLanding({ onEnter }) {
   );
 }
 
+function PublicNav({ onNavigate, active }) {
+  return (
+    <header className="public-nav">
+      <a className="public-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
+        <BrandMark />
+      </a>
+      <nav className="public-links" aria-label="Marketing navigation">
+        <a href="/pricing" className={active === "pricing" ? "active" : ""} onClick={(event) => { event.preventDefault(); onNavigate("/pricing"); }}>Pricing</a>
+        <a href="/about" className={active === "about" ? "active" : ""} onClick={(event) => { event.preventDefault(); onNavigate("/about"); }}>About</a>
+      </nav>
+      <div className="public-nav-actions">
+        <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
+        <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
+      </div>
+    </header>
+  );
+}
+
+function PricingPage({ onNavigate }) {
+  const tiers = [
+    { name: "Starter", price: "Free", per: "", blurb: "For trying it out", cta: "Start free", to: "/signup", featured: false, features: ["Scan & search products", "1 reorder list", "Benchmark price ranges"] },
+    { name: "Practice", price: "$49", per: "/mo", blurb: "For a single office", cta: "Start free trial", to: "/signup", featured: true, features: ["Unlimited reorder lists", "Invoice upload & matching", "Supplier handoffs", "Price alerts"] },
+    { name: "Group", price: "Custom", per: "", blurb: "For multi-location groups", cta: "Contact sales", to: "/about", featured: false, features: ["Everything in Practice", "Multiple locations", "Team roles & approvals", "Priority support"] },
+  ];
+  return (
+    <main className="public-page">
+      <PublicNav onNavigate={onNavigate} active="pricing" />
+      <section className="public-hero">
+        <h1>Simple pricing for dental offices</h1>
+        <p>Start free. Upgrade when you&rsquo;re ready to optimize every reorder.</p>
+      </section>
+      <section className="pricing-tiers">
+        {tiers.map((tier) => (
+          <article className={`pricing-card ${tier.featured ? "featured" : ""}`} key={tier.name}>
+            {tier.featured && <span className="pricing-badge">Most popular</span>}
+            <h3>{tier.name}</h3>
+            <div className="pricing-price"><strong>{tier.price}</strong>{tier.per && <small>{tier.per}</small>}</div>
+            <p className="pricing-blurb">{tier.blurb}</p>
+            <ul className="pricing-features">
+              {tier.features.map((feature) => <li key={feature}><Icon name="icon-check" className="button-icon" />{feature}</li>)}
+            </ul>
+            <button className={tier.featured ? "primary-action" : "secondary-action"} type="button" onClick={() => onNavigate(tier.to)}>{tier.cta}</button>
+          </article>
+        ))}
+      </section>
+    </main>
+  );
+}
+
+function AboutPage({ onNavigate }) {
+  return (
+    <main className="public-page">
+      <PublicNav onNavigate={onNavigate} active="about" />
+      <section className="public-hero">
+        <h1>We help dental offices buy supplies smarter</h1>
+        <p>MedMKP turns your invoices and barcodes into a clean, matched reorder list, so you can compare prices across suppliers and reorder in minutes instead of hours.</p>
+      </section>
+      <section className="about-grid">
+        <div><Icon name="icon-scan" className="about-icon" /><strong>Scan or upload</strong><p>Capture items by barcode, photo, or invoice upload.</p></div>
+        <div><Icon name="icon-shuffle" className="about-icon" /><strong>Match &amp; compare</strong><p>We match to a canonical catalog and surface the best-value supplier.</p></div>
+        <div><Icon name="icon-handshake" className="about-icon" /><strong>Hand off &amp; reorder</strong><p>Group by supplier and hand off a ready-to-order plan.</p></div>
+      </section>
+      <section className="about-cta">
+        <h2>Ready to try it?</h2>
+        <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>Create your free account</button>
+      </section>
+    </main>
+  );
+}
+
+function AuthShell({ title, subtitle, children, onNavigate }) {
+  return (
+    <main className="auth-page">
+      <a className="auth-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
+        <BrandMark />
+      </a>
+      <div className="auth-card">
+        <h1>{title}</h1>
+        <p className="auth-sub">{subtitle}</p>
+        {children}
+      </div>
+    </main>
+  );
+}
+
+function LoginPage({ onNavigate }) {
+  return (
+    <AuthShell title="Welcome back" subtitle="Sign in to your MedMKP workspace." onNavigate={onNavigate}>
+      <form className="auth-form" onSubmit={(event) => { event.preventDefault(); onNavigate("/app"); }}>
+        <label><span>Email</span><input type="email" placeholder="you@practice.com" required /></label>
+        <label><span>Password</span><input type="password" placeholder="••••••••" required /></label>
+        <button className="primary-action" type="submit">Sign in</button>
+      </form>
+      <p className="auth-alt">New to MedMKP? <a href="/signup" onClick={(event) => { event.preventDefault(); onNavigate("/signup"); }}>Create an account</a></p>
+    </AuthShell>
+  );
+}
+
+function SignupPage({ onNavigate }) {
+  return (
+    <AuthShell title="Create your account" subtitle="Start optimizing your dental supply reorders." onNavigate={onNavigate}>
+      <form className="auth-form" onSubmit={(event) => { event.preventDefault(); onNavigate("/app"); }}>
+        <label><span>Practice name</span><input type="text" placeholder="Bright Smiles Dental" required /></label>
+        <label><span>Email</span><input type="email" placeholder="you@practice.com" required /></label>
+        <label><span>Password</span><input type="password" placeholder="Create a password" required /></label>
+        <button className="primary-action" type="submit">Create account</button>
+      </form>
+      <p className="auth-alt">Already have an account? <a href="/login" onClick={(event) => { event.preventDefault(); onNavigate("/login"); }}>Log in</a></p>
+    </AuthShell>
+  );
+}
+
 export default function Home() {
   const uploadFormRef = useRef(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [view, setViewState] = useState("home");
+  const [view, setViewState] = useState("landing");
+  const [historyId, setHistoryId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -644,6 +769,7 @@ export default function Home() {
       const nextRoute = viewFromPath(window.location.pathname);
       setIsLoggedIn(nextRoute.isLoggedIn);
       setViewState(nextRoute.view);
+      setHistoryId(nextRoute.historyId || null);
       setMobileAddItemRoute(Boolean(nextRoute.mobileAddItemRoute));
       setMenuOpen(false);
     }
@@ -759,31 +885,29 @@ export default function Home() {
     });
   }, [canonicalResults, canonicalSource, catalogMatches]);
 
-  function setView(nextView) {
-    setViewState(nextView);
-    setMobileAddItemRoute(false);
-    setMenuOpen(false);
-    const nextPath = pathForView(nextView);
-    if (window.location.pathname !== nextPath) {
-      window.history.pushState({}, "", nextPath);
+  function navigate(path) {
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, "", path);
     }
+    const next = viewFromPath(path);
+    setIsLoggedIn(next.isLoggedIn);
+    setViewState(next.view);
+    setHistoryId(next.historyId || null);
+    setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
+    setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function setView(nextView) {
+    navigate(pathForView(nextView));
+  }
+
   function openMobileScan() {
-    setViewState("home");
-    setMobileAddItemRoute(true);
-    setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigate("/app/scan");
   }
 
   function handleScanComplete(code) {
     addScannedItem(code);
-  }
-
-  function enterBuyerPortal() {
-    setIsLoggedIn(true);
-    setView("home");
   }
 
   function showToast(message) {
@@ -922,7 +1046,11 @@ export default function Home() {
   if (!isLoggedIn) {
     return (
       <>
-        <LoggedOutLanding onEnter={enterBuyerPortal} />
+        {view === "pricing" ? <PricingPage onNavigate={navigate} />
+          : view === "about" ? <AboutPage onNavigate={navigate} />
+          : view === "login" ? <LoginPage onNavigate={navigate} />
+          : view === "signup" ? <SignupPage onNavigate={navigate} />
+          : <LoggedOutLanding onNavigate={navigate} />}
         <IconSprite />
       </>
     );
@@ -1006,7 +1134,9 @@ export default function Home() {
             )
           )}
 
-          {view === "history" && <HistoryView />}
+          {view === "history" && <HistoryView onOpen={(id) => navigate(`/app/history/${id}`)} />}
+
+          {view === "historyDetail" && <HistoryDetail id={historyId} onBack={() => navigate("/app/history")} />}
 
           {view === "settings" && <SettingsView />}
         </main>
@@ -2152,16 +2282,57 @@ function UploadModal({
   );
 }
 
-function HistoryView() {
+const ARCHIVED_LISTS = [
+  { id: "june-restock", name: "June Restock", date: "Jun 2, 2025", items: 124, suppliers: 5, total: "$5,842.16" },
+  { id: "may-hygiene", name: "May Hygiene Reorder", date: "May 9, 2025", items: 86, suppliers: 4, total: "$3,217.40" },
+  { id: "april-ortho", name: "April Ortho Supplies", date: "Apr 14, 2025", items: 52, suppliers: 3, total: "$1,905.00" },
+];
+
+function HistoryView({ onOpen }) {
   return (
     <div className="crl">
       <header className="crl-header">
         <div className="crl-title"><h2>History / Past Lists</h2></div>
       </header>
-      <div className="crl-placeholder">
-        <Icon name="icon-clock" className="crl-placeholder-icon" />
-        <strong>No archived lists yet</strong>
-        <p>Archived reorder lists and supplier handoffs will appear here once you finish and archive a list.</p>
+      <div className="history-list">
+        {ARCHIVED_LISTS.map((list) => (
+          <button className="history-row" type="button" key={list.id} onClick={() => onOpen(list.id)}>
+            <span className="history-icon"><Icon name="icon-clock" className="button-icon" /></span>
+            <span className="history-info">
+              <strong>{list.name}</strong>
+              <small>Archived {list.date} · {list.items} items · {list.suppliers} suppliers</small>
+            </span>
+            <span className="history-total">{list.total}</span>
+            <Icon name="icon-chevron-right" className="button-icon history-chev" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HistoryDetail({ id, onBack }) {
+  const list = ARCHIVED_LISTS.find((entry) => entry.id === id) || ARCHIVED_LISTS[0];
+  return (
+    <div className="crl">
+      <header className="crl-header">
+        <div className="crl-title">
+          <button className="history-back" type="button" onClick={onBack}><Icon name="icon-chevron-left" className="button-icon" />History</button>
+          <h2>{list.name}</h2>
+          <span className="history-archived-pill">Archived</span>
+        </div>
+      </header>
+      <div className="history-detail-stats">
+        <div><small>Archived</small><strong>{list.date}</strong></div>
+        <div><small>Items</small><strong>{list.items}</strong></div>
+        <div><small>Suppliers</small><strong>{list.suppliers}</strong></div>
+        <div><small>Total</small><strong>{list.total}</strong></div>
+      </div>
+      <p className="history-detail-note">This reorder list is archived and read-only. Reopen or duplicate it to start a new reorder, or revisit the supplier handoff.</p>
+      <div className="history-detail-actions">
+        <button className="primary-action compact" type="button">Reopen list</button>
+        <button className="secondary-action compact" type="button">Duplicate</button>
+        <button className="secondary-action compact" type="button">View handoff</button>
       </div>
     </div>
   );
