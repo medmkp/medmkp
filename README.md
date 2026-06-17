@@ -65,8 +65,8 @@ npm run db:migrate
 been applied.
 
 Catalog data comes from the supplier ingestion pipeline (see
-`SUPPLIER_INGESTION.md`) followed by `npm run products:match -- --commit`
-(see `PRODUCT_MATCHING.md`), or from importing an existing catalog dump.
+`docs/SUPPLIER_INGESTION.md`) followed by `npm run products:match -- --commit`
+(see `docs/PRODUCT_MATCHING.md`), or from importing an existing catalog dump.
 
 ### 3. Create the Local Medusa Admin User
 
@@ -200,7 +200,7 @@ Nitrile Exam Gloves, Medium, 100/Box
 
 Canonical products are generated from the ingested supplier catalogs by the
 product matching pipeline (`npm run products:match`, see
-`PRODUCT_MATCHING.md`).
+`docs/PRODUCT_MATCHING.md`).
 
 ## Deploy
 
@@ -308,7 +308,7 @@ account/password before sharing the admin URL.
 
 ## Product Direction
 
-See [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) for the current Sean-notes product brief.
+See [PRODUCT_BRIEF.md](./docs/PRODUCT_BRIEF.md) for the current Sean-notes product brief.
 
 The key marketplace rule is to separate canonical products from seller offers:
 
