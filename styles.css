@@ -8601,3 +8601,50 @@ th {
   .pdp-specs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pdp-breadcrumb-row { flex-direction: column; align-items: flex-start; gap: 12px; }
 }
+
+/* Public /sample preview: reuses the app shell, but with its own top bar (brand
+   + sample label + sign-up CTAs) instead of the authenticated search/user area.
+   Its own class — not .topbar — so it follows the reorder list's mobile
+   breakpoint (767px, where CurrentReorderList renders its own mobile header)
+   rather than the app shell's 900px topbar-hide. */
+.sample-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 60px;
+  padding: 0 24px 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.sample-tag {
+  flex: 1;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Mobile: the desktop sample top bar gives way to the reorder list's own mobile
+   header, so surface the sign-up CTA as a sticky footer instead. The mobile
+   .app-main already reserves 96px of bottom padding, so nothing is covered. */
+.sample-mobile-cta { display: none; }
+
+@media (max-width: 767px) {
+  .sample-topbar { display: none; }
+  .sample-mobile-cta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 8;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .sample-mobile-cta span { font-size: 13px; font-weight: 600; color: var(--muted); }
+}

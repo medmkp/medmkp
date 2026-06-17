@@ -43,6 +43,7 @@ function viewFromPath(pathname = "/") {
   if (path === "/signup") return { view: "signup", isLoggedIn: false };
   if (path === "/forgot-password") return { view: "forgotPassword", isLoggedIn: false };
   if (path === "/reset-password") return { view: "resetPassword", isLoggedIn: false };
+  if (path === "/sample") return { view: "sample", isLoggedIn: false };
 
   // Authenticated app
   if (path === "/app") return { view: "home", isLoggedIn: true };
@@ -535,7 +536,7 @@ function LoggedOutLanding({ onNavigate }) {
                 <Icon name="icon-scan" className="button-icon" />
                 Scan 1 item free
               </button>
-              <button className="secondary-action" type="button" onClick={() => onNavigate("/app")}>
+              <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
                 <Icon name="icon-play" className="button-icon" />
                 See sample result
               </button>
@@ -637,6 +638,80 @@ function LoggedOutLanding({ onNavigate }) {
         </div>
       </footer>
     </main>
+  );
+}
+
+// Public, unauthenticated preview reached from "See sample result". Renders the
+// real CurrentReorderList in its sample state (no items, untouched) inside a
+// light public shell, so the demo matches the live app exactly. Actions that
+// would mutate a real workspace (upload, scan, archive, clear) nudge the visitor
+// to sign up; browsing the list and opening a row work so it feels live. /app
+// itself stays auth-guarded — this is the only public window onto the list.
+function SampleReorderList({ onNavigate }) {
+  const sampleFormRef = useRef(null);
+  const [prefs, setPrefs] = useState(DEFAULT_BUYING_PREFS);
+  const [toast, setToast] = useState("");
+  const showToast = (message) => {
+    setToast(message);
+    window.clearTimeout(showToast.timer);
+    showToast.timer = window.setTimeout(() => setToast(""), 2200);
+  };
+  const nudge = () => onNavigate("/signup");
+  return (
+    <div className="app-shell sample-shell">
+      <header className="sample-topbar">
+        <button className="topbar-brand" type="button" onClick={() => onNavigate("/")} aria-label="MedMKP home">
+          <BrandMark />
+        </button>
+        <span className="sample-tag">Sample reorder list — explore freely</span>
+        <div className="topbar-right">
+          <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
+          <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up free</button>
+        </div>
+      </header>
+      <div className="app-body">
+        <main className="app-main">
+          <CurrentReorderList
+            items={[]}
+            addMode=""
+            onAddMode={nudge}
+            lastUpload={null}
+            onCloseUpload={() => {}}
+            onUploadAnother={() => {}}
+            uploadFormRef={sampleFormRef}
+            onUpload={nudge}
+            uploading={false}
+            uploadProgress={0}
+            uploadElapsed={0}
+            uploadError=""
+            onCancelUpload={() => {}}
+            onClearUploadError={() => {}}
+            isDraggingInvoice={false}
+            onDragStateChange={() => {}}
+            onInvoiceDrop={nudge}
+            onInvoiceFile={nudge}
+            selectedInvoiceName=""
+            hasUploadedInvoice={false}
+            onScan={nudge}
+            searchTerm=""
+            onSearchTerm={() => {}}
+            searchResults={[]}
+            searchLoading={false}
+            onToast={showToast}
+            listTouched={false}
+            buyingPrefs={prefs}
+            onBuyingPrefs={setPrefs}
+            onArchiveList={nudge}
+            onClearList={nudge}
+          />
+        </main>
+      </div>
+      <div className="sample-mobile-cta">
+        <span>You&rsquo;re viewing a sample list</span>
+        <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up free</button>
+      </div>
+      <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
+    </div>
   );
 }
 
@@ -1434,6 +1509,7 @@ export default function Home() {
           : view === "signup" ? <SignupPage onNavigate={navigate} onAuthed={handleAuthed} />
           : view === "forgotPassword" ? <ForgotPasswordPage onNavigate={navigate} />
           : view === "resetPassword" ? <ResetPasswordPage onNavigate={navigate} />
+          : view === "sample" ? <SampleReorderList onNavigate={navigate} />
           : <LoggedOutLanding onNavigate={navigate} />}
         <IconSprite />
       </>
