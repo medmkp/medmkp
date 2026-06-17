@@ -232,7 +232,11 @@ function IconSprite() {
       <symbol id="icon-clock" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="8.5" />
         <path d="M12 7.5V12l3.25 2.1" />
-      </symbol>      
+      </symbol>
+      <symbol id="icon-bell" viewBox="0 0 24 24">
+        <path d="M18 8.5a6 6 0 0 0-12 0c0 6.5-2.5 8-2.5 8h17s-2.5-1.5-2.5-8Z" />
+        <path d="M13.7 20.5a2 2 0 0 1-3.4 0" />
+      </symbol>
     </svg>
   );
 }
@@ -454,30 +458,25 @@ function MobileScanItemView({ onBack, onScan, tray }) {
   );
 }
 
-function MobileBottomNav({ view, onNavigate, onScan }) {
-  const items = [
-    ["Home", "icon-home", "home", view === "home", ""],
-    ["Scan", "icon-scan", "scan", false, ""],
-    ["History", "icon-clock", "history", view === "history", ""],
-    ["Settings", "icon-settings", "settings", view === "settings", ""],
-  ];
-
+function MobileBottomNav({ view, onNavigate, onAdd }) {
   return (
     <nav className="mobile-bottom-nav" aria-label="Mobile primary navigation">
-      {items.map(([label, icon, target, active, badge]) => (
-        <button
-          key={label}
-          className={active ? "active" : ""}
-          type="button"
-          onClick={() => target === "scan" ? onScan() : onNavigate(target)}
-        >
-          <span>
-            <Icon name={icon} className="mobile-bottom-icon" />
-            {badge && <b>{badge}</b>}
-          </span>
-          {label}
+      <div className="m-nav-group">
+        <button className={view === "home" ? "active" : ""} type="button" onClick={() => onNavigate("home")}>
+          <span><Icon name="icon-home" className="mobile-bottom-icon" /></span>Home
         </button>
-      ))}
+        <button className={view === "history" ? "active" : ""} type="button" onClick={() => onNavigate("history")}>
+          <span><Icon name="icon-clock" className="mobile-bottom-icon" /></span>History
+        </button>
+      </div>
+      <button className="m-nav-fab" type="button" aria-label="Add items" onClick={onAdd}>
+        <Icon name="icon-plus" className="m-nav-fab-icon" />
+      </button>
+      <div className="m-nav-group">
+        <button className={view === "settings" ? "active" : ""} type="button" onClick={() => onNavigate("settings")}>
+          <span><Icon name="icon-list" className="mobile-bottom-icon" /></span>More
+        </button>
+      </div>
     </nav>
   );
 }
@@ -630,6 +629,7 @@ export default function Home() {
   const [selectedInvoiceName, setSelectedInvoiceName] = useState("");
   const [hasUploadedInvoice, setHasUploadedInvoice] = useState(false);
   const [mobileAddItemRoute, setMobileAddItemRoute] = useState(false);
+  const [mobileAddOpen, setMobileAddOpen] = useState(false);
   const [addMode, setAddMode] = useState("");
   const [lastUpload, setLastUpload] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState([]);
@@ -931,22 +931,24 @@ export default function Home() {
   return (
     <>
       <div className={`app-shell ${menuOpen ? "menu-open" : ""} ${mobileAddItemRoute ? "mobile-add-item-shell" : ""}`}>
-        <aside className="sidebar">
-          <div className="brand-block">
-            <button className="brand-home" type="button" onClick={() => setView("home")} aria-label="MedMKP home">
-              <BrandMark />
+        <header className="topbar">
+          <button className="topbar-brand" type="button" onClick={() => setView("home")} aria-label="MedMKP home">
+            <BrandMark />
+          </button>
+          <div className="topbar-right">
+            <button className="topbar-alerts" type="button" aria-label="Alerts">
+              <Icon name="icon-bell" className="button-icon" />
+              <span className="topbar-badge">3</span>
             </button>
-            <button
-              className="mobile-menu-button"
-              type="button"
-              aria-label="Close menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((isOpen) => !isOpen)}
-            >
-              <span></span><span></span><span></span>
+            <button className="topbar-user" type="button">
+              <span className="topbar-avatar">AK</span>
+              <span className="topbar-user-id"><strong>Alex Kim</strong><small>Buyer</small></span>
+              <Icon name="icon-chevron-down" className="button-icon" />
             </button>
           </div>
-
+        </header>
+        <div className="app-body">
+        <aside className="sidebar">
           <nav className="nav-tabs" aria-label="Primary navigation">
             {navItems.map(([target, icon, label]) => (
               <button
@@ -960,15 +962,6 @@ export default function Home() {
               </button>
             ))}
           </nav>
-
-          <div className="sidebar-account">
-            <span className="sidebar-avatar">AK</span>
-            <span className="sidebar-account-id">
-              <strong>Alex Kim</strong>
-              <small>Buyer</small>
-            </span>
-            <Icon name="icon-chevron-down" className="button-icon" />
-          </div>
         </aside>
 
         <main className="app-main">
@@ -1017,7 +1010,24 @@ export default function Home() {
 
           {view === "settings" && <SettingsView />}
         </main>
-        <MobileBottomNav view={view} onNavigate={setView} onScan={openMobileScan} />
+        <MobileBottomNav view={view} onNavigate={setView} onAdd={() => setMobileAddOpen(true)} />
+        {mobileAddOpen && (
+          <div className="m-sheet-backdrop" onClick={() => setMobileAddOpen(false)}>
+            <div className="m-sheet" role="dialog" aria-label="Add items" onClick={(event) => event.stopPropagation()}>
+              <span className="m-sheet-grip" aria-hidden="true" />
+              <h3>Add items</h3>
+              <button type="button" onClick={() => { setMobileAddOpen(false); setView("home"); setAddMode("upload"); }}>
+                <Icon name="icon-cloud-upload" className="button-icon" />
+                <span><strong>Upload invoice</strong><small>PDF, CSV, or photo</small></span>
+              </button>
+              <button type="button" onClick={() => { setMobileAddOpen(false); openMobileScan(); }}>
+                <Icon name="icon-scan" className="button-icon" />
+                <span><strong>Scan barcode</strong><small>Use your camera</small></span>
+              </button>
+            </div>
+          </div>
+        )}
+        </div>
       </div>
 
       <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
@@ -1110,6 +1120,7 @@ const MR_STATUS = {
 
 function mrMoney(n) { return `$${Number(n).toFixed(2)}`; }
 function mrEa(n) { return Number(n) >= 1 ? Number(n).toFixed(2) : Number(n).toFixed(3); }
+function mrConfTone(n) { return n >= 80 ? "high" : n >= 50 ? "med" : "low"; }
 function MatchSupplier({ name }) {
   if (!name || name === "—") return <span className="mr-supplier-none">—</span>;
   const key = name.toLowerCase();
@@ -1493,6 +1504,160 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast }) {
   );
 }
 
+function rowMode(row) {
+  return row.status === "Not found" ? "resolve" : row.status === "Review" ? "review" : "view";
+}
+
+// Mobile card list for the current reorder list (replaces the desktop table on
+// phones). Stats band + status tabs + tappable product cards.
+function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow }) {
+  return (
+    <div className="m-list">
+      <div className="m-brandbar">
+        <BrandMark />
+        <button className="m-iconbtn" type="button" aria-label="Alerts">
+          <Icon name="icon-bell" className="button-icon" />
+          <span className="m-brand-badge">3</span>
+        </button>
+      </div>
+
+      <header className="m-topbar">
+        <h1>{title}</h1>
+        <button className="m-iconbtn" type="button" aria-label="Filters"><Icon name="icon-filter" className="button-icon" /></button>
+      </header>
+
+      <nav className="m-tabs" aria-label="Item list filters">
+        {[["all", `All ${totalItems}`], ["confirmed", `Verified ${stats.matched}`], ["possible", `Verify ${stats.review}`], ["nomatch", `No match ${stats.notFound}`]].map(([id, label]) => (
+          <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => onTab(id)}>{label}</button>
+        ))}
+      </nav>
+
+      <div className="m-cards">
+        {rows.map((row) => {
+          const notFound = row.status === "Not found";
+          return (
+            <button className="m-card" type="button" key={row.id} onClick={() => onOpenRow(row)}>
+              <ProductThumb image={row.image} alt={row.matchName || row.importedName} />
+              <span className="m-card-body">
+                <strong>{row.matchName || row.importedName}</strong>
+                <small>{row.importedSub}</small>
+                {row.supplier && row.supplier !== "—" && <small className="m-card-supplier">{row.supplier}</small>}
+              </span>
+              <span className="m-card-right">
+                {notFound
+                  ? <em className="m-conf nomatch">Not found</em>
+                  : <em className={`m-conf ${mrConfTone(row.confidence)}`}>{row.confidence}%</em>}
+                {row.price != null && <strong>{mrMoney(row.price)}</strong>}
+                {row.price != null && <small>${mrEa(row.perEa)} / ea</small>}
+              </span>
+              <Icon name="icon-chevron-right" className="m-card-chev" />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Full-screen mobile detail page. Layout follows the mobile mockup; the footer
+// actions mirror the desktop MatchPanel (Cancel / Confirm by mode).
+function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast }) {
+  const idx = rows.findIndex((r) => r.id === row.id);
+  const total = rows.length;
+  const isResolve = mode === "resolve";
+  const isView = mode === "view";
+  const candidates = isResolve ? [] : [
+    { name: row.matchName, supplier: row.supplier, sub: row.matchSub, price: row.price, perEa: row.perEa, image: row.image, recommended: true, confidence: row.confidence },
+    ...(row.others || []).map((offer) => ({ name: offer.name, supplier: offer.supplier, sub: offer.sub, price: offer.price, perEa: offer.perEa, image: "", recommended: false, confidence: offer.confidence })),
+  ];
+  const [selected, setSelected] = useState(0);
+  const [notes, setNotes] = useState("");
+  const confLabel = row.confidence == null ? "No catalog match"
+    : row.confidence >= 80 ? "High match confidence"
+    : row.confidence >= 50 ? "Medium match confidence"
+    : "Low match confidence";
+
+  function confirm() {
+    onClose();
+    onToast(isResolve ? "Product linked to item" : "Match confirmed");
+  }
+
+  return (
+    <div className="m-detail">
+      <header className="m-detail-top">
+        <button className="m-iconbtn" type="button" aria-label="Back to list" onClick={onClose}><Icon name="icon-chevron-left" className="button-icon" /></button>
+        <div className="m-pager">
+          <button type="button" aria-label="Previous item" disabled={idx <= 0} onClick={() => idx > 0 && onOpenRow(rows[idx - 1])}><Icon name="icon-chevron-left" className="button-icon" /></button>
+          <span>{idx + 1} of {total}</span>
+          <button type="button" aria-label="Next item" disabled={idx >= total - 1} onClick={() => idx < total - 1 && onOpenRow(rows[idx + 1])}><Icon name="icon-chevron-right" className="button-icon" /></button>
+        </div>
+        <button className="m-iconbtn" type="button" aria-label="More"><span aria-hidden="true">⋯</span></button>
+      </header>
+
+      <div className="m-detail-body">
+        <div className={`m-conf-banner ${row.confidence == null ? "nomatch" : mrConfTone(row.confidence)}`}>
+          <span>{confLabel}</span>
+          {row.confidence != null && <strong>{row.confidence}%</strong>}
+        </div>
+
+        <section className="m-detail-sec">
+          <span className="m-detail-label">Imported item</span>
+          <strong className="m-detail-name">{row.importedName}</strong>
+          <small>{row.importedSub}</small>
+          {row.supplier && row.supplier !== "—" && <small>Imported by {row.supplier}</small>}
+        </section>
+
+        {isResolve ? (
+          <section className="m-detail-sec">
+            <span className="m-detail-label">Find a match</span>
+            <label className="crl-search"><Icon name="icon-search" className="button-icon" /><input type="search" placeholder="Search products, SKUs, suppliers…" /></label>
+            <p className="m-detail-empty">No catalog match found yet. Search above to link this item to a product.</p>
+          </section>
+        ) : (
+          <>
+            <section className="m-detail-sec">
+              <span className="m-detail-label">Best match</span>
+              <label className={`m-match best ${selected === 0 ? "active" : ""}`}>
+                <input type="radio" name="m-cand" checked={selected === 0} onChange={() => setSelected(0)} />
+                <ProductThumb image={candidates[0].image} alt={candidates[0].name} />
+                <span className="m-match-info"><strong>{candidates[0].name}</strong><small>{candidateSub(candidates[0].supplier, candidates[0].sub)}</small></span>
+                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrMoney(candidates[0].price)}</strong><small>${mrEa(candidates[0].perEa)} / ea</small></span>
+              </label>
+            </section>
+            {candidates.length > 1 && (
+              <section className="m-detail-sec">
+                <span className="m-detail-label">Other possible matches</span>
+                {candidates.slice(1).map((candidate, index) => (
+                  <label className={`m-match ${selected === index + 1 ? "active" : ""}`} key={index + 1}>
+                    <input type="radio" name="m-cand" checked={selected === index + 1} onChange={() => setSelected(index + 1)} />
+                    <span className="m-match-info"><strong>{candidate.name}</strong><small>{candidateSub(candidate.supplier, candidate.sub)}</small></span>
+                    <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrMoney(candidate.price)}</strong><small>${mrEa(candidate.perEa)} / ea</small></span>
+                  </label>
+                ))}
+              </section>
+            )}
+          </>
+        )}
+
+        <section className="m-detail-sec">
+          <span className="m-detail-label">Item details</span>
+          <div className="m-itemdetails">
+            <div><small>Quantity</small><strong>{row.qty}</strong></div>
+            <div><small>UOM</small><strong>{row.uom}</strong></div>
+            <div><small>Line total</small><strong>{row.lineTotal != null ? mrMoney(row.lineTotal) : "—"}</strong></div>
+          </div>
+          <textarea className="m-notes" placeholder="Add a note…" maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </section>
+      </div>
+
+      <footer className="m-detail-foot">
+        <button className="crl-ghost-btn" type="button" onClick={onClose}>{isView ? "Close" : "Cancel"}</button>
+        <button className="primary-action compact" type="button" onClick={confirm}>{isResolve ? "Confirm Match" : isView ? "Update Match" : "Confirm Selected Match"}</button>
+      </footer>
+    </div>
+  );
+}
+
 function CurrentReorderList({
   items,
   addMode,
@@ -1530,6 +1695,15 @@ function CurrentReorderList({
   const [detailWide, setDetailWide] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   const tabFilter = {
     all: () => true,
@@ -1538,6 +1712,51 @@ function CurrentReorderList({
     nomatch: (row) => row.status === "Not found",
   };
   const filtered = rows.filter(tabFilter[tab] || tabFilter.all);
+  const openRow = (row) => setDetail({ row, mode: rowMode(row) });
+
+  if (isMobile) {
+    return (
+      <>
+        <MobileReorderList
+          title="Current Reorder List"
+          rows={filtered}
+          stats={stats}
+          totalItems={totalItems}
+          tab={tab}
+          onTab={setTab}
+          onOpenRow={openRow}
+        />
+        {detail && (
+          <MobileItemDetail
+            key={detail.row.id}
+            rows={rows}
+            row={detail.row}
+            mode={detail.mode}
+            onClose={() => setDetail(null)}
+            onOpenRow={openRow}
+            onToast={onToast}
+          />
+        )}
+        {addMode === "upload" && (
+          <UploadModal
+            uploadFormRef={uploadFormRef}
+            onUpload={onUpload}
+            uploading={uploading}
+            uploadProgress={uploadProgress}
+            isDraggingInvoice={isDraggingInvoice}
+            onDragStateChange={onDragStateChange}
+            onInvoiceDrop={onInvoiceDrop}
+            onInvoiceFile={onInvoiceFile}
+            selectedInvoiceName={selectedInvoiceName}
+            hasUploadedInvoice={hasUploadedInvoice}
+            lastUpload={lastUpload}
+            onClose={onCloseUpload}
+            onUploadAnother={onUploadAnother}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className={`crl ${detail ? "detail-open" : ""}`}>
@@ -1667,8 +1886,8 @@ function CurrentReorderList({
                 const mode = notFound ? "resolve" : row.status === "Review" ? "review" : "view";
                 const actionLabel = notFound ? "Resolve" : row.status === "Review" ? "Verify" : "View";
                 return (
-                  <div className={`crl-row ${detail?.row.id === row.id ? "active" : ""}`} key={row.id}>
-                    <span><input type="checkbox" aria-label={`Select ${row.importedName}`} /></span>
+                  <div className={`crl-row crl-row-click ${detail?.row.id === row.id ? "active" : ""}`} key={row.id} onClick={() => setDetail({ row, mode })}>
+                    <span><input type="checkbox" aria-label={`Select ${row.importedName}`} onClick={(event) => event.stopPropagation()} /></span>
                     <span className="crl-item">
                       <ProductThumb image={row.image} alt={row.matchName || row.importedName} />
                       <span className="crl-item-id">
@@ -1703,7 +1922,7 @@ function CurrentReorderList({
                     </span>
                     <span className="crl-actions">
                       <button className={`crl-action-btn ${notFound ? "danger" : row.status === "Review" ? "warn" : ""}`} type="button" onClick={() => setDetail({ row, mode })}>{actionLabel}</button>
-                      <button className="crl-kebab" type="button" aria-label="Row actions"><Icon name="icon-list" className="button-icon" /></button>
+                      <button className="crl-kebab" type="button" aria-label="Row actions" onClick={(event) => event.stopPropagation()}><Icon name="icon-list" className="button-icon" /></button>
                     </span>
                   </div>
                 );
