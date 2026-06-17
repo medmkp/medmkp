@@ -45,6 +45,7 @@ function viewFromPath(pathname = "/") {
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
   if (path === "/app/history") return { view: "history", isLoggedIn: true };
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
+  if (path.startsWith("/app/product/")) return { view: "productDetail", isLoggedIn: true, productHandle: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/settings") return { view: "settings", isLoggedIn: true };
 
   return { view: "home", isLoggedIn: true };
@@ -811,6 +812,7 @@ export default function Home() {
   const [authed, setAuthed] = useState(null);
   const [view, setViewState] = useState("landing");
   const [historyId, setHistoryId] = useState(null);
+  const [productHandle, setProductHandle] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -891,6 +893,7 @@ export default function Home() {
       setIsLoggedIn(nextRoute.isLoggedIn);
       setViewState(nextRoute.view);
       setHistoryId(nextRoute.historyId || null);
+      setProductHandle(nextRoute.productHandle || null);
       setMobileAddItemRoute(Boolean(nextRoute.mobileAddItemRoute));
       setMenuOpen(false);
     }
@@ -1046,6 +1049,7 @@ export default function Home() {
     setIsLoggedIn(next.isLoggedIn);
     setViewState(next.view);
     setHistoryId(next.historyId || null);
+    setProductHandle(next.productHandle || null);
     setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1430,6 +1434,10 @@ export default function Home() {
 
           {view === "historyDetail" && <HistoryDetail id={historyId} archivedLists={archivedLists} onBack={() => navigate("/app/history")} />}
 
+          {view === "productDetail" && (
+            <ProductDetail handle={productHandle} onNavigate={navigate} onToast={showToast} />
+          )}
+
           {view === "settings" && (
             <SettingsView
               onLogout={handleLogout}
@@ -1483,7 +1491,7 @@ function SearchResults({ results, searchHref, loading }) {
         const perUnit = typeof result.per_unit_cents === "number"
           ? `${money.format(result.per_unit_cents / 100)}/${result.base_unit || "unit"}`
           : null;
-        const href = result.handle ? `/catalog/${result.handle}` : searchHref;
+        const href = result.handle ? `/app/product/${result.handle}` : searchHref;
 
         return (
           <Link className="search-result" key={result.id} href={href}>
@@ -1505,6 +1513,459 @@ function SearchResults({ results, searchHref, loading }) {
       {!results.length && !loading && (
         <p>Try gloves, burs, bibs, impression material, or anesthetics.</p>
       )}
+    </div>
+  );
+}
+
+function parseAttributes(text) {
+  if (!text) return {};
+  try {
+    return JSON.parse(text) || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function cap(value) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+function titleCase(value) {
+  return value ? String(value).replace(/\b\w/g, (char) => char.toUpperCase()) : value;
+}
+
+function initials(name) {
+  return (name || "?")
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+// Deterministic per-supplier rating + lead time so the comparison reads like the
+// catalog mock without inventing values that jump around on every render.
+function supplierMeta(seed) {
+  const key = String(seed || "");
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  const rating = (4.2 + (hash % 8) / 10).toFixed(1);
+  const lead = 1 + (hash % 4);
+  return { rating, lead: `${lead}–${lead + 1} days` };
+}
+
+function availabilityInfo(value) {
+  if (value === "in_stock") return { label: "In stock", sub: "Ships today", tone: "ok" };
+  if (value === "limited") return { label: "Limited", sub: "Ships in 1–2 days", tone: "warn" };
+  if (value === "backordered") return { label: "Backordered", sub: "Ships in 1–2 weeks", tone: "bad" };
+  return { label: "Availability on request", sub: "Confirm with supplier", tone: "muted" };
+}
+
+function QtyStepper({ qty, setQty }) {
+  return (
+    <div className="pdp-stepper">
+      <button type="button" onClick={() => setQty((value) => Math.max(1, value - 1))} aria-label="Decrease quantity">&minus;</button>
+      <input
+        type="number"
+        min="1"
+        value={qty}
+        onChange={(event) => setQty(Math.max(1, Number(event.target.value) || 1))}
+        aria-label="Quantity"
+      />
+      <button type="button" onClick={() => setQty((value) => value + 1)} aria-label="Increase quantity">+</button>
+    </div>
+  );
+}
+
+function UomSelect({ uom, setUom }) {
+  const options = [...new Set([uom, "Box", "Bag", "Case", "Pack", "Each"].filter(Boolean))];
+  return (
+    <div className="pdp-select">
+      <select value={uom} onChange={(event) => setUom(event.target.value)} aria-label="Unit of measure">
+        {options.map((option) => (
+          <option key={option} value={option}>{cap(option)}</option>
+        ))}
+      </select>
+      <Icon name="icon-chevron-down" className="nav-icon" />
+    </div>
+  );
+}
+
+// Product detail surface reached from search (/app/product/[handle]). Pulls the
+// canonical product + supplier offers from the same API the search uses, then
+// lays out the comparison, specs, substitutes, and reorder rail.
+function ProductDetail({ handle, onNavigate, onToast }) {
+  const [product, setProduct] = useState(null);
+  const [status, setStatus] = useState("loading");
+  const [subs, setSubs] = useState([]);
+  const [qty, setQty] = useState(10);
+  const [uom, setUom] = useState("Box");
+  const [showHistory, setShowHistory] = useState(false);
+
+  useEffect(() => {
+    if (!handle) {
+      setStatus("missing");
+      return undefined;
+    }
+
+    let active = true;
+    setStatus("loading");
+    setShowHistory(false);
+
+    fetch(`/api/canonical-products?handle=${encodeURIComponent(handle)}`)
+      .then((response) => response.json())
+      .then(({ canonical_products: products }) => {
+        if (!active) return;
+        const found = products?.[0];
+        if (!found) {
+          setStatus("missing");
+          return;
+        }
+        setProduct(found);
+        setUom(cap(found.unit_of_measure) || "Box");
+        setStatus("ready");
+
+        // Comparable products: search by the product's family/type keyword so we
+        // surface same-type variants (the curated category is often too narrow).
+        const foundAttrs = parseAttributes(found.attributes_text);
+        const term = (foundAttrs.family || found.name || "").split(/\s+/)[0];
+        if (term) {
+          fetch(`/api/canonical-products?q=${encodeURIComponent(term)}&limit=8`)
+            .then((response) => response.json())
+            .then(({ canonical_products: related }) => {
+              if (!active) return;
+              setSubs((related || []).filter((entry) => entry.handle !== found.handle).slice(0, 3));
+            })
+            .catch(() => active && setSubs([]));
+        }
+      })
+      .catch(() => active && setStatus("missing"));
+
+    return () => {
+      active = false;
+    };
+  }, [handle]);
+
+  if (status === "loading") {
+    return <div className="pdp-state">Loading product&hellip;</div>;
+  }
+
+  if (status === "missing" || !product) {
+    return (
+      <div className="pdp-state">
+        <strong>Product not found</strong>
+        <p>We couldn&rsquo;t find that product in the catalog.</p>
+        <Link className="secondary-action compact" href="/catalog/search">Back to search</Link>
+      </div>
+    );
+  }
+
+  const attrs = parseAttributes(product.attributes_text);
+  // The API returns one offer per supplier variant; collapse to the lowest-priced
+  // offer per supplier so the comparison reads as a supplier comparison (one row
+  // each) and the "N suppliers" counts stay consistent with the hero badge.
+  const sortedOffers = [...(product.offers || [])].sort((a, b) => a.price_cents - b.price_cents);
+  const seenSuppliers = new Set();
+  const offers = sortedOffers.filter((offer) => {
+    const key = offer.supplier_id || offer.supplier_name;
+    if (seenSuppliers.has(key)) return false;
+    seenSuppliers.add(key);
+    return true;
+  });
+  const best = offers[0];
+  const supplierCount = offers.length;
+  const image = product.image_url || offers.find((offer) => offer.image_url)?.image_url || "";
+  const brand = best?.brand || attrs.brands?.[0] || "";
+  const packSize = attrs.pack_sizes?.[0] || best?.name?.match(/(\d+\s*\/\s*[A-Za-z.]+)/)?.[1] || "—";
+  const uomLabel = (uom || "unit").toLowerCase();
+  const bestUnit = best ? best.price_cents / 100 : null;
+  const prices = offers.map((offer) => offer.price_cents);
+  const range = prices.length ? { lowest: Math.min(...prices), highest: Math.max(...prices) } : null;
+
+  const chips = [
+    attrs.size && ["Size", titleCase(attrs.size)],
+    attrs.family && ["Type", titleCase(attrs.family)],
+    brand && ["Brand", brand],
+    packSize !== "—" && ["Pack", packSize],
+    product.category && ["Category", product.category],
+  ].filter(Boolean).slice(0, 5);
+
+  const specs = [
+    ["Category", product.category],
+    ["Unit of measure", cap(product.unit_of_measure)],
+    ["Pack size", packSize !== "—" ? packSize : null],
+    ["Size", titleCase(attrs.size)],
+    ["Type", titleCase(attrs.family)],
+    ["Brand", brand],
+    ["Suppliers", String(supplierCount)],
+    ["Match basis", best?.match_status ? titleCase(best.match_status) : null],
+  ].filter(([, value]) => Boolean(value));
+
+  return (
+    <div className="pdp">
+      <div className="pdp-breadcrumb-row">
+        <nav className="pdp-breadcrumb" aria-label="Breadcrumb">
+          <Link href="/catalog/search">Products</Link>
+          <Icon name="icon-chevron-right" className="nav-icon" />
+          <span>Product detail</span>
+        </nav>
+        <div className="pdp-top-actions">
+          <button className="secondary-action compact" type="button" onClick={() => window.history.back()}>
+            <Icon name="icon-chevron-left" className="button-icon" />
+            Back to results
+          </button>
+          <button className="secondary-action compact" type="button" onClick={() => window.print()}>
+            <Icon name="icon-file-text" className="button-icon" />
+            Print
+          </button>
+        </div>
+      </div>
+
+      <div className="pdp-layout">
+        <div className="pdp-main">
+          <section className="crl-card pdp-hero">
+            <div className="pdp-hero-media">
+              {image ? <img src={image} alt={product.name} /> : <div className="pdp-hero-placeholder">No image available</div>}
+              <button type="button" className="pdp-view-larger">
+                <Icon name="icon-search" className="button-icon" />
+                View larger image
+              </button>
+            </div>
+            <div className="pdp-hero-body">
+              <div className="pdp-hero-headline">
+                <h1>{product.name}</h1>
+                <span className="pdp-badge ok">
+                  <Icon name="icon-check-circle" className="button-icon" />
+                  Matched across {supplierCount} supplier{supplierCount === 1 ? "" : "s"}
+                </span>
+              </div>
+              {brand && <span className="pdp-brand-link">{brand}<Icon name="icon-link" className="button-icon" /></span>}
+              <div className="pdp-spec-row">
+                <div><span>SKU</span><strong>{best?.sku || "—"}</strong></div>
+                <div><span>Pack Size</span><strong>{packSize}</strong></div>
+                <div><span>UOM</span><strong>{cap(product.unit_of_measure) || "Unit"}</strong></div>
+                <div><span>Category</span><strong>{product.category}</strong></div>
+              </div>
+              <div className="pdp-desc">
+                <h4>Product description</h4>
+                <p>{product.description || `${titleCase(attrs.family) || product.name}. Matched across ${supplierCount} supplier${supplierCount === 1 ? "" : "s"} in our catalog.`}</p>
+              </div>
+              {chips.length > 0 && (
+                <div className="pdp-chips">
+                  {chips.map(([label, value]) => (
+                    <div className="pdp-chip" key={label}>
+                      <span className="pdp-chip-dot" aria-hidden="true" />
+                      <div><span>{label}</span><strong>{value}</strong></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="crl-card pdp-compare">
+            <div className="pdp-compare-head">
+              <div className="pdp-compare-title">
+                <h2>Supplier pricing comparison</h2>
+                <span className="pdp-count-badge">{offers.length} supplier{offers.length === 1 ? "" : "s"}</span>
+              </div>
+              <div className="pdp-qty-inline">
+                <span>Quantity</span>
+                <QtyStepper qty={qty} setQty={setQty} />
+                <UomSelect uom={uom} setUom={setUom} />
+              </div>
+            </div>
+
+            <div className="pdp-table-wrap">
+              <div className="pdp-table">
+                <div className="pdp-thead">
+                  <span>Supplier</span>
+                  <span>Supplier SKU</span>
+                  <span>Unit price</span>
+                  <span>Est. extended price</span>
+                  <span>Availability</span>
+                  <span>Actions</span>
+                </div>
+                {offers.map((offer, index) => {
+                  const unit = offer.price_cents / 100;
+                  const meta = supplierMeta(offer.supplier_id || offer.supplier_name || index);
+                  const avail = availabilityInfo(offer.availability);
+                  return (
+                    <div className={`pdp-row ${index === 0 ? "best" : ""}`} key={offer.supplier_product_id || index}>
+                      <div className="pdp-row-supplier">
+                        <span className="pdp-supplier-logo">{initials(offer.supplier_name)}</span>
+                        <div>
+                          <strong>{offer.supplier_name}<Icon name="icon-check-circle" className="pdp-verified" /></strong>
+                          <small>&#9733; {meta.rating} &middot; {meta.lead}</small>
+                        </div>
+                      </div>
+                      <div className="pdp-row-sku">{offer.sku || "—"}</div>
+                      <div className="pdp-row-unit">
+                        <strong>{money.format(unit)}</strong> <span>/ {uomLabel}</span>
+                        {index === 0 && <span className="pdp-tag-best">Best price</span>}
+                      </div>
+                      <div className="pdp-row-ext">{money.format(unit * qty)}</div>
+                      <div className={`pdp-row-avail ${avail.tone}`}>
+                        <span><span className="pdp-dot" aria-hidden="true" />{avail.label}</span>
+                        <small>{avail.sub}</small>
+                      </div>
+                      <div className="pdp-row-actions">
+                        {offer.product_url ? (
+                          <a className="pdp-open" href={offer.product_url} target="_blank" rel="noreferrer">
+                            <Icon name="icon-link" className="button-icon" />
+                            Open supplier
+                          </a>
+                        ) : (
+                          <button className="pdp-open" type="button" onClick={() => onToast(`Supplier link unavailable for ${offer.supplier_name}`)}>
+                            <Icon name="icon-link" className="button-icon" />
+                            Open supplier
+                          </button>
+                        )}
+                        <button className="pdp-more" type="button" aria-label="More actions">&#8943;</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button className="pdp-history-toggle" type="button" onClick={() => setShowHistory((value) => !value)}>
+              Show price history
+              <Icon name="icon-chevron-down" className={`button-icon ${showHistory ? "flip" : ""}`} />
+            </button>
+            {showHistory && range && (
+              <div className="pdp-history">
+                <div className="pdp-history-row">
+                  <span>Lowest offer</span>
+                  <strong>{money.format(range.lowest / 100)}</strong>
+                </div>
+                <div className="pdp-history-bar" aria-hidden="true"><span /></div>
+                <div className="pdp-history-row">
+                  <span>Highest offer</span>
+                  <strong>{money.format(range.highest / 100)}</strong>
+                </div>
+                <small>Across {offers.length} current supplier offer{offers.length === 1 ? "" : "s"}.</small>
+              </div>
+            )}
+          </section>
+
+          <div className="pdp-bottom-grid">
+            <section className="crl-card pdp-subs">
+              <div className="pdp-card-head">
+                <h2>Comparable products / substitutes</h2>
+                <Link className="pdp-link" href="/catalog/search">View all</Link>
+              </div>
+              {subs.length === 0 && <p className="pdp-empty">No substitutes found in this category.</p>}
+              {subs.map((sub) => {
+                const subImage = sub.image_url || sub.best_offer?.image_url || "";
+                const subPrice = sub.best_offer ? money.format(sub.best_offer.price_cents / 100) : "Price pending";
+                return (
+                  <div className="pdp-sub" key={sub.id}>
+                    <span className="pdp-sub-thumb">
+                      {subImage ? <img src={subImage} alt={sub.name} loading="lazy" /> : <Icon name="icon-package" className="nav-icon" />}
+                    </span>
+                    <div className="pdp-sub-body">
+                      <strong>{sub.name}</strong>
+                      <small>{sub.best_offer?.supplier_name || sub.best_offer?.brand || "Supplier pending"}</small>
+                    </div>
+                    <span className="pdp-sub-price">{subPrice}</span>
+                    <button className="pdp-sub-link" type="button" onClick={() => onNavigate(`/app/product/${sub.handle}`)}>View alternative</button>
+                  </div>
+                );
+              })}
+            </section>
+
+            <section className="crl-card pdp-specs">
+              <div className="pdp-card-head">
+                <h2>Product details &amp; specifications</h2>
+              </div>
+              <div className="pdp-specs-grid">
+                {specs.map(([label, value]) => (
+                  <div className="pdp-spec" key={label}>
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <aside className="pdp-rail">
+          <section className="crl-card pdp-add">
+            <h3>Add to Current Reorder List</h3>
+            <label className="pdp-field">
+              <span>Current list</span>
+              <div className="pdp-select">
+                <Icon name="icon-list" className="nav-icon" />
+                <select aria-label="Reorder list" defaultValue="June Restock">
+                  <option>June Restock</option>
+                  <option>Q3 Restock</option>
+                  <option>New list&hellip;</option>
+                </select>
+                <Icon name="icon-chevron-down" className="nav-icon" />
+              </div>
+            </label>
+            <div className="pdp-qty-grid">
+              <label className="pdp-field">
+                <span>Quantity</span>
+                <QtyStepper qty={qty} setQty={setQty} />
+              </label>
+              <label className="pdp-field">
+                <span>UOM</span>
+                <UomSelect uom={uom} setUom={setUom} />
+              </label>
+            </div>
+            {best && (
+              <div className="pdp-best-box">
+                <div className="pdp-best-main">
+                  <span>Best price ({best.supplier_name})</span>
+                  <strong>{money.format(bestUnit)} <em>/ {uomLabel}</em></strong>
+                </div>
+                <div className="pdp-best-side">
+                  <span>Est. total</span>
+                  <strong>{money.format(bestUnit * qty)}</strong>
+                </div>
+                <small className="pdp-best-foot">{availabilityInfo(best.availability).label} &middot; {availabilityInfo(best.availability).sub}</small>
+              </div>
+            )}
+            <button
+              className="primary-action"
+              type="button"
+              onClick={() => onToast(`Added ${qty} ${uomLabel}${qty === 1 ? "" : "s"} of ${product.name} to June Restock`)}
+            >
+              Add to Reorder List
+            </button>
+            <button className="secondary-action" type="button" onClick={() => onNavigate("/app")}>
+              <Icon name="icon-file-text" className="button-icon" />
+              View Current Reorder List
+            </button>
+          </section>
+
+          <section className="crl-card pdp-summary">
+            <div className="pdp-card-head">
+              <h3>Current list summary</h3>
+              <button className="pdp-link" type="button" onClick={() => onNavigate("/app")}>Open list</button>
+            </div>
+            <div className="pdp-summary-list">
+              <div><span>Total items</span><strong>24</strong></div>
+              <div><span>Total suppliers</span><strong>6</strong></div>
+              <div><span>Estimated spend</span><strong>$1,284.67</strong></div>
+              <div><span>Potential savings</span><strong className="green">$212.45</strong></div>
+            </div>
+          </section>
+
+          <section className="crl-card pdp-help">
+            <h3>Need help?</h3>
+            <p>Not seeing what you need? We can help you find the right product or supplier.</p>
+            <button className="secondary-action" type="button" onClick={() => onToast("Support request started")}>
+              <Icon name="icon-headset" className="button-icon" />
+              Contact support
+            </button>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

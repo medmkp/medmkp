@@ -92,7 +92,7 @@ export default async function CatalogSearchPage({ searchParams }) {
           const priceRange = formatPriceRange(product.price_range_cents, product.offer_count)
           return (
             <article className="catalog-result-card" key={product.id}>
-              <Link className="catalog-result-link" href={`/catalog/${product.handle}`}>
+              <Link className="catalog-result-link" href={`/app/product/${product.handle}`}>
                 <div className="catalog-result-image">
                   {product.image_url ? (
                     <img src={product.image_url} alt={product.name} loading="lazy" />

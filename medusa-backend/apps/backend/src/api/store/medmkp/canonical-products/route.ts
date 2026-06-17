@@ -141,6 +141,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
           name: supplierProduct.name,
           brand: supplierProduct.brand,
           image_url: supplierProduct.image_url || "",
+          product_url: supplierProduct.product_url || "",
           price_cents: latestPrice.price_cents,
           availability: latestPrice.availability,
           match_status: match.match_status,
