@@ -43,6 +43,7 @@ type CliOptions = {
   debug: boolean
   commit: boolean
   allowEmptyCommit: boolean
+  allowCatalogShrink: boolean
 }
 
 function optionValue(arg: string) {
@@ -116,6 +117,7 @@ function parseOptions(): CliOptions {
     debug: process.env.SUPPLIER_INGESTION_DEBUG === "1",
     commit: process.env.SUPPLIER_INGESTION_COMMIT === "1",
     allowEmptyCommit: process.env.SUPPLIER_INGESTION_ALLOW_EMPTY_COMMIT === "1",
+    allowCatalogShrink: process.env.SUPPLIER_INGESTION_ALLOW_CATALOG_SHRINK === "1",
   }
 
   for (const arg of process.argv.slice(2)) {
@@ -127,6 +129,9 @@ function parseOptions(): CliOptions {
     }
     if (arg === "--allow-empty-commit") {
       options.allowEmptyCommit = true
+    }
+    if (arg === "--allow-catalog-shrink") {
+      options.allowCatalogShrink = true
     }
     if (arg.startsWith("--supplier-id=")) {
       options.supplierId = optionValue(arg)
@@ -361,9 +366,42 @@ function assertNonEmptyCandidateState(options: {
   }
 }
 
+// Supplier-agnostic backstop for the delete-and-replace commit: refuse to shrink
+// an established catalog to a small fraction of its current size. This is the
+// failure mode that wiped DC Dental from 39,559 rows to 1,002 — a partial
+// extraction was committed and hard-deleted the rest. Tiny catalogs are exempt so
+// a first-time/near-empty import isn't blocked; --allow-catalog-shrink (or
+// --allow-empty-commit) overrides when most rows are intentionally being removed.
+const CATALOG_SHRINK_FLOOR_RATIO = 0.5
+const CATALOG_SHRINK_GUARD_MIN_EXISTING = 50
+
+export function assertCatalogReplaceNotDestructive(input: {
+  supplierId: string
+  sourceCatalog: string
+  existingCount: number
+  newCount: number
+  allowCatalogShrink: boolean
+}) {
+  if (input.allowCatalogShrink) {
+    return
+  }
+  if (
+    input.existingCount >= CATALOG_SHRINK_GUARD_MIN_EXISTING &&
+    input.newCount < input.existingCount * CATALOG_SHRINK_FLOOR_RATIO
+  ) {
+    throw new Error(
+      `Refusing to replace supplier=${input.supplierId} source=${input.sourceCatalog}: ` +
+        `new catalog has ${input.newCount} rows vs ${input.existingCount} existing ` +
+        `(>${Math.round((1 - CATALOG_SHRINK_FLOOR_RATIO) * 100)}% shrink). ` +
+        `Fix the extraction and re-run, or pass --allow-catalog-shrink to override.`
+    )
+  }
+}
+
 async function replaceSupplierCatalog(
   medmkp: MedMKPModuleService,
-  input: SupplierCatalogIngestionInput
+  input: SupplierCatalogIngestionInput,
+  options: { allowCatalogShrink: boolean }
 ) {
   const canonicalProducts = await medmkp.listCanonicalProducts()
   const ingestion = buildSupplierCatalogIngestion(
@@ -390,6 +428,14 @@ async function replaceSupplierCatalog(
         source_catalog: input.source_catalog,
       }),
     ])
+  assertCatalogReplaceNotDestructive({
+    supplierId: input.supplier_id,
+    sourceCatalog: input.source_catalog,
+    existingCount: existingProducts.length,
+    newCount: ingestion.supplierProducts.length,
+    allowCatalogShrink: options.allowCatalogShrink,
+  })
+
   const productIdsToDelete = existingProducts.map((product) => product.id)
   const existingMatches = productIdsToDelete.length
     ? await medmkp.listCanonicalProductMatches({
@@ -597,7 +643,7 @@ export default async function ingestSupplierCatalogs({
       source_url: matchedSupplier.website_url,
       source_catalog: sourceCatalogForSupplier(matchedSupplier),
       rows: catalogRows(products),
-    })
+    }, { allowCatalogShrink: options.allowCatalogShrink })
   }
 
   console.log(

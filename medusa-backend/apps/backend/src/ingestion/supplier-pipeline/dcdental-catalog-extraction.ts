@@ -181,9 +181,31 @@ async function fetchCategoryItems(
   return items
 }
 
+// A run that can't confirm it has most of the catalog must abort, never return a
+// partial set: the extracted products feed a delete-and-replace commit, so a stub
+// hard-deletes the rest of the catalog. An unknown size (total<=0, e.g. a transient
+// head-request hiccup) is treated as a failure rather than silently "complete" —
+// the bug that let a 1,002-row partial replace 39,559 real rows.
+export function assertDcDentalCatalogComplete(
+  collected: number,
+  total: number,
+  categories: number
+) {
+  if (total <= 0) {
+    throw new Error(
+      `DC Dental catalog size unknown (total=${total}); refusing to treat it as complete — aborting rather than risk a partial replace`
+    )
+  }
+  if (collected < total * MIN_COMPLETE_RATIO) {
+    throw new Error(
+      `DC Dental catalog incomplete: collected ${collected} of ${total} items across ${categories} categories; aborting to avoid a partial replace`
+    )
+  }
+}
+
 // Walk every category and dedupe by SKU. All-or-nothing: any unrecoverable page
-// fetch throws, and a short collected count throws, so the commit never replaces
-// the supplier with a partial catalog.
+// fetch throws, and an unknown/short collected count throws, so the commit never
+// replaces the supplier with a partial catalog.
 async function fetchCatalogItems(
   origin: string,
   fields: string,
@@ -191,6 +213,10 @@ async function fetchCatalogItems(
 ): Promise<DcDentalCatalogItem[]> {
   const head = await fetchJson(apiUrl(origin, { fields: "internalid", limit: "1", offset: "0" }), options.timeoutMs)
   const total = typeof head.total === "number" ? head.total : 0
+  // Fail before the (expensive) category walk when the catalog size is unknown.
+  if (total <= 0) {
+    assertDcDentalCatalogComplete(0, total, 0)
+  }
   const paths = await fetchCategoryPaths(origin, options.timeoutMs)
 
   const bySku = new Map<string, DcDentalCatalogItem>()
@@ -205,11 +231,7 @@ async function fetchCatalogItems(
   }
 
   const collected = [...bySku.values()]
-  if (total > 0 && collected.length < total * MIN_COMPLETE_RATIO) {
-    throw new Error(
-      `DC Dental catalog incomplete: collected ${collected.length} of ${total} items across ${paths.length} categories; aborting to avoid a partial replace`
-    )
-  }
+  assertDcDentalCatalogComplete(collected.length, total, paths.length)
   return collected
 }
 
