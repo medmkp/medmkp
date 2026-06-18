@@ -673,7 +673,7 @@ function MobileBottomNav({ view, onNavigate, onScan }) {
   );
 }
 
-function LoggedOutLanding({ onNavigate }) {
+function LoggedOutLanding({ onNavigate, authed = false }) {
   return (
     <main className="landing-page">
       <header className="landing-nav">
@@ -686,7 +686,7 @@ function LoggedOutLanding({ onNavigate }) {
           <a href="/about" onClick={(event) => { event.preventDefault(); onNavigate("/about"); }}>About</a>
         </nav>
         <div className="landing-nav-actions">
-          <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
+          <button className="secondary-action compact" type="button" onClick={() => onNavigate(authed ? "/app" : "/login")}>Log in</button>
           <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
         </div>
       </header>
@@ -697,7 +697,7 @@ function LoggedOutLanding({ onNavigate }) {
             <h1>Scan your dental supplies and spot <span>possible savings</span> in seconds</h1>
             <p>Point your phone at a barcode or enter a SKU to identify the item, compare typical price ranges, and save it to a free starter reorder list. No login required to try it.</p>
             <div className="landing-actions">
-              <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>
+              <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/signup")}>
                 <Icon name="icon-scan" className="button-icon" />
                 Scan 1 item free
               </button>
@@ -1344,14 +1344,6 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, isLoggedIn]);
 
-  // Send logged-in visitors from the marketing landing page to their home.
-  useEffect(() => {
-    if (authed === true && view === "landing") {
-      navigate("/app");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed, view]);
-
   useEffect(() => {
     function onKeyDown(event) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -1803,7 +1795,7 @@ export default function Home() {
           : view === "forgotPassword" ? <ForgotPasswordPage onNavigate={navigate} />
           : view === "resetPassword" ? <ResetPasswordPage onNavigate={navigate} />
           : view === "sample" ? <SampleReorderList onNavigate={navigate} />
-          : <LoggedOutLanding onNavigate={navigate} />}
+          : <LoggedOutLanding onNavigate={navigate} authed={authed === true} />}
         <IconSprite />
       </>
     );
