@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CATALOG_CATEGORIES, bucketCategories, categoryBySlug } from "./catalogData";
+import { CATALOG_CATEGORIES, CATALOG_TINTS, bucketCategories, categoryBySlug } from "./catalogData";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -2138,12 +2138,12 @@ function CatalogCard({ category, onNavigate }) {
       <div className="cat-card-chips">
         {category.subcategories.map((sub) => (
           <button
-            key={sub}
+            key={sub.name}
             type="button"
             className="cat-chip"
-            onClick={() => onNavigate(`/app/catalog/${category.slug}?sub=${encodeURIComponent(sub)}`)}
+            onClick={() => onNavigate(`/app/catalog/${category.slug}?sub=${encodeURIComponent(sub.name)}`)}
           >
-            {sub}
+            {sub.name}
           </button>
         ))}
       </div>
@@ -2310,20 +2310,36 @@ function CatalogView({ onNavigate }) {
   );
 }
 
-// Category drill-down (/app/catalog/[slug]). Shows the curated category's
-// subcategory chips as quick filters and a product grid pulled from the same
+// Category drill-down (/app/catalog/[slug]). Mirrors the catalog landing layout
+// scoped to one department: a stat row, a grid of subcategory cards, a popular-
+// products table, and a right rail (jump-to box, top suppliers, subcategory
+// quick links, recently viewed). Products and stats come from the same
 // canonical-products API the search uses; products open the existing PDP.
 function CatalogCategoryView({ slug, onNavigate }) {
   const category = categoryBySlug(slug);
   const [products, setProducts] = useState([]);
+  const [productCount, setProductCount] = useState(null);
+  const [supplierCount, setSupplierCount] = useState(null);
+  const [topSuppliers, setTopSuppliers] = useState([]);
   const [status, setStatus] = useState("loading");
   const [sub, setSub] = useState("");
+  const [subLayout, setSubLayout] = useState("grid");
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [recent, setRecent] = useState([]);
+  const productsRef = useRef(null);
 
-  // Remember this category for the landing page's "Recently viewed" rail.
+  const tintFor = (index) => {
+    const base = category ? CATALOG_TINTS.indexOf(category.tint) : 0;
+    return CATALOG_TINTS[(Math.max(base, 0) + index) % CATALOG_TINTS.length];
+  };
+
+  // Remember this category for the landing page's "Recently viewed" rail, and
+  // load the rail's own recent list (excluding the current category).
   useEffect(() => {
     if (!slug) return;
     try {
       const prev = JSON.parse(window.localStorage.getItem(CATALOG_RECENT_KEY) || "[]").filter((s) => s !== slug);
+      setRecent(prev.map((s) => categoryBySlug(s)).filter(Boolean).slice(0, 5));
       window.localStorage.setItem(CATALOG_RECENT_KEY, JSON.stringify([slug, ...prev].slice(0, 6)));
     } catch {
       // storage unavailable — non-fatal
@@ -2336,12 +2352,34 @@ function CatalogCategoryView({ slug, onNavigate }) {
     setSub(initial);
   }, [slug]);
 
+  // Supplier coverage (from the bucketed category summary) + top suppliers for
+  // the rail. These don't depend on the active subcategory filter.
+  useEffect(() => {
+    if (!category) return undefined;
+    let active = true;
+    Promise.all([
+      fetch("/api/catalog").then((r) => r.json()).catch(() => ({ categories: [] })),
+      fetch("/api/suppliers").then((r) => r.json()).catch(() => ({ suppliers: [] })),
+    ]).then(([catRes, supRes]) => {
+      if (!active) return;
+      const bucket = bucketCategories(catRes.categories || []).find((c) => c.slug === slug);
+      setSupplierCount(bucket ? bucket.supplier_count : null);
+      setTopSuppliers(
+        (supRes.suppliers || [])
+          .slice()
+          .sort((a, b) => (b.product_count || 0) - (a.product_count || 0))
+      );
+    });
+    return () => { active = false; };
+  }, [slug, category]);
+
   useEffect(() => {
     if (!category) { setStatus("missing"); return undefined; }
     // Abort superseded/duplicate fetches (StrictMode double-invoke, filter
     // changes) so we don't pile concurrent heavy queries onto the backend.
     const controller = new AbortController();
     setStatus("loading");
+    setShowAllProducts(false);
     // A curated category can own several supplier-named source categories
     // (e.g. Burs & Rotary = "Burs & Diamonds" + "Burs"); fetch each, merge,
     // dedupe, and rank by best offer so the grid spans the whole department.
@@ -2351,13 +2389,15 @@ function CatalogCategoryView({ slug, onNavigate }) {
         if (sub) params.set("q", sub);
         return fetch(`/api/canonical-products?${params}`, { signal: controller.signal })
           .then((r) => r.json())
-          .catch(() => ({ canonical_products: [] }));
+          .catch(() => ({ canonical_products: [], count: 0 }));
       })
     ).then((responses) => {
       if (controller.signal.aborted) return;
       const seen = new Set();
       const merged = [];
-      responses.forEach(({ canonical_products }) => {
+      let total = 0;
+      responses.forEach(({ canonical_products, count }) => {
+        total += count || 0;
         (canonical_products || []).forEach((product) => {
           if (seen.has(product.id)) return;
           seen.add(product.id);
@@ -2366,6 +2406,7 @@ function CatalogCategoryView({ slug, onNavigate }) {
       });
       merged.sort((a, b) => (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity));
       setProducts(merged.slice(0, 24));
+      setProductCount(total);
       setStatus("ready");
     });
     return () => controller.abort();
@@ -2383,12 +2424,34 @@ function CatalogCategoryView({ slug, onNavigate }) {
     );
   }
 
+  const scrollToProducts = () => {
+    productsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const browseSub = (name) => {
+    setSub((prev) => (prev === name ? "" : name));
+    requestAnimationFrame(scrollToProducts);
+  };
+  const visibleProducts = showAllProducts ? products : products.slice(0, 8);
+  const bestPrice = products[0]?.best_offer?.price_cents;
+  const productsTitle = sub ? `Products in ${sub}` : `Popular products in ${category.name}`;
+  const fmt = (value) => (typeof value === "number" ? value.toLocaleString() : "—");
+
   return (
     <div className="cat">
       <nav className="cat-crumb" aria-label="Breadcrumb">
-        <button type="button" onClick={() => onNavigate("/app/catalog")}>Catalog</button>
+        <button type="button" onClick={() => onNavigate("/app/catalog")}>Products</button>
         <Icon name="icon-chevron-right" className="cat-crumb-sep" />
-        <strong>{category.name}</strong>
+        {sub ? (
+          <button type="button" onClick={() => setSub("")}>{category.name}</button>
+        ) : (
+          <strong>{category.name}</strong>
+        )}
+        {sub && (
+          <>
+            <Icon name="icon-chevron-right" className="cat-crumb-sep" />
+            <strong>{sub}</strong>
+          </>
+        )}
       </nav>
       <div className="cat-cat-head">
         <span className={`cat-tile lg tint-${category.tint}`}><Icon name={category.icon} className="nav-icon" /></span>
@@ -2398,62 +2461,196 @@ function CatalogCategoryView({ slug, onNavigate }) {
         </div>
       </div>
 
-      <div className="cat-filterbar">
-        <button type="button" className={`cat-chip ${sub === "" ? "active" : ""}`} onClick={() => setSub("")}>All</button>
-        {category.subcategories.map((option) => (
-          <button key={option} type="button" className={`cat-chip ${sub === option ? "active" : ""}`} onClick={() => setSub(option)}>
-            {option}
-          </button>
-        ))}
-      </div>
+      <div className="cat-layout">
+        <div className="cat-main">
+          <div className="cat-stats">
+            <CatalogStat icon="icon-list" tint="blue" label="Subcategories" value={category.subcategories.length} />
+            <CatalogStat icon="icon-package" tint="green" label="Products" value={status === "loading" ? "—" : fmt(productCount)} />
+            <CatalogStat icon="icon-users" tint="indigo" label="Suppliers covered" value={fmt(supplierCount)} />
+            <CatalogStat icon="icon-dollar-circle" tint="amber" label="Best price" value={typeof bestPrice === "number" ? catMoney(bestPrice) : "—"} sub={typeof bestPrice === "number" ? "lowest offer" : null} />
+          </div>
 
-      {status === "loading" ? (
-        <div className="catalog-results-grid">
-          {Array.from({ length: 6 }).map((_, i) => <div className="catalog-result-card cat-card-skeleton" key={i} />)}
-        </div>
-      ) : products.length ? (
-        <div className="catalog-results-grid">
-          {products.map((product) => {
-            const best = product.best_offer;
-            return (
-              <article className="catalog-result-card" key={product.id}>
-                <a
-                  className="catalog-result-link"
-                  href={`/app/product/${product.handle}`}
-                  onClick={(event) => { event.preventDefault(); onNavigate(`/app/product/${product.handle}`); }}
-                >
-                  <div className="catalog-result-image">
-                    {product.image_url ? (
-                      <img src={product.image_url} alt={product.name} loading="lazy" />
-                    ) : (
-                      <div className="catalog-result-placeholder"><Icon name="icon-image" className="nav-icon" /></div>
-                    )}
-                  </div>
-                  <div className="catalog-result-copy">
-                    <div className="catalog-result-topline">
-                      <span className="catalog-category">{product.category}</span>
-                      <span className="catalog-result-count">{product.offer_count} offer{product.offer_count === 1 ? "" : "s"}</span>
-                    </div>
-                    <h2>{product.name}</h2>
-                    <div className="catalog-result-meta">
-                      <span>{best?.supplier_name || "Supplier pending"}</span>
-                    </div>
-                    <div className="catalog-result-price">
-                      <strong>{best ? catMoney(best.price_cents) : "Price pending"}</strong>
-                    </div>
-                  </div>
-                </a>
+          <div className="cat-section-head">
+            <h2>Subcategories</h2>
+            <div className="cat-viewtoggle" role="group" aria-label="View as">
+              <span>View as:</span>
+              <button type="button" className={subLayout === "grid" ? "active" : ""} onClick={() => setSubLayout("grid")} aria-label="Grid view">
+                <Icon name="icon-grid" className="button-icon" />
+              </button>
+              <button type="button" className={subLayout === "list" ? "active" : ""} onClick={() => setSubLayout("list")} aria-label="List view">
+                <Icon name="icon-list" className="button-icon" />
+              </button>
+            </div>
+          </div>
+
+          <div className={`cat-grid ${subLayout}`}>
+            {category.subcategories.map((option, index) => (
+              <article className={`cat-card ${sub === option.name ? "active" : ""}`} key={option.name}>
+                <button type="button" className="cat-card-open" onClick={() => browseSub(option.name)}>
+                  <span className={`cat-tile tint-${tintFor(index)}`}><Icon name={category.icon} className="nav-icon" /></span>
+                  <span className="cat-card-headtext">
+                    <strong>{option.name}</strong>
+                    <small>{option.blurb}</small>
+                  </span>
+                </button>
+                <button type="button" className="cat-browse" onClick={() => browseSub(option.name)}>
+                  {sub === option.name ? "Clear filter" : "Browse subcategory"}
+                  <Icon name="icon-chevron-right" className="button-icon" />
+                </button>
               </article>
-            );
-          })}
+            ))}
+          </div>
+
+          <div className="cat-section-head cat-products-head" ref={productsRef}>
+            <h2>{productsTitle}</h2>
+            {sub && (
+              <button type="button" className="cat-clear-filter" onClick={() => setSub("")}>
+                <Icon name="icon-x" className="button-icon" />
+                Clear filter
+              </button>
+            )}
+          </div>
+
+          {status === "loading" ? (
+            <div className="cat-ptable-wrap">
+              {Array.from({ length: 5 }).map((_, i) => <div className="cat-pt-skeleton" key={i} />)}
+            </div>
+          ) : products.length ? (
+            <div className="cat-ptable-wrap">
+              <table className="cat-ptable">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Category path / SKU</th>
+                    <th>Best price</th>
+                    <th className="cat-pt-num">Suppliers matched</th>
+                    <th className="cat-pt-act">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleProducts.map((product, index) => {
+                    const best = product.best_offer;
+                    const open = () => onNavigate(`/app/product/${product.handle}`);
+                    return (
+                      <tr key={product.id}>
+                        <td>
+                          <div className="cat-pt-product">
+                            <span className="cat-pt-thumb">
+                              {product.image_url ? (
+                                <img src={product.image_url} alt="" loading="lazy" />
+                              ) : (
+                                <Icon name="icon-image" className="nav-icon" />
+                              )}
+                            </span>
+                            <button type="button" className="cat-pt-name" onClick={open}>{product.name}</button>
+                          </div>
+                        </td>
+                        <td className="cat-pt-path">
+                          <span>{category.name} <Icon name="icon-chevron-right" className="cat-pt-pathsep" /> {product.category}</span>
+                          <em>{best?.sku || "—"}</em>
+                        </td>
+                        <td>
+                          <div className="cat-pt-price">
+                            <strong>{best ? catMoney(best.price_cents) : "—"}</strong>
+                            {index === 0 && !sub && <span className="cat-pt-badge">Best price</span>}
+                          </div>
+                        </td>
+                        <td className="cat-pt-num">{product.offer_count}</td>
+                        <td className="cat-pt-act">
+                          <button type="button" className="cat-pt-view" onClick={open}>
+                            View product
+                            <Icon name="icon-link" className="button-icon" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {!showAllProducts && products.length > 8 && (
+                <button type="button" className="cat-pt-all" onClick={() => setShowAllProducts(true)}>
+                  View all {fmt(productCount)} products in {category.name}
+                  <Icon name="icon-chevron-right" className="button-icon" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <strong>No products{sub ? ` for ${sub}` : ""}</strong>
+              <span>Try a different subcategory or clear the filter.</span>
+              {sub && <button type="button" className="secondary-action compact" onClick={() => setSub("")}>Clear filter</button>}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="empty-state">
-          <strong>No products{sub ? ` for ${sub}` : ""}</strong>
-          <span>Try a different subcategory or clear the filter.</span>
-          {sub && <button type="button" className="secondary-action compact" onClick={() => setSub("")}>Clear filter</button>}
-        </div>
-      )}
+
+        <aside className="cat-rail">
+          <div className="cat-callout">
+            <Icon name="icon-info" className="button-icon" />
+            <div>
+              <strong>Drill down or jump to products</strong>
+              <p>Explore subcategories to narrow your search, or view all products in {category.name}.</p>
+              <div className="cat-callout-actions">
+                <button type="button" className="cat-callout-primary" onClick={() => { setSub(""); setShowAllProducts(true); requestAnimationFrame(scrollToProducts); }}>
+                  View all {fmt(productCount)} products
+                  <Icon name="icon-arrow-right" className="button-icon" />
+                </button>
+                <button type="button" className="cat-callout-secondary" onClick={() => onNavigate("/app/catalog")}>
+                  Back to all categories
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {topSuppliers.length > 0 && (
+            <section className="cat-panel">
+              <header><h3>Top suppliers</h3></header>
+              <ul className="cat-supplier-list">
+                {topSuppliers.slice(0, 5).map((supplier) => (
+                  <li key={supplier.id}>
+                    <span className="cat-supplier-avatar">{supplierInitials(supplier.name)}</span>
+                    <span className="cat-supplier-name">{supplier.name}</span>
+                    <em>{(supplier.product_count || 0).toLocaleString()}</em>
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="cat-panel-action" onClick={() => onNavigate("/app/settings")}>
+                View all {topSuppliers.length} suppliers
+              </button>
+            </section>
+          )}
+
+          <section className="cat-panel">
+            <header><h3>Subcategories</h3></header>
+            <ul className="cat-sublink-list">
+              {category.subcategories.map((option) => (
+                <li key={option.name}>
+                  <button type="button" className={sub === option.name ? "active" : ""} onClick={() => browseSub(option.name)}>
+                    {option.name}
+                    <Icon name="icon-chevron-right" className="button-icon" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {recent.length > 0 && (
+            <section className="cat-panel">
+              <header><h3>Recently viewed</h3></header>
+              <ul className="cat-recent-list">
+                {recent.map((item) => (
+                  <li key={item.slug}>
+                    <button type="button" onClick={() => onNavigate(`/app/catalog/${item.slug}`)}>
+                      <span className={`cat-tile sm tint-${item.tint}`}><Icon name={item.icon} className="nav-icon" /></span>
+                      {item.name}
+                      <Icon name="icon-chevron-right" className="button-icon" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }
