@@ -1,4 +1,4 @@
-import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 import { MEDMKP_MODULE } from "../../../modules/medmkp"
 import type MedMKPModuleService from "../../../modules/medmkp/service"
@@ -25,7 +25,7 @@ function serializePractice(row: any) {
 // Identity + editable profile for the signed-in buyer: their name/contact (for
 // the topbar/profile) and the practice they belong to (shipping address, buyer
 // preferences). The frontend /api/auth/me proxies this with the session cookie.
-export async function GET(req: MedusaRequest, res: MedusaResponse) {
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   const customerId = req.auth_context?.actor_id
   if (!customerId) {
     res.status(401).json({ error: "Not authenticated." })
@@ -75,7 +75,7 @@ type ProfileUpdate = {
 // Persists the buyer-editable profile: customer name/phone, plus the practice
 // name, structured shipping address, and preferences blob. Email is NOT
 // editable here — it's the login identity (changed via account recovery).
-export async function PUT(req: MedusaRequest, res: MedusaResponse) {
+export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   const customerId = req.auth_context?.actor_id
   if (!customerId) {
     res.status(401).json({ error: "Not authenticated." })

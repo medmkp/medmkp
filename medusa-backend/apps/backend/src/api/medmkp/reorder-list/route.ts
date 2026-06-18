@@ -1,9 +1,9 @@
-import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../modules/medmkp"
 import type MedMKPModuleService from "../../../modules/medmkp/service"
 import { resolvePracticeId } from "../../../utils/practice"
 
-export async function GET(req: MedusaRequest, res: MedusaResponse) {
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   if (!req.auth_context?.actor_id) {
     res.status(401).json({ error: "Not authenticated." })
     return
@@ -23,7 +23,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   })
 }
 
-export async function PUT(req: MedusaRequest, res: MedusaResponse) {
+export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   if (!req.auth_context?.actor_id) {
     res.status(401).json({ error: "Not authenticated." })
     return

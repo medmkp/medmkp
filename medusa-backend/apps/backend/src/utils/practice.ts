@@ -1,4 +1,4 @@
-import type { MedusaRequest } from "@medusajs/framework/http"
+import type { AuthenticatedMedusaRequest } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
 // The customer<->practice link join table. We read it directly rather than via
@@ -12,7 +12,7 @@ const PRACTICE_LINK_TABLE = "customer_customer_medmkp_medmkp_dental_practice"
 // Resolves the dental practice id for the authenticated customer. The
 // authenticate middleware (see src/api/middlewares.ts) puts the customer id on
 // auth_context. Returns null when unauthenticated or unlinked.
-export async function resolvePracticeId(req: MedusaRequest): Promise<string | null> {
+export async function resolvePracticeId(req: AuthenticatedMedusaRequest): Promise<string | null> {
   const customerId = req.auth_context?.actor_id
   if (!customerId) return null
 

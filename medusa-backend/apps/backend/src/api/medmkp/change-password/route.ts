@@ -1,11 +1,11 @@
-import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 
 // Changes the signed-in buyer's emailpass password. The built-in
 // /auth/customer/emailpass/update route only accepts a *reset* token (not a
 // login token), so a logged-in "change password" has to go through the auth
 // module directly: verify the current password, then update the provider.
-export async function POST(req: MedusaRequest, res: MedusaResponse) {
+export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   const customerId = req.auth_context?.actor_id
   if (!customerId) {
     res.status(401).json({ error: "Not authenticated." })
