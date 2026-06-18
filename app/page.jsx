@@ -278,6 +278,28 @@ function IconSprite() {
         <path d="M18 8.5a6 6 0 0 0-12 0c0 6.5-2.5 8-2.5 8h17s-2.5-1.5-2.5-8Z" />
         <path d="M13.7 20.5a2 2 0 0 1-3.4 0" />
       </symbol>
+      <symbol id="icon-eye" viewBox="0 0 24 24">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+        <circle cx="12" cy="12" r="3" />
+      </symbol>
+      <symbol id="icon-eye-off" viewBox="0 0 24 24">
+        <path d="M9.9 4.7A10.6 10.6 0 0 1 12 4.5c6.5 0 10 7 10 7a18 18 0 0 1-3.2 4.1M6.6 6.6A18 18 0 0 0 2 11.5s3.5 7 10 7a10.6 10.6 0 0 0 4.1-.8" />
+        <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+        <path d="m3 3 18 18" />
+      </symbol>
+      <symbol id="icon-credit-card" viewBox="0 0 24 24">
+        <rect x="2.5" y="5" width="19" height="14" rx="2.2" />
+        <path d="M2.5 9.5h19" />
+      </symbol>
+      <symbol id="icon-plug" viewBox="0 0 24 24">
+        <path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8Z" />
+        <path d="M12 16v5" />
+      </symbol>
+      <symbol id="icon-logout" viewBox="0 0 24 24">
+        <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+        <path d="M10 17l-5-5 5-5" />
+        <path d="M15 12H5" />
+      </symbol>
     </svg>
   );
 }
@@ -642,6 +664,9 @@ function MobileBottomNav({ view, onNavigate, onScan }) {
       <div className="m-nav-group">
         <button className={view === "history" ? "active" : ""} type="button" onClick={() => onNavigate("history")}>
           <span><Icon name="icon-clock" className="mobile-bottom-icon" /></span>History
+        </button>
+        <button className={view === "settings" ? "active" : ""} type="button" onClick={() => onNavigate("settings")}>
+          <span><Icon name="icon-settings" className="mobile-bottom-icon" /></span>Settings
         </button>
       </div>
     </nav>
@@ -1152,6 +1177,7 @@ export default function Home() {
   const [productHandle, setProductHandle] = useState(null);
   const [categorySlug, setCategorySlug] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -1820,11 +1846,38 @@ export default function Home() {
               <Icon name="icon-bell" className="button-icon" />
               <span className="topbar-badge">3</span>
             </button>
-            <button className="topbar-user" type="button">
-              <span className="topbar-avatar">{buyerInitials || "··"}</span>
-              <span className="topbar-user-id"><strong>{buyerName || "Your account"}</strong><small>{practiceName || "Buyer"}</small></span>
-              <Icon name="icon-chevron-down" className="button-icon" />
-            </button>
+            <div className="topbar-user-wrap">
+              <button
+                className="topbar-user"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                onClick={() => setUserMenuOpen((open) => !open)}
+              >
+                <span className="topbar-avatar">{buyerInitials || "··"}</span>
+                <span className="topbar-user-id"><strong>{buyerName || "Your account"}</strong><small>{practiceName || "Buyer"}</small></span>
+                <Icon name="icon-chevron-down" className={`button-icon ${userMenuOpen ? "rot" : ""}`} />
+              </button>
+              {userMenuOpen && (
+                <>
+                  <div className="topbar-menu-backdrop" onClick={() => setUserMenuOpen(false)} />
+                  <div className="topbar-menu" role="menu">
+                    <div className="topbar-menu-head">
+                      <strong>{buyerName || "Your account"}</strong>
+                      <small>{me?.customer?.email || practiceName || "Buyer"}</small>
+                    </div>
+                    <button role="menuitem" type="button" onClick={() => { setUserMenuOpen(false); setView("settings"); }}>
+                      <Icon name="icon-settings" className="button-icon" />
+                      Settings
+                    </button>
+                    <button role="menuitem" type="button" onClick={() => { setUserMenuOpen(false); handleLogout(); }}>
+                      <Icon name="icon-logout" className="button-icon" />
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
         <div className="app-body">
@@ -1915,9 +1968,8 @@ export default function Home() {
 
           {view === "settings" && (
             <SettingsView
-              onLogout={handleLogout}
-              buyerName={buyerName}
-              practiceName={practiceName}
+              me={me}
+              onMeUpdate={setMe}
               defaultBuyingPrefs={defaultBuyingPrefs}
               onSaveDefaults={setDefaultBuyingPrefs}
               supplierOptions={supplierOptions}
@@ -4570,32 +4622,475 @@ function HistoryDetail({ id, onBack, archivedLists = [] }) {
   );
 }
 
-function SettingsView({ onLogout, buyerName = "", practiceName = "", defaultBuyingPrefs, onSaveDefaults, supplierOptions = [], onToast }) {
+const SETTINGS_TABS = [
+  ["profile", "Profile"],
+  ["users", "Users"],
+  ["billing", "Billing"],
+  ["notifications", "Notifications"],
+  ["integrations", "Integrations"],
+  ["security", "Security"],
+];
+
+const SETTINGS_TAB_STUBS = {
+  users: { icon: "icon-users", title: "Team & users", body: "Invite teammates, assign buyer or approver roles, and manage who can place orders for your practice." },
+  billing: { icon: "icon-credit-card", title: "Billing & payment", body: "Manage payment methods, billing contacts, and download invoices for your MedMKP subscription." },
+  notifications: { icon: "icon-bell", title: "Notifications", body: "Choose which emails and alerts you receive. Order-related email toggles live under Profile → Preferences for now." },
+  integrations: { icon: "icon-plug", title: "Integrations", body: "Connect your practice-management system and accounting tools to sync orders and invoices automatically." },
+  security: { icon: "icon-shield-check", title: "Security", body: "Two-factor authentication, active sessions, and audit history. Password changes live under Profile → Change password." },
+};
+
+const DEFAULT_PREFERENCES = {
+  currency: "USD",
+  itemsPerPage: "25",
+  defaultUom: "Each",
+  timezone: "America/New_York",
+  emailOrderConfirmations: false,
+  emailBackInStock: false,
+  showPricingWithTax: true,
+};
+
+const CURRENCY_OPTIONS = [
+  ["USD", "USD – US Dollar"],
+  ["CAD", "CAD – Canadian Dollar"],
+  ["EUR", "EUR – Euro"],
+  ["GBP", "GBP – British Pound"],
+];
+const ITEMS_PER_PAGE_OPTIONS = ["10", "25", "50", "100"];
+const UOM_OPTIONS = ["Each", "Box", "Case", "Pack", "Bag", "Bottle", "Tube", "Kit"];
+const TIMEZONE_OPTIONS = [
+  ["America/New_York", "(GMT-05:00) Eastern Time (US & Canada)"],
+  ["America/Chicago", "(GMT-06:00) Central Time (US & Canada)"],
+  ["America/Denver", "(GMT-07:00) Mountain Time (US & Canada)"],
+  ["America/Los_Angeles", "(GMT-08:00) Pacific Time (US & Canada)"],
+  ["America/Anchorage", "(GMT-09:00) Alaska"],
+  ["Pacific/Honolulu", "(GMT-10:00) Hawaii"],
+];
+const COUNTRY_OPTIONS = ["United States", "Canada", "Mexico", "United Kingdom"];
+const US_STATES = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
+
+function formFromMe(me) {
+  const customer = me?.customer || {};
+  const practice = me?.practice || {};
+  return {
+    first_name: customer.first_name || "",
+    last_name: customer.last_name || "",
+    email: customer.email || "",
+    phone: customer.phone || "",
+    name: practice.name || "",
+    ship_address_line1: practice.ship_address_line1 || "",
+    ship_address_line2: practice.ship_address_line2 || "",
+    ship_city: practice.ship_city || "",
+    ship_state: practice.ship_state || "",
+    ship_zip: practice.ship_zip || "",
+    ship_country: practice.ship_country || "United States",
+    shipping_notes: practice.shipping_notes || "",
+    use_as_billing: Boolean(practice.use_as_billing),
+    prefs: { ...DEFAULT_PREFERENCES, ...(practice.preferences || {}) },
+  };
+}
+
+function meFromForm(form, prevMe) {
+  return {
+    customer: {
+      ...(prevMe?.customer || {}),
+      first_name: form.first_name,
+      last_name: form.last_name,
+      email: form.email,
+      phone: form.phone,
+    },
+    practice: {
+      ...(prevMe?.practice || {}),
+      name: form.name,
+      ship_address_line1: form.ship_address_line1,
+      ship_address_line2: form.ship_address_line2,
+      ship_city: form.ship_city,
+      ship_state: form.ship_state,
+      ship_zip: form.ship_zip,
+      ship_country: form.ship_country,
+      shipping_notes: form.shipping_notes,
+      use_as_billing: form.use_as_billing,
+      preferences: form.prefs,
+    },
+  };
+}
+
+function SettingsView({ me, onMeUpdate, defaultBuyingPrefs, onSaveDefaults, supplierOptions = [], onToast }) {
+  const [tab, setTab] = useState("profile");
   return (
-    <div className="crl">
-      <header className="crl-header">
-        <div className="crl-title"><h2>Settings</h2></div>
+    <div className="settings-page">
+      <header className="settings-head">
+        <h2>Settings</h2>
       </header>
-      <div className="settings-grid">
-        <div className="ops-panel">
-          <p className="eyebrow">Buyer Profile</p>
-          <h3>{buyerName || "Your account"}</h3>
-          <p>{practiceName ? `${practiceName} · Buyer` : "Buyer"}</p>
-        </div>
-        <BuyingPreferencesCard
-          title="Default Buying Preferences"
-          savedMessage="Default preferences saved"
-          prefs={defaultBuyingPrefs}
+      <nav className="settings-tabs" aria-label="Settings sections">
+        {SETTINGS_TABS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={`settings-tab ${tab === id ? "active" : ""}`}
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {tab === "profile" ? (
+        <ProfileSettings
+          me={me}
+          onMeUpdate={onMeUpdate}
+          defaultBuyingPrefs={defaultBuyingPrefs}
+          onSaveDefaults={onSaveDefaults}
           supplierOptions={supplierOptions}
-          onSave={onSaveDefaults}
           onToast={onToast}
         />
-      </div>
-      <p className="settings-prefs-note">
-        <Icon name="icon-info" className="button-icon" />
-        New reorder lists start from these defaults. You can still tweak preferences per list on Home.
-      </p>
-      <button className="secondary-action" type="button" onClick={onLogout} style={{ marginTop: "1.5rem" }}>Sign out</button>
+      ) : (
+        <SettingsComingSoon tab={tab} />
+      )}
     </div>
+  );
+}
+
+function SettingsComingSoon({ tab }) {
+  const stub = SETTINGS_TAB_STUBS[tab] || { icon: "icon-settings", title: "Coming soon", body: "This section isn't available yet." };
+  return (
+    <div className="settings-stub">
+      <Icon name={stub.icon} className="settings-stub-icon" />
+      <h3>{stub.title}</h3>
+      <p>{stub.body}</p>
+      <span className="settings-stub-badge">Coming soon</span>
+    </div>
+  );
+}
+
+function ProfileSettings({ me, onMeUpdate, defaultBuyingPrefs, onSaveDefaults, supplierOptions, onToast }) {
+  const [form, setForm] = useState(() => formFromMe(me));
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
+  const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+
+  // Keep the form in sync with the server identity until the buyer starts
+  // editing; after that, their in-progress edits win (no clobber on refetch).
+  useEffect(() => {
+    if (!dirtyRef.current) setForm(formFromMe(me));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
+
+  function markDirty() {
+    dirtyRef.current = true;
+    setDirty(true);
+    setSaveStatus("idle");
+  }
+  function setField(key, value) {
+    markDirty();
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+  function setPref(key, value) {
+    markDirty();
+    setForm((current) => ({ ...current, prefs: { ...current.prefs, [key]: value } }));
+  }
+
+  // Explicit save of profile + address + preferences.
+  async function save() {
+    if (!me || !dirty) return;
+    setSaveStatus("saving");
+    const payload = {
+      customer: { first_name: form.first_name, last_name: form.last_name, phone: form.phone },
+      practice: {
+        name: form.name,
+        ship_address_line1: form.ship_address_line1,
+        ship_address_line2: form.ship_address_line2,
+        ship_city: form.ship_city,
+        ship_state: form.ship_state,
+        ship_zip: form.ship_zip,
+        ship_country: form.ship_country,
+        shipping_notes: form.shipping_notes,
+        use_as_billing: form.use_as_billing,
+        preferences: form.prefs,
+      },
+    };
+    try {
+      const response = await fetch("/api/auth/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error("save failed");
+      dirtyRef.current = false;
+      setDirty(false);
+      setSaveStatus("saved");
+      onMeUpdate?.(meFromForm(form, me));
+      onToast?.("Settings saved");
+    } catch {
+      setSaveStatus("error");
+    }
+  }
+
+  return (
+    <>
+      <section className="set-section">
+        <div className="set-section-info">
+          <h3>Profile information</h3>
+          <p>Update your personal information and how we contact you.</p>
+        </div>
+        <div className="set-section-body">
+          <div className="set-grid cols-2">
+            <label className="set-field">
+              <span>First name</span>
+              <input type="text" value={form.first_name} onChange={(e) => setField("first_name", e.target.value)} />
+            </label>
+            <label className="set-field">
+              <span>Last name</span>
+              <input type="text" value={form.last_name} onChange={(e) => setField("last_name", e.target.value)} />
+            </label>
+            <label className="set-field">
+              <span>Work email</span>
+              <input type="email" value={form.email} readOnly title="Your login email — contact support to change it." />
+            </label>
+            <label className="set-field">
+              <span>Phone number</span>
+              <input type="tel" value={form.phone} onChange={(e) => setField("phone", e.target.value)} placeholder="(212) 555-0187" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section className="set-section">
+        <div className="set-section-info">
+          <h3>Default shipping address</h3>
+          <p>This address will be used to calculate shipping costs and delivery estimates.</p>
+        </div>
+        <div className="set-section-body">
+          <div className="set-ship">
+            <div className="set-ship-main">
+              <label className="set-field">
+                <span>Company / Practice name</span>
+                <input type="text" value={form.name} onChange={(e) => setField("name", e.target.value)} />
+              </label>
+              <label className="set-field">
+                <span>Address line 1</span>
+                <input type="text" value={form.ship_address_line1} onChange={(e) => setField("ship_address_line1", e.target.value)} />
+              </label>
+              <label className="set-field">
+                <span>Address line 2 <em>(optional)</em></span>
+                <input type="text" value={form.ship_address_line2} onChange={(e) => setField("ship_address_line2", e.target.value)} />
+              </label>
+              <div className="set-grid cols-3">
+                <label className="set-field">
+                  <span>City</span>
+                  <input type="text" value={form.ship_city} onChange={(e) => setField("ship_city", e.target.value)} />
+                </label>
+                <label className="set-field">
+                  <span>State / Province</span>
+                  <select value={form.ship_state} onChange={(e) => setField("ship_state", e.target.value)}>
+                    <option value="">—</option>
+                    {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label className="set-field">
+                  <span>ZIP / Postal code</span>
+                  <input type="text" value={form.ship_zip} onChange={(e) => setField("ship_zip", e.target.value)} />
+                </label>
+              </div>
+              <label className="set-field">
+                <span>Country</span>
+                <select value={form.ship_country} onChange={(e) => setField("ship_country", e.target.value)}>
+                  {COUNTRY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label className="set-check">
+                <input type="checkbox" checked={form.use_as_billing} onChange={(e) => setField("use_as_billing", e.target.checked)} />
+                <span>
+                  Use as billing address
+                  <small>Billing address is used for invoices and tax calculations.</small>
+                </span>
+              </label>
+            </div>
+            <div className="set-ship-aside">
+              <label className="set-field">
+                <span>Shipping notes <em>(optional)</em></span>
+                <textarea
+                  rows={4}
+                  maxLength={200}
+                  value={form.shipping_notes}
+                  onChange={(e) => setField("shipping_notes", e.target.value)}
+                  placeholder="e.g., Gate code, suite number, receiving hours, etc."
+                />
+                <small className="set-counter">{form.shipping_notes.length} / 200</small>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <ChangePasswordSection onToast={onToast} />
+
+      <section className="set-section">
+        <div className="set-section-info">
+          <h3>Preferences</h3>
+          <p>Set your default preferences for a better shopping experience.</p>
+        </div>
+        <div className="set-section-body">
+          <div className="set-grid cols-3">
+            <label className="set-field">
+              <span>Default currency</span>
+              <select value={form.prefs.currency} onChange={(e) => setPref("currency", e.target.value)}>
+                {CURRENCY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className="set-field">
+              <span>Items per page</span>
+              <select value={form.prefs.itemsPerPage} onChange={(e) => setPref("itemsPerPage", e.target.value)}>
+                {ITEMS_PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <label className="set-field">
+              <span>Default UOM</span>
+              <select value={form.prefs.defaultUom} onChange={(e) => setPref("defaultUom", e.target.value)}>
+                {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="set-grid cols-3">
+            <label className="set-field">
+              <span>Timezone</span>
+              <select value={form.prefs.timezone} onChange={(e) => setPref("timezone", e.target.value)}>
+                {TIMEZONE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="set-toggles">
+            <label className="set-check">
+              <input type="checkbox" checked={form.prefs.emailOrderConfirmations} onChange={(e) => setPref("emailOrderConfirmations", e.target.checked)} />
+              <span>Email me order confirmations</span>
+            </label>
+            <label className="set-check">
+              <input type="checkbox" checked={form.prefs.emailBackInStock} onChange={(e) => setPref("emailBackInStock", e.target.checked)} />
+              <span>Email me when items are back in stock</span>
+            </label>
+            <label className="set-check">
+              <input type="checkbox" checked={form.prefs.showPricingWithTax} onChange={(e) => setPref("showPricingWithTax", e.target.checked)} />
+              <span>Show pricing with tax (if applicable)</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section className="set-section">
+        <div className="set-section-info">
+          <h3>Default buying preferences</h3>
+          <p>New reorder lists start from these defaults. You can still tweak them per list on Home.</p>
+        </div>
+        <div className="set-section-body">
+          <BuyingPreferencesCard
+            title="Default Buying Preferences"
+            savedMessage="Default preferences saved"
+            prefs={defaultBuyingPrefs}
+            supplierOptions={supplierOptions}
+            onSave={onSaveDefaults}
+            onToast={onToast}
+          />
+        </div>
+      </section>
+
+      <footer className="settings-foot">
+        <span className={`settings-savestate ${saveStatus}`}>
+          {saveStatus === "saving" && "Saving…"}
+          {saveStatus === "saved" && !dirty && "All changes saved"}
+          {saveStatus === "error" && "Couldn't save — please try again"}
+          {dirty && saveStatus !== "saving" && "You have unsaved changes"}
+        </span>
+        <div className="settings-foot-actions">
+          <button className="primary-action compact" type="button" onClick={save} disabled={!dirty || saveStatus === "saving"}>
+            {saveStatus === "saving" ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </footer>
+    </>
+  );
+}
+
+function ChangePasswordSection({ onToast }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showNext, setShowNext] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    if (next.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (next !== confirm) {
+      setError("New passwords don't match.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || "Could not update your password.");
+        return;
+      }
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+      onToast?.("Password updated");
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="set-section">
+      <div className="set-section-info">
+        <h3>Change password</h3>
+        <p>Choose a strong password to keep your account secure.</p>
+      </div>
+      <div className="set-section-body">
+        <form className="set-pw-form" onSubmit={submit}>
+          <div className="set-grid cols-3">
+            <label className="set-field">
+              <span>Current password</span>
+              <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+            </label>
+            <label className="set-field">
+              <span>New password</span>
+              <div className="set-input-wrap">
+                <input type={showNext ? "text" : "password"} autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+                <button type="button" className="set-eye" aria-label={showNext ? "Hide password" : "Show password"} onClick={() => setShowNext((v) => !v)}>
+                  <Icon name={showNext ? "icon-eye-off" : "icon-eye"} className="button-icon" />
+                </button>
+              </div>
+            </label>
+            <label className="set-field">
+              <span>Confirm new password</span>
+              <div className="set-input-wrap">
+                <input type={showConfirm ? "text" : "password"} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+                <button type="button" className="set-eye" aria-label={showConfirm ? "Hide password" : "Show password"} onClick={() => setShowConfirm((v) => !v)}>
+                  <Icon name={showConfirm ? "icon-eye-off" : "icon-eye"} className="button-icon" />
+                </button>
+              </div>
+            </label>
+          </div>
+          {error && <p className="set-pw-error">{error}</p>}
+          <div className="set-pw-actions">
+            <button className="primary-action compact" type="submit" disabled={submitting || !current || !next || !confirm}>
+              {submitting ? "Updating…" : "Update password"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
   );
 }

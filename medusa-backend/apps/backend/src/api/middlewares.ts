@@ -12,7 +12,12 @@ export default defineMiddlewares({
     },
     {
       matcher: "/medmkp/me",
-      method: ["GET"],
+      method: ["GET", "PUT"],
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
+    {
+      matcher: "/medmkp/change-password",
+      method: ["POST"],
       middlewares: [authenticate("customer", ["bearer", "session"])],
     },
   ],
