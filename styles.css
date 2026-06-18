@@ -6661,63 +6661,17 @@ th {
     padding: 0;
   }
 
+  /* Full-screen camera scanner overlay — covers the app shell and bottom nav */
   .mobile-scan-screen {
-    display: flex;
-    min-height: 100dvh;
-    flex-direction: column;
-    overflow-x: hidden;
-    overflow-y: auto;
-    padding-bottom: 86px;
-    background: #ffffff;
-    color: #071331;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: block;
+    overflow: hidden;
+    background: #05070b;
+    color: #ffffff;
   }
 
-  .mobile-scan-header {
-    display: grid;
-    grid-template-columns: 44px 1fr 44px;
-    align-items: center;
-    height: 70px;
-    padding: 0 24px;
-    border-bottom: 1px solid #dbe2ee;
-    background: #ffffff;
-  }
-
-  .mobile-scan-header h1 {
-    text-align: center;
-    color: #081536;
-    font-size: 16px;
-    line-height: 1;
-    font-weight: 700;
-  }
-
-  .mobile-scan-icon-button {
-    display: grid;
-    width: 42px;
-    height: 42px;
-    place-items: center;
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: #081536;
-    font-size: 18px;
-    font-weight: 700;
-  }
-
-  .mobile-scan-icon-button:last-child {
-    border: 2px solid #081536;
-    font-size: 17px;
-  }
-
-  .mobile-scan-icon-button.back {
-    justify-self: start;
-  }
-
-  .mobile-scan-icon-button.back .mobile-scan-icon {
-    transform: rotate(180deg);
-  }
-
-  .mobile-scan-icon,
-  .mobile-tab-icon,
   .mobile-control-icon,
   .mobile-edit-icon,
   .mobile-cta-icon,
@@ -6726,60 +6680,9 @@ th {
     fill: none;
   }
 
-  .mobile-scan-icon {
-    width: 21px;
-    height: 21px;
-    stroke-width: 2.4;
-  }
-
-  .mobile-scan-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    height: 50px;
-    border-bottom: 1px solid #dbe2ee;
-    background: #ffffff;
-  }
-
-  .mobile-scan-tabs button {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 0 8px;
-    border: none;
-    background: transparent;
-    color: #818181;
-    font-size: 12px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .mobile-scan-tabs button.active {
-    color: #0f62ff;
-  }
-
-  .mobile-scan-tabs button.active::after {
-    content: "";
-    position: absolute;
-    right: 0;
-    bottom: -1px;
-    left: 0;
-    height: 4px;
-    background: #0f62ff;
-  }
-
-  .mobile-tab-icon {
-    width: 19px;
-    height: 19px;
-    flex: 0 0 auto;
-    stroke-width: 2.4;
-  }
-
   .mobile-camera-stage {
-    position: relative;
-    flex: 1 0 512px;
-    min-height: 512px;
+    position: absolute;
+    inset: 0;
     overflow: hidden;
     background:
       radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.2), transparent 24%),
@@ -6831,17 +6734,18 @@ th {
   .scan-instruction {
     position: absolute;
     z-index: 4;
-    top: 31px;
+    top: calc(72px + env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
+    max-width: calc(100% - 48px);
     padding: 8px 20px;
     border: 2px solid rgba(255, 255, 255, 0.35);
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.56);
     color: #ffffff;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 650;
-    white-space: nowrap;
+    text-align: center;
   }
 
   .product-box-capture {
@@ -6957,10 +6861,11 @@ th {
   .scan-frame {
     position: absolute;
     z-index: 3;
-    top: 78px;
+    top: 50%;
     right: 31px;
     left: 31px;
-    height: 318px;
+    height: 300px;
+    transform: translateY(-50%);
     pointer-events: none;
   }
 
@@ -7013,70 +6918,158 @@ th {
     box-shadow: 0 0 16px rgba(56, 119, 255, 0.9);
   }
 
-  .camera-actions {
-    position: absolute;
-    z-index: 4;
-    right: 0;
-    bottom: 35px;
-    left: 0;
-    display: grid;
-    grid-template-columns: 1fr 112px 1fr;
-    align-items: center;
-    padding: 0 72px;
-  }
-
-  .camera-actions button {
-    display: grid;
-    place-items: center;
-    width: 69px;
-    height: 69px;
-    justify-self: center;
-    border: none;
-    border-radius: 999px;
-    background: rgba(5, 19, 25, 0.74);
-    color: #ffffff;
-  }
-
-  .camera-actions .shutter {
-    width: 102px;
-    height: 102px;
-    border: 7px solid #ffffff;
-    background: radial-gradient(circle, #ffffff 0 58%, transparent 59%), #0f62ff;
-    box-shadow: inset 0 0 0 5px #0f62ff;
-  }
-
   .mobile-control-icon {
     width: 26px;
     height: 26px;
     stroke-width: 2.6;
   }
 
-  .camera-aux-spacer {
-    width: 69px;
-    height: 69px;
-    justify-self: center;
+  /* Top overlay bar: close (✕) + manual entry, floated over the live camera */
+  .scan-fs-top {
+    position: absolute;
+    z-index: 6;
+    top: calc(14px + env(safe-area-inset-top));
+    right: 16px;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .scan-fs-close {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border: none;
+    border-radius: 999px;
+    background: rgba(5, 12, 20, 0.55);
+    color: #ffffff;
+    backdrop-filter: blur(6px);
+  }
+  .scan-fs-close-icon {
+    width: 24px;
+    height: 24px;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    fill: none;
+  }
+  .scan-fs-enter {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 40px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(5, 12, 20, 0.55);
+    color: #ffffff;
+    font-size: 13.5px;
+    font-weight: 700;
+    backdrop-filter: blur(6px);
+  }
+  .scan-fs-enter .button-icon {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    fill: none;
   }
 
-  /* Two-tab method switcher (Scan / Enter Code) */
-  .mobile-scan-tabs.two-up {
-    grid-template-columns: repeat(2, 1fr);
+  /* Bottom-right review button with a running count of items scanned */
+  .scan-fs-review {
+    position: absolute;
+    z-index: 6;
+    right: 20px;
+    bottom: calc(28px + env(safe-area-inset-bottom));
+    display: grid;
+    width: 64px;
+    height: 64px;
+    place-items: center;
+    border: none;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #ffffff;
+    box-shadow: 0 12px 26px rgba(15, 98, 255, 0.5);
+  }
+  .scan-fs-review-icon {
+    width: 30px;
+    height: 30px;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    fill: none;
+  }
+  .scan-fs-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: grid;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    place-items: center;
+    border: 2.5px solid #05070b;
+    border-radius: 999px;
+    background: #ff3b30;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
   }
 
-  /* Manual code entry — the fallback for iOS Safari (no BarcodeDetector) and
-     for items whose barcode won't read or that have none. */
-  .mobile-manual-panel {
-    flex: 1 0 auto;
+  /* Manual-entry sheet — slides over the camera when the buyer taps Enter code */
+  .scan-fs-manual {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(3, 7, 12, 0.55);
+  }
+  .scan-fs-manual-card {
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 28px 24px 22px;
-    background: #f6f9fd;
+    padding: 20px 22px calc(26px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0;
+    background: #ffffff;
+    color: #081536;
+    animation: scanResultIn 0.24s ease-out;
   }
-  .mobile-manual-panel form {
+  .scan-fs-manual-card header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .scan-fs-manual-card header strong {
+    font-size: 16px;
+    font-weight: 750;
+  }
+  .scan-fs-manual-card header button {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: none;
+    border-radius: 999px;
+    background: #eef2f8;
+    color: #5a6b86;
+  }
+  .scan-fs-manual-card header button .button-icon {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    fill: none;
+  }
+  .scan-fs-manual-card form {
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
+
+  /* Manual code entry — the fallback for iOS Safari (no BarcodeDetector) and
+     for items whose barcode won't read or that have none. */
   .mobile-manual-field {
     display: flex;
     align-items: center;
@@ -7109,7 +7102,7 @@ th {
     color: #081536;
     letter-spacing: 0.02em;
   }
-  .mobile-manual-panel .primary-action {
+  .scan-fs-manual-card .primary-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7122,10 +7115,10 @@ th {
     font-size: 15px;
     font-weight: 700;
   }
-  .mobile-manual-panel .primary-action:disabled {
+  .scan-fs-manual-card .primary-action:disabled {
     opacity: 0.5;
   }
-  .mobile-manual-panel .primary-action .button-icon {
+  .scan-fs-manual-card .primary-action .button-icon {
     width: 18px;
     height: 18px;
     stroke: currentColor;
@@ -7255,16 +7248,6 @@ th {
     color: #ffffff;
     font-size: 13.5px;
     font-weight: 700;
-  }
-
-  .recognized-sheet {
-    position: relative;
-    z-index: 5;
-    margin-top: -1px;
-    padding: 28px 33px 112px;
-    border-radius: 20px 20px 0 0;
-    background: #ffffff;
-    box-shadow: 0 -10px 30px rgba(10, 26, 56, 0.12);
   }
 
   .recognized-heading {
@@ -7545,18 +7528,8 @@ th {
 }
 
 @media (max-width: 520px) {
-  .mobile-scan-tabs button {
-    gap: 7px;
-    font-size: 13px;
-  }
-
-  .mobile-camera-stage {
-    flex-basis: 430px;
-    min-height: 430px;
-  }
-
   .scan-instruction {
-    top: 24px;
+    top: calc(66px + env(safe-area-inset-top));
     padding: 6px 13px;
     font-size: 11px;
   }
@@ -7617,31 +7590,10 @@ th {
   }
 
   .scan-frame {
-    top: 73px;
+    top: 50%;
     right: 18px;
     left: 18px;
     height: 264px;
-  }
-
-  .camera-actions {
-    bottom: 26px;
-    grid-template-columns: 1fr 82px 1fr;
-    padding: 0 48px;
-  }
-
-  .camera-actions button {
-    width: 54px;
-    height: 54px;
-  }
-
-  .camera-actions .shutter {
-    width: 78px;
-    height: 78px;
-    border-width: 6px;
-  }
-
-  .recognized-sheet {
-    padding: 18px 17px 100px;
   }
 
   .recognized-heading {
@@ -7900,7 +7852,6 @@ th {
 .desktop-scan-shutter:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
 .scan-captured { animation: scanCapturedFlash 0.65s ease-out; }
 @keyframes scanCapturedFlash { 0% { box-shadow: inset 0 0 0 4px var(--green); } 100% { box-shadow: inset 0 0 0 0 rgba(30, 158, 90, 0); } }
-.camera-actions .shutter:disabled { opacity: 0.6; }
 
 .desktop-scan-result { display: grid; gap: 14px; align-content: start; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
 .desktop-scan-result-head { display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: center; }
@@ -8571,6 +8522,10 @@ th {
 .m-card-right strong { color: var(--ink); font-size: 14px; }
 .m-card-right small { color: var(--muted); font-size: 11px; }
 .m-card-chev { width: 16px; height: 16px; color: var(--muted); }
+.m-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 56px 24px; color: var(--muted); }
+.m-empty-icon { width: 40px; height: 40px; color: var(--muted); stroke: currentColor; fill: none; }
+.m-empty strong { color: var(--ink); font-size: 15px; }
+.m-empty p { max-width: 300px; margin: 0; font-size: 13px; line-height: 1.45; }
 
 /* Mobile detail (full-screen) */
 .m-detail { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: var(--surface); }
