@@ -12,6 +12,9 @@ const UPLOAD_TIMEOUT_MS = 180000;
 
 const APP_STATE_KEY = "medmkp_app_state_v1";
 const CATALOG_RECENT_KEY = "medmkp_catalog_recent_v1";
+// Device-local UI preference: whether the left nav sidebar is collapsed. Kept
+// out of the synced app-state blob since collapse is per-device, like ChatGPT.
+const NAV_COLLAPSED_KEY = "medmkp_nav_collapsed_v1";
 
 // Unauthenticated visitors get a taste of the scanner before the signup wall:
 // FREE_SCAN_LIMIT distinct lookups, counted in localStorage so the budget
@@ -117,6 +120,10 @@ function IconSprite() {
       <symbol id="icon-search" viewBox="0 0 24 24">
         <path d="M10.8 18.1a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
         <path d="m16 16 5 5" />
+      </symbol>
+      <symbol id="icon-sidebar" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2.5" />
+        <path d="M9 4v16" />
       </symbol>
       <symbol id="icon-cloud-upload" viewBox="0 0 24 24">
         <path d="M8 18.5H6.8a4.3 4.3 0 0 1-.8-8.5 6 6 0 0 1 11.4-1.8A4.8 4.8 0 0 1 18 18.5h-2" />
@@ -1357,6 +1364,7 @@ export default function Home() {
   const [categorySlug, setCategorySlug] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -1428,9 +1436,24 @@ export default function Home() {
     } catch {
       // ignore corrupt state
     }
+    try {
+      if (window.localStorage.getItem(NAV_COLLAPSED_KEY) === "1") setNavCollapsed(true);
+    } catch {
+      // ignore corrupt state
+    }
     setStateLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist the sidebar collapse preference per-device.
+  useEffect(() => {
+    if (!stateLoaded) return;
+    try {
+      window.localStorage.setItem(NAV_COLLAPSED_KEY, navCollapsed ? "1" : "0");
+    } catch {
+      // storage unavailable — non-fatal
+    }
+  }, [stateLoaded, navCollapsed]);
 
   // Once we know the visitor is signed in, pull the practice's saved list. A
   // server list wins (it's the cross-device source of truth); if there's none
@@ -2024,7 +2047,7 @@ export default function Home() {
 
   return (
     <>
-      <div className={`app-shell ${menuOpen ? "menu-open" : ""} ${mobileAddItemRoute ? "mobile-add-item-shell" : ""}`}>
+      <div className={`app-shell ${menuOpen ? "menu-open" : ""} ${navCollapsed ? "nav-collapsed" : ""} ${mobileAddItemRoute ? "mobile-add-item-shell" : ""}`}>
         <header className="topbar">
           <button className="topbar-brand" type="button" onClick={() => setView("home")} aria-label="MedMKP home">
             <BrandMark />
@@ -2103,6 +2126,17 @@ export default function Home() {
         </header>
         <div className="app-body">
         <aside className="sidebar">
+          <div className="sidebar-head">
+            <button
+              className="nav-collapse-btn"
+              type="button"
+              onClick={() => setNavCollapsed((collapsed) => !collapsed)}
+              aria-label={navCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={navCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <Icon name="icon-sidebar" className="button-icon" />
+            </button>
+          </div>
           <nav className="nav-tabs" aria-label="Primary navigation">
             {navItems.map(([target, icon, label]) => (
               <button
@@ -2110,6 +2144,7 @@ export default function Home() {
                 className={`nav-tab ${view === target ? "active" : ""}`}
                 type="button"
                 onClick={() => setView(target)}
+                title={navCollapsed ? label : undefined}
               >
                 <Icon name={icon} />
                 <strong>{label}</strong>

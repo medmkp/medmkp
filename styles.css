@@ -195,6 +195,81 @@ p {
   color: var(--blue);
 }
 
+/* ChatGPT-style collapse toggle at the top of the sidebar. Collapsing shrinks
+   the sidebar to a narrow icon-only rail rather than hiding it. */
+.sidebar-head {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: -18px;
+}
+
+.nav-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #5d6a81;
+  cursor: pointer;
+}
+
+.nav-collapse-btn:hover {
+  background: #edf4ff;
+  color: var(--blue);
+}
+
+/* Collapse only applies where the sidebar is a real left column. Below 1020px
+   it becomes a horizontal nav (and then an off-canvas menu), so the toggle is
+   hidden and the collapsed state is a no-op. */
+@media (min-width: 1021px) {
+  .app-shell.nav-collapsed .sidebar {
+    flex-basis: 64px;
+    width: 64px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .app-shell.nav-collapsed .sidebar-head {
+    justify-content: center;
+  }
+
+  .app-shell.nav-collapsed .nav-tab {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 0;
+  }
+
+  .app-shell.nav-collapsed .nav-tab strong {
+    display: none;
+  }
+
+  /* Let the reorder list reclaim the ~216px the collapsed sidebar gives up:
+     extend the capped container and widen the table column by the same amount
+     (1320→1536, 990→1206), keeping the rail's width. The detail-open layout is
+     left alone — it already fills the freed space via its own max-width:none. */
+  .app-shell.nav-collapsed .crl:not(.detail-open) {
+    max-width: 1536px;
+  }
+
+  .app-shell.nav-collapsed .crl:not(.detail-open) .crl-header {
+    max-width: min(1206px, 78%);
+  }
+
+  .app-shell.nav-collapsed .crl-layout:not(.has-detail) {
+    grid-template-columns: min(1206px, 78%) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1020px) {
+  .sidebar-head {
+    display: none;
+  }
+}
+
 .upload-button {
   display: flex;
   align-items: center;
