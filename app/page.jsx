@@ -14,6 +14,12 @@ const UPLOAD_TIMEOUT_MS = 180000;
 const APP_STATE_KEY = "medmkp_app_state_v1";
 const CATALOG_RECENT_KEY = "medmkp_catalog_recent_v1";
 
+// Unauthenticated visitors get a taste of the scanner before the signup wall:
+// FREE_SCAN_LIMIT distinct lookups, counted in localStorage so the budget
+// survives a refresh. This is a soft marketing gate, not a security control.
+const FREE_SCAN_LIMIT = 3;
+const FREE_SCAN_KEY = "medmkp_free_scans_v1";
+
 const DEFAULT_BUYING_PREFS = {
   strategy: "best-price",
   preferredSuppliers: [],
@@ -47,6 +53,7 @@ function viewFromPath(pathname = "/") {
   if (path === "/forgot-password") return { view: "forgotPassword", isLoggedIn: false };
   if (path === "/reset-password") return { view: "resetPassword", isLoggedIn: false };
   if (path === "/sample") return { view: "sample", isLoggedIn: false };
+  if (path === "/scan") return { view: "publicScan", isLoggedIn: false };
 
   // Authenticated app
   if (path === "/app") return { view: "home", isLoggedIn: true };
@@ -697,9 +704,9 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
             <h1>Scan your dental supplies and spot <span>possible savings</span> in seconds</h1>
             <p>Point your phone at a barcode or enter a SKU to identify the item, compare typical price ranges, and save it to a free starter reorder list. No login required to try it.</p>
             <div className="landing-actions">
-              <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/signup")}>
+              <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/scan")}>
                 <Icon name="icon-scan" className="button-icon" />
-                Scan 1 item free
+                Scan 3 items free
               </button>
               <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
                 <Icon name="icon-play" className="button-icon" />
@@ -877,6 +884,146 @@ function SampleReorderList({ onNavigate }) {
       </div>
       <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
     </div>
+  );
+}
+
+// The free, no-login scan funnel reached from the landing "Scan 3 items free"
+// CTA. Reuses the real camera/decoder hook and ScanResultCard so a public scan
+// looks exactly like the in-app one; the parent meters the free-scan budget and
+// passes it in. When the budget is gone the signup wall slides over the card —
+// the final result stays visible for a beat first so the visitor sees the payoff.
+function PublicScanView({ onScan, scanResult, onClearScanResult, freeScansUsed, limit, onSignup, onLogin, onHome }) {
+  const [manualCode, setManualCode] = useState("");
+  const [captured, setCaptured] = useState(false);
+  const flashTimer = useRef();
+  const exhausted = freeScansUsed >= limit;
+  const remaining = Math.max(0, limit - freeScansUsed);
+
+  // Hold the wall back briefly after the last scan so its result card is seen.
+  const [gateVisible, setGateVisible] = useState(false);
+  useEffect(() => {
+    if (!exhausted) {
+      setGateVisible(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setGateVisible(true), 1500);
+    return () => window.clearTimeout(timer);
+  }, [exhausted]);
+
+  const { videoRef, cameraStatus, autoDetect, capture } = useBarcodeScanner({
+    active: !exhausted,
+    onScan: (code) => {
+      onScan?.(code);
+      setCaptured(true);
+      window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setCaptured(false), 700);
+    },
+  });
+
+  function submitManual(event) {
+    event.preventDefault();
+    const value = manualCode.trim();
+    if (!value || exhausted) return;
+    onScan?.(value);
+    setManualCode("");
+  }
+
+  return (
+    <main className="pscan-page">
+      <header className="pscan-header">
+        <button className="landing-brand" type="button" onClick={onHome} aria-label="MedMKP home">
+          <BrandMark />
+        </button>
+        <div className="pscan-header-actions">
+          <button className="secondary-action compact" type="button" onClick={onLogin}>Log in</button>
+          <button className="primary-action compact" type="button" onClick={onSignup}>Sign up</button>
+        </div>
+      </header>
+
+      <section className="pscan-body">
+        <div className="pscan-intro">
+          <h1>Scan a product to see its price benchmark</h1>
+          <p>Point your camera at any dental supply barcode &mdash; or key in the code &mdash; to identify the item and compare typical prices. {limit} scans free, no login required.</p>
+        </div>
+
+        <div className={`pscan-card ${captured ? "scan-captured" : ""}`}>
+          <div className="pscan-stage">
+            <video ref={videoRef} className="pscan-video" playsInline muted autoPlay aria-label="Live camera preview"></video>
+            {cameraStatus !== "ready" && (
+              <div className="pscan-permission">
+                <Icon name="icon-scan" className="pscan-permission-icon" />
+                <strong>{cameraStatus === "requesting" ? "Camera access needed" : "Camera unavailable"}</strong>
+                <p>
+                  {cameraStatus === "requesting"
+                    ? "Allow camera access to scan a barcode, or type the code below."
+                    : "Enable camera permissions for this site, or type the code below."}
+                </p>
+              </div>
+            )}
+            <div className="pscan-frame" aria-hidden="true">
+              <span className="corner top-left"></span>
+              <span className="corner top-right"></span>
+              <span className="corner bottom-left"></span>
+              <span className="corner bottom-right"></span>
+              <span className="scan-line"></span>
+            </div>
+            <div className="pscan-instruction">
+              {captured
+                ? "Got it"
+                : autoDetect
+                  ? "Point at a barcode"
+                  : "Align the barcode, then tap Scan"}
+            </div>
+            <span className="pscan-counter">{remaining} of {limit} free scans left</span>
+          </div>
+
+          <div className="pscan-controls">
+            <button
+              className="pscan-shutter"
+              type="button"
+              onClick={capture}
+              disabled={cameraStatus !== "ready" || exhausted}
+            >
+              <Icon name="icon-scan" className="button-icon" />
+              Scan barcode
+            </button>
+            <form className="pscan-manual" onSubmit={submitManual}>
+              <input
+                type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                placeholder="…or enter a barcode / SKU"
+                aria-label="Barcode or SKU"
+                value={manualCode}
+                onChange={(event) => setManualCode(event.target.value)}
+                disabled={exhausted}
+              />
+              <button className="secondary-action" type="submit" disabled={!manualCode.trim() || exhausted}>
+                Look up
+              </button>
+            </form>
+          </div>
+
+          <ScanResultCard result={scanResult} onClear={onClearScanResult} onEnterManually={() => {}} />
+        </div>
+      </section>
+
+      {gateVisible && (
+        <div className="pscan-gate" role="dialog" aria-modal="true" aria-label="Sign up to keep scanning">
+          <div className="pscan-gate-card">
+            <Icon name="icon-lock" className="pscan-gate-icon" />
+            <h2>That&rsquo;s your {limit} free scans</h2>
+            <p>Sign up free to keep scanning, save your reorder list, and compare prices across suppliers. Your scanned items are waiting in your list.</p>
+            <button className="primary-action" type="button" onClick={onSignup}>
+              <Icon name="icon-cloud-upload" className="button-icon" />
+              Sign up free
+            </button>
+            <button className="secondary-action" type="button" onClick={onLogin}>Log in</button>
+            <button className="pscan-gate-back" type="button" onClick={onHome}>Back to home</button>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
 
@@ -1192,6 +1339,7 @@ export default function Home() {
   const [addMode, setAddMode] = useState("");
   const [scanResult, setScanResult] = useState(null);
   const [scanCount, setScanCount] = useState(0);
+  const [freeScansUsed, setFreeScansUsed] = useState(0);
   const [lastUpload, setLastUpload] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [draftItems, setDraftItems] = useState([]);
@@ -1238,6 +1386,12 @@ export default function Home() {
     try {
       const saved = JSON.parse(window.localStorage.getItem(APP_STATE_KEY) || "null");
       if (saved) hydrateFromState(saved);
+    } catch {
+      // ignore corrupt state
+    }
+    try {
+      const used = parseInt(window.localStorage.getItem(FREE_SCAN_KEY) || "0", 10);
+      if (Number.isFinite(used) && used > 0) setFreeScansUsed(used);
     } catch {
       // ignore corrupt state
     }
@@ -1336,13 +1490,16 @@ export default function Home() {
       .catch(() => setAuthed(false));
   }, []);
 
-  // Keep unauthenticated visitors out of the authenticated app routes.
+  // Keep unauthenticated visitors out of the authenticated app routes, and send
+  // already-signed-in visitors from the public free-scan page into the real app.
   useEffect(() => {
     if (authed === false && isLoggedIn) {
       navigate("/login");
+    } else if (authed === true && view === "publicScan") {
+      navigate("/app");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed, isLoggedIn]);
+  }, [authed, isLoggedIn, view]);
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -1516,6 +1673,21 @@ export default function Home() {
     addScannedItem(code);
   }
 
+  // Logged-out scanning: each real lookup spends one of the free scans, tracked
+  // in localStorage. Once the budget is gone, scans are ignored and the view's
+  // signup wall takes over. Items still land in the local list, so they carry
+  // into the account the moment the visitor signs up.
+  async function handlePublicScan(code) {
+    if (freeScansUsed >= FREE_SCAN_LIMIT) return;
+    const added = await addScannedItem(code);
+    if (!added) return;
+    setFreeScansUsed((n) => {
+      const next = n + 1;
+      try { window.localStorage.setItem(FREE_SCAN_KEY, String(next)); } catch {}
+      return next;
+    });
+  }
+
   function showToast(message) {
     setToast(message);
     window.clearTimeout(showToast.timer);
@@ -1662,7 +1834,7 @@ export default function Home() {
     if (existing) {
       setScanResult({ status: statusFromItem(existing), item: existing, isDuplicate: true, qty: existing.draftQty || 1 });
       showToast("Already on your list");
-      return;
+      return false;
     }
 
     // Resolve against the real catalog: GTIN/UPC barcode first, then exact SKU.
@@ -1676,6 +1848,7 @@ export default function Home() {
     setScanCount((n) => n + 1);
     setScanResult({ status: statusFromItem(item), item, isDuplicate: false, qty: item.draftQty || 1 });
     showToast(product ? `Added ${product.name}` : code ? `Scanned ${code} — needs review` : "Item added");
+    return true;
   }
 
   function removeDraftItem(target) {
@@ -1795,6 +1968,18 @@ export default function Home() {
           : view === "forgotPassword" ? <ForgotPasswordPage onNavigate={navigate} />
           : view === "resetPassword" ? <ResetPasswordPage onNavigate={navigate} />
           : view === "sample" ? <SampleReorderList onNavigate={navigate} />
+          : view === "publicScan" ? (
+            <PublicScanView
+              onScan={handlePublicScan}
+              scanResult={scanResult}
+              onClearScanResult={() => setScanResult(null)}
+              freeScansUsed={freeScansUsed}
+              limit={FREE_SCAN_LIMIT}
+              onSignup={() => navigate("/signup")}
+              onLogin={() => navigate("/login")}
+              onHome={() => navigate("/")}
+            />
+          )
           : <LoggedOutLanding onNavigate={navigate} authed={authed === true} />}
         <IconSprite />
       </>
