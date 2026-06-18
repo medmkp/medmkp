@@ -730,11 +730,9 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
                 <span>$11.80 &ndash; $13.50<br />per bag</span>
               </div>
               <div>
-                <div><Icon name="icon-shuffle" className="landing-instant-icon"/></div>
-                <div>
-                  <strong>Possible lower-cost alternatives</strong>
-                  <span>See 3-6 matches</span>
-                </div>
+                <Icon name="icon-shuffle" className="landing-instant-icon" />
+                <strong>Possible lower-cost alternatives</strong>
+                <span>See 3-6 matches</span>
               </div>
               <div>
                 <Icon name="icon-list" className="landing-instant-icon" />
@@ -800,7 +798,6 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
         <div>
           <span><Icon name="icon-handshake" className="button-icon" />Works with Henry Schein, Patterson, Darby, and generic barcodes</span>
           <span><Icon name="icon-building" className="button-icon" />Built for dental offices<br /><small>Designed around how your office buys.</small></span>
-          <span><Icon name="icon-shield-check" className="button-icon" />HIPAA-aware / secure<br /><small>We protect your data with enterprise-grade security.</small></span>
         </div>
       </footer>
     </main>

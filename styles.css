@@ -311,7 +311,6 @@ p {
 }
 
 .landing-copy p {
-  max-width: 520px;
   color: #596888;
   font-size: 18px;
   line-height: 1.55;
@@ -331,9 +330,14 @@ p {
   text-decoration: none;
 }
 
+.landing-copy .landing-actions {
+  justify-content: center;
+}
+
 .landing-assurances {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 22px;
   margin-top: 6px;
   color: #5f6c88;
@@ -369,17 +373,24 @@ p {
 
 .instant-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
 .instant-grid > div {
   display: grid;
-  gap: 6px;
-  padding: 13px 14px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #f4f5f8;
+}
+
+.instant-grid > div .landing-instant-icon {
+  grid-row: 1 / span 2;
 }
 
 .instant-grid strong {
@@ -393,8 +404,8 @@ p {
 }
 
 .landing-instant-icon {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 6px;
   border-radius: 999px;
   background: var(--blue);
@@ -546,7 +557,7 @@ p {
 
 .trusted-strip div {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   max-width: 1100px;
   width: 100%;
   margin: 0 auto;
