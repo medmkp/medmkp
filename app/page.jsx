@@ -1310,6 +1310,14 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, isLoggedIn]);
 
+  // Send logged-in visitors from the marketing landing page to their home.
+  useEffect(() => {
+    if (authed === true && view === "landing") {
+      navigate("/app");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed, view]);
+
   useEffect(() => {
     function onKeyDown(event) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
