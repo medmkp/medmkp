@@ -8065,6 +8065,7 @@ th {
 .crl-status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; width: fit-content; white-space: nowrap; }
 .crl-status .button-icon { width: 15px; height: 15px; }
 .crl-status.confirmed { background: #e7f6ee; color: var(--green); }
+.crl-status.verified { background: var(--blue-2); color: var(--blue); }
 .crl-status.possible { background: #fcf1dd; color: var(--gold); }
 .crl-status.nomatch { background: #fdeaea; color: var(--red); }
 
@@ -8073,6 +8074,7 @@ th {
 .crl-conf.high { color: var(--green); }
 .crl-conf.med { color: var(--gold); }
 .crl-conf.low { color: var(--red); }
+.crl-conf.verified { color: var(--blue); }
 
 .crl-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 48px 24px; color: var(--muted); }
 .crl-empty .button-icon { width: 36px; height: 36px; color: var(--muted); }
@@ -8256,6 +8258,41 @@ th {
 
 .crl-drawer-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }
 
+/* Verify drawer: catalog search results render as clickable cards (no radio). */
+.crl-cand-result { grid-template-columns: 40px minmax(0, 1fr) auto; width: 100%; text-align: left; background: var(--surface); font: inherit; }
+.crl-cand-result:hover { border-color: var(--blue); background: var(--blue-2); }
+
+/* "Selected" tag in the verify drawer — shown when the buyer picks an offer
+   other than our Recommended one, so the two are visually distinct. */
+.crl-cand-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin-top: 3px; }
+.crl-cand-sel { display: inline-block; padding: 2px 7px; border-radius: 6px; background: var(--blue-2); color: var(--blue); font-size: 10px; font-weight: 700; }
+
+/* Remove-from-list action inside the verify drawer / mobile detail. */
+.crl-drawer-remove { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--red); font-weight: 600; font-size: 13px; cursor: pointer; }
+.crl-drawer-remove .button-icon { width: 15px; height: 15px; }
+.m-detail-remove { margin-top: 12px; }
+.m-detail-relink { margin-top: 4px; }
+
+/* Compact bulk-selection bar above the reorder table. Sized to its content
+   (not full width) with margin, and a subtle surface so it doesn't shout. */
+.crl-bulk-bar { display: inline-flex; align-items: center; gap: 12px; width: max-content; max-width: 100%; margin: 12px 2px 4px; padding: 7px 10px 7px 14px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
+.crl-bulk-count { color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.crl-bulk-actions { display: inline-flex; align-items: center; gap: 6px; }
+.crl-bulk-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+.crl-bulk-btn .button-icon { width: 14px; height: 14px; }
+.crl-bulk-btn:hover { border-color: var(--blue); color: var(--blue); }
+.crl-bulk-btn.danger:hover { border-color: var(--red); color: var(--red); }
+.crl-bulk-dismiss { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 2px; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; }
+.crl-bulk-dismiss .button-icon { width: 15px; height: 15px; }
+.crl-bulk-dismiss:hover { background: var(--surface); color: var(--ink); }
+
+/* Per-row actions menu (the kebab at the end of each reorder line). */
+.crl-rowmenu-wrap { position: relative; display: inline-flex; }
+.crl-rowmenu { left: auto; right: 0; top: calc(100% + 4px); z-index: 40; min-width: 184px; }
+.crl-rowmenu span { font-size: 13px; font-weight: 600; color: inherit; }
+.crl-rowmenu-danger { color: var(--red); }
+.crl-rowmenu-danger .button-icon { color: var(--red); }
+
 /* ============================ Mobile screens ============================ */
 /* These render only when isMobile (<=767px); components are absent from the
    DOM on desktop, so the rules don't need media gating. */
@@ -8314,6 +8351,7 @@ th {
 .m-detail-body { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
 .m-conf-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 10px; font-size: 14px; font-weight: 700; }
 .m-conf-banner.high { background: #e7f6ee; color: var(--green); }
+.m-conf-banner.verified { background: var(--blue-2); color: var(--blue); }
 .m-conf-banner.med { background: #fdf1dc; color: var(--gold); }
 .m-conf-banner.low, .m-conf-banner.nomatch { background: #fde9e7; color: var(--red); }
 .m-detail-sec { display: grid; gap: 8px; }
