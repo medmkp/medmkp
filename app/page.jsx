@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CATALOG_CATEGORIES, bucketCategories, categoryBySlug } from "./catalogData";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -11,6 +12,7 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const UPLOAD_TIMEOUT_MS = 180000;
 
 const APP_STATE_KEY = "medmkp_app_state_v1";
+const CATALOG_RECENT_KEY = "medmkp_catalog_recent_v1";
 
 const DEFAULT_BUYING_PREFS = {
   strategy: "best-price",
@@ -28,6 +30,7 @@ const routeByView = {
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
   home: "/app",
+  catalog: "/app/catalog",
   history: "/app/history",
   settings: "/app/settings",
 };
@@ -50,6 +53,8 @@ function viewFromPath(pathname = "/") {
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
   if (path === "/app/history") return { view: "history", isLoggedIn: true };
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
+  if (path === "/app/catalog") return { view: "catalog", isLoggedIn: true };
+  if (path.startsWith("/app/catalog/")) return { view: "catalogCategory", isLoggedIn: true, categorySlug: decodeURIComponent(path.split("/")[3] || "") };
   if (path.startsWith("/app/product/")) return { view: "productDetail", isLoggedIn: true, productHandle: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/settings") return { view: "settings", isLoggedIn: true };
 
@@ -253,6 +258,12 @@ function IconSprite() {
       <symbol id="icon-table" viewBox="0 0 24 24">
         <path d="M4 5.5h16v13H4Z" />
         <path d="M4 10h16M4 14.5h16M10 5.5v13" />
+      </symbol>
+      <symbol id="icon-grid" viewBox="0 0 24 24">
+        <rect x="4" y="4" width="7" height="7" rx="1.4" />
+        <rect x="13" y="4" width="7" height="7" rx="1.4" />
+        <rect x="4" y="13" width="7" height="7" rx="1.4" />
+        <rect x="13" y="13" width="7" height="7" rx="1.4" />
       </symbol>
       <symbol id="icon-truck" viewBox="0 0 24 24">
         <path d="M2.5 7.5h11v9H2.5Z" />
@@ -613,6 +624,9 @@ function MobileBottomNav({ view, onNavigate, onScan }) {
       <div className="m-nav-group">
         <button className={view === "home" ? "active" : ""} type="button" onClick={() => onNavigate("home")}>
           <span><Icon name="icon-home" className="mobile-bottom-icon" /></span>Home
+        </button>
+        <button className={view === "catalog" || view === "catalogCategory" ? "active" : ""} type="button" onClick={() => onNavigate("catalog")}>
+          <span><Icon name="icon-grid" className="mobile-bottom-icon" /></span>Catalog
         </button>
       </div>
       <button className="m-nav-fab" type="button" aria-label="Scan barcode" onClick={onScan}>
@@ -1128,6 +1142,7 @@ export default function Home() {
   const [view, setViewState] = useState("landing");
   const [historyId, setHistoryId] = useState(null);
   const [productHandle, setProductHandle] = useState(null);
+  const [categorySlug, setCategorySlug] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -1211,6 +1226,7 @@ export default function Home() {
       setViewState(nextRoute.view);
       setHistoryId(nextRoute.historyId || null);
       setProductHandle(nextRoute.productHandle || null);
+      setCategorySlug(nextRoute.categorySlug || null);
       setMobileAddItemRoute(Boolean(nextRoute.mobileAddItemRoute));
       setMenuOpen(false);
     }
@@ -1367,6 +1383,7 @@ export default function Home() {
     setViewState(next.view);
     setHistoryId(next.historyId || null);
     setProductHandle(next.productHandle || null);
+    setCategorySlug(next.categorySlug || null);
     setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1666,6 +1683,7 @@ export default function Home() {
 
   const navItems = [
     ["home", "icon-home", "Home"],
+    ["catalog", "icon-grid", "Catalog"],
     ["history", "icon-clock", "History / Past Lists"],
     ["settings", "icon-settings", "Settings"],
   ];
@@ -1809,6 +1827,12 @@ export default function Home() {
 
           {view === "historyDetail" && <HistoryDetail id={historyId} archivedLists={archivedLists} onBack={() => navigate("/app/history")} />}
 
+          {view === "catalog" && <CatalogView onNavigate={navigate} />}
+
+          {view === "catalogCategory" && (
+            <CatalogCategoryView slug={categorySlug} onNavigate={navigate} />
+          )}
+
           {view === "productDetail" && (
             <ProductDetail handle={productHandle} onNavigate={navigate} onToast={showToast} />
           )}
@@ -1947,6 +1971,367 @@ function UomSelect({ uom, setUom }) {
         ))}
       </select>
       <Icon name="icon-chevron-down" className="nav-icon" />
+    </div>
+  );
+}
+
+function catMoney(cents) {
+  return typeof cents === "number" && !Number.isNaN(cents) ? money.format(cents / 100) : "Price pending";
+}
+
+function supplierInitials(name) {
+  return (name || "?")
+    .replace(/[^a-zA-Z0-9 ]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join("");
+}
+
+function CatalogStat({ icon, tint, label, value, sub }) {
+  return (
+    <div className="cat-stat">
+      <span className={`cat-stat-icon tint-${tint}`}><Icon name={icon} className="nav-icon" /></span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}{sub && <em>{sub}</em>}</strong>
+      </div>
+    </div>
+  );
+}
+
+function CatalogCard({ category, onNavigate }) {
+  const open = () => onNavigate(`/app/catalog/${category.slug}`);
+  return (
+    <article className="cat-card">
+      <button type="button" className="cat-card-open" onClick={open}>
+        <span className={`cat-tile tint-${category.tint}`}><Icon name={category.icon} className="nav-icon" /></span>
+        <span className="cat-card-headtext">
+          <strong>{category.name}</strong>
+          <small>{category.description}</small>
+        </span>
+      </button>
+      <p className="cat-card-count">{category.product_count.toLocaleString()} products</p>
+      <div className="cat-card-chips">
+        {category.subcategories.map((sub) => (
+          <button
+            key={sub}
+            type="button"
+            className="cat-chip"
+            onClick={() => onNavigate(`/app/catalog/${category.slug}?sub=${encodeURIComponent(sub)}`)}
+          >
+            {sub}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="cat-browse" onClick={open}>
+        Browse category
+        <Icon name="icon-chevron-right" className="button-icon" />
+      </button>
+    </article>
+  );
+}
+
+// In-app catalog landing (/app/catalog). Lives in the app shell so it shares the
+// sidebar + topbar. Live category rows roll up into curated departments
+// (catalogData.js); the grid, stat row, and right rail are populated from the
+// cached /api/catalog + /api/suppliers responses.
+function CatalogView({ onNavigate }) {
+  const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [status, setStatus] = useState("loading");
+  const [layout, setLayout] = useState("grid");
+  const [recent, setRecent] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      fetch("/api/catalog").then((r) => r.json()).catch(() => ({ categories: [] })),
+      fetch("/api/suppliers").then((r) => r.json()).catch(() => ({ suppliers: [] })),
+    ]).then(([catRes, supRes]) => {
+      if (!active) return;
+      setCategories(bucketCategories(catRes.categories || []));
+      setSuppliers(
+        (supRes.suppliers || [])
+          .slice()
+          .sort((a, b) => (b.product_count || 0) - (a.product_count || 0))
+      );
+      setStatus("ready");
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const slugs = JSON.parse(window.localStorage.getItem(CATALOG_RECENT_KEY) || "[]");
+      setRecent(slugs.map((slug) => categoryBySlug(slug)).filter(Boolean));
+    } catch {
+      setRecent([]);
+    }
+  }, []);
+
+  const totalProducts = categories.reduce((sum, c) => sum + c.product_count, 0);
+  const totalSubcategories = CATALOG_CATEGORIES.reduce((sum, c) => sum + c.subcategories.length, 0);
+  const popular = categories.slice(0, 6);
+
+  return (
+    <div className="cat">
+      <nav className="cat-crumb" aria-label="Breadcrumb">
+        <span>Products</span>
+        <Icon name="icon-chevron-right" className="cat-crumb-sep" />
+        <strong>Catalog</strong>
+      </nav>
+      <h1 className="cat-title">Product Catalog</h1>
+      <p className="cat-lede">
+        Browse our canonical dental products organized by category. Drill down into subcategories
+        to find exactly what you need.
+      </p>
+
+      <div className="cat-layout">
+        <div className="cat-main">
+          <div className="cat-stats">
+            <CatalogStat icon="icon-grid" tint="blue" label="Top-level categories" value={categories.length || "—"} />
+            <CatalogStat icon="icon-package" tint="green" label="Catalog products" value={totalProducts ? totalProducts.toLocaleString() : "—"} />
+            <CatalogStat icon="icon-users" tint="indigo" label="Suppliers covered" value={suppliers.length || "—"} />
+            <CatalogStat icon="icon-list" tint="amber" label="Subcategories" value={totalSubcategories} />
+          </div>
+
+          <div className="cat-section-head">
+            <h2>Top-level categories</h2>
+            <div className="cat-viewtoggle" role="group" aria-label="View as">
+              <span>View as:</span>
+              <button type="button" className={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")} aria-label="Grid view">
+                <Icon name="icon-grid" className="button-icon" />
+              </button>
+              <button type="button" className={layout === "list" ? "active" : ""} onClick={() => setLayout("list")} aria-label="List view">
+                <Icon name="icon-list" className="button-icon" />
+              </button>
+            </div>
+          </div>
+
+          {status === "loading" ? (
+            <div className="cat-grid grid">
+              {Array.from({ length: 8 }).map((_, i) => <div className="cat-card cat-card-skeleton" key={i} />)}
+            </div>
+          ) : categories.length ? (
+            <div className={`cat-grid ${layout}`}>
+              {categories.map((category) => (
+                <CatalogCard key={category.slug} category={category} onNavigate={onNavigate} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <strong>Catalog unavailable</strong>
+              <span>We couldn&rsquo;t load categories right now. Please try again shortly.</span>
+            </div>
+          )}
+        </div>
+
+        <aside className="cat-rail">
+          <div className="cat-callout">
+            <Icon name="icon-info" className="button-icon" />
+            <div>
+              <strong>Drill down to find products</strong>
+              <p>Pick a category to explore its subcategories and products. Product detail pages open from any listing.</p>
+            </div>
+          </div>
+
+          <section className="cat-panel">
+            <header><h3>Browse by supplier</h3></header>
+            <ul className="cat-supplier-list">
+              {suppliers.slice(0, 5).map((supplier) => (
+                <li key={supplier.id}>
+                  <span className="cat-supplier-avatar">{supplierInitials(supplier.name)}</span>
+                  <span className="cat-supplier-name">{supplier.name}</span>
+                  <em>{(supplier.product_count || 0).toLocaleString()}</em>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="cat-panel-action" onClick={() => onNavigate("/app/settings")}>
+              View all suppliers ({suppliers.length})
+            </button>
+          </section>
+
+          {recent.length > 0 && (
+            <section className="cat-panel">
+              <header><h3>Recently viewed</h3></header>
+              <ul className="cat-recent-list">
+                {recent.map((category) => (
+                  <li key={category.slug}>
+                    <button type="button" onClick={() => onNavigate(`/app/catalog/${category.slug}`)}>
+                      <span className={`cat-tile sm tint-${category.tint}`}><Icon name={category.icon} className="nav-icon" /></span>
+                      {category.name}
+                      <Icon name="icon-chevron-right" className="button-icon" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {popular.length > 0 && (
+            <section className="cat-panel">
+              <header><h3>Popular categories</h3></header>
+              <div className="cat-card-chips">
+                {popular.map((category) => (
+                  <button key={category.slug} type="button" className="cat-chip" onClick={() => onNavigate(`/app/catalog/${category.slug}`)}>
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+// Category drill-down (/app/catalog/[slug]). Shows the curated category's
+// subcategory chips as quick filters and a product grid pulled from the same
+// canonical-products API the search uses; products open the existing PDP.
+function CatalogCategoryView({ slug, onNavigate }) {
+  const category = categoryBySlug(slug);
+  const [products, setProducts] = useState([]);
+  const [status, setStatus] = useState("loading");
+  const [sub, setSub] = useState("");
+
+  // Remember this category for the landing page's "Recently viewed" rail.
+  useEffect(() => {
+    if (!slug) return;
+    try {
+      const prev = JSON.parse(window.localStorage.getItem(CATALOG_RECENT_KEY) || "[]").filter((s) => s !== slug);
+      window.localStorage.setItem(CATALOG_RECENT_KEY, JSON.stringify([slug, ...prev].slice(0, 6)));
+    } catch {
+      // storage unavailable — non-fatal
+    }
+  }, [slug]);
+
+  // Seed the active subcategory filter from a ?sub= chip click on the landing.
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("sub") || "";
+    setSub(initial);
+  }, [slug]);
+
+  useEffect(() => {
+    if (!category) { setStatus("missing"); return undefined; }
+    // Abort superseded/duplicate fetches (StrictMode double-invoke, filter
+    // changes) so we don't pile concurrent heavy queries onto the backend.
+    const controller = new AbortController();
+    setStatus("loading");
+    // A curated category can own several supplier-named source categories
+    // (e.g. Burs & Rotary = "Burs & Diamonds" + "Burs"); fetch each, merge,
+    // dedupe, and rank by best offer so the grid spans the whole department.
+    Promise.all(
+      category.sources.map((source) => {
+        const params = new URLSearchParams({ category: source, limit: "24" });
+        if (sub) params.set("q", sub);
+        return fetch(`/api/canonical-products?${params}`, { signal: controller.signal })
+          .then((r) => r.json())
+          .catch(() => ({ canonical_products: [] }));
+      })
+    ).then((responses) => {
+      if (controller.signal.aborted) return;
+      const seen = new Set();
+      const merged = [];
+      responses.forEach(({ canonical_products }) => {
+        (canonical_products || []).forEach((product) => {
+          if (seen.has(product.id)) return;
+          seen.add(product.id);
+          merged.push(product);
+        });
+      });
+      merged.sort((a, b) => (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity));
+      setProducts(merged.slice(0, 24));
+      setStatus("ready");
+    });
+    return () => controller.abort();
+  }, [slug, sub, category]);
+
+  if (!category) {
+    return (
+      <div className="cat">
+        <div className="empty-state">
+          <strong>Category not found</strong>
+          <span>That catalog category doesn&rsquo;t exist.</span>
+          <button type="button" className="secondary-action compact" onClick={() => onNavigate("/app/catalog")}>Back to catalog</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cat">
+      <nav className="cat-crumb" aria-label="Breadcrumb">
+        <button type="button" onClick={() => onNavigate("/app/catalog")}>Catalog</button>
+        <Icon name="icon-chevron-right" className="cat-crumb-sep" />
+        <strong>{category.name}</strong>
+      </nav>
+      <div className="cat-cat-head">
+        <span className={`cat-tile lg tint-${category.tint}`}><Icon name={category.icon} className="nav-icon" /></span>
+        <div>
+          <h1 className="cat-title">{category.name}</h1>
+          <p className="cat-lede">{category.description}</p>
+        </div>
+      </div>
+
+      <div className="cat-filterbar">
+        <button type="button" className={`cat-chip ${sub === "" ? "active" : ""}`} onClick={() => setSub("")}>All</button>
+        {category.subcategories.map((option) => (
+          <button key={option} type="button" className={`cat-chip ${sub === option ? "active" : ""}`} onClick={() => setSub(option)}>
+            {option}
+          </button>
+        ))}
+      </div>
+
+      {status === "loading" ? (
+        <div className="catalog-results-grid">
+          {Array.from({ length: 6 }).map((_, i) => <div className="catalog-result-card cat-card-skeleton" key={i} />)}
+        </div>
+      ) : products.length ? (
+        <div className="catalog-results-grid">
+          {products.map((product) => {
+            const best = product.best_offer;
+            return (
+              <article className="catalog-result-card" key={product.id}>
+                <a
+                  className="catalog-result-link"
+                  href={`/app/product/${product.handle}`}
+                  onClick={(event) => { event.preventDefault(); onNavigate(`/app/product/${product.handle}`); }}
+                >
+                  <div className="catalog-result-image">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name} loading="lazy" />
+                    ) : (
+                      <div className="catalog-result-placeholder"><Icon name="icon-image" className="nav-icon" /></div>
+                    )}
+                  </div>
+                  <div className="catalog-result-copy">
+                    <div className="catalog-result-topline">
+                      <span className="catalog-category">{product.category}</span>
+                      <span className="catalog-result-count">{product.offer_count} offer{product.offer_count === 1 ? "" : "s"}</span>
+                    </div>
+                    <h2>{product.name}</h2>
+                    <div className="catalog-result-meta">
+                      <span>{best?.supplier_name || "Supplier pending"}</span>
+                    </div>
+                    <div className="catalog-result-price">
+                      <strong>{best ? catMoney(best.price_cents) : "Price pending"}</strong>
+                    </div>
+                  </div>
+                </a>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <strong>No products{sub ? ` for ${sub}` : ""}</strong>
+          <span>Try a different subcategory or clear the filter.</span>
+          {sub && <button type="button" className="secondary-action compact" onClick={() => setSub("")}>Clear filter</button>}
+        </div>
+      )}
     </div>
   );
 }

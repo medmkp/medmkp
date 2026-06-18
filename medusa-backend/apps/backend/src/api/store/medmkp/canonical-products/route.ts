@@ -81,7 +81,16 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const productFilters =
     where.length === 0 ? {} : where.length === 1 ? where[0] : { $and: where }
 
-  const filteredCanonicalProducts = await medmkp.listCanonicalProducts(productFilters as any)
+  // Cap how many rows we pull + enrich for browse/search. A category like
+  // "Instruments" has tens of thousands of products; loading and enriching all
+  // of them just to slice off one page makes the catalog crawl. A handle lookup
+  // targets a single product, so it is never capped. (Mirrors the bounded
+  // candidate fetch in /medmkp/products/search.)
+  const listOptions = handle ? undefined : { take: 600 }
+  const filteredCanonicalProducts = await medmkp.listCanonicalProducts(
+    productFilters as any,
+    listOptions as any
+  )
 
   if (!filteredCanonicalProducts.length) {
     res.json({ count: 0, canonical_products: [] })
