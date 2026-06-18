@@ -692,27 +692,27 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
       </header>
 
       <section className="landing-main">
-        <div className="landing-col-left">
-          <div className="landing-copy">
-            <h1>Scan your dental supplies and spot <span>possible savings</span> in seconds</h1>
-            <p>Point your phone at a barcode or enter a SKU to identify the item, compare typical price ranges, and save it to a free starter reorder list. No login required to try it.</p>
-            <div className="landing-actions">
-              <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/signup")}>
-                <Icon name="icon-scan" className="button-icon" />
-                Scan 1 item free
-              </button>
-              <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
-                <Icon name="icon-play" className="button-icon" />
-                See sample result
-              </button>
-            </div>
-            <div className="landing-assurances">
-              <span ><Icon name="icon-lock" className="button-icon" style={{ background: '#5fc08a' }} />No login</span>
-              <span><Icon name="icon-book" className="button-icon" />Dental supply catalog</span>
-              <span><Icon name="icon-bolt" className="button-icon" />Fast barcode match</span>
-            </div>
+        <div className="landing-copy">
+          <h1>Scan your dental supplies and spot <span>possible savings</span> in seconds</h1>
+          <p>Point your phone at a barcode or enter a SKU to identify the item, compare typical price ranges, and save it to a free starter reorder list. No login required to try it.</p>
+          <div className="landing-actions">
+            <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/signup")}>
+              <Icon name="icon-scan" className="button-icon" />
+              Scan 1 item free
+            </button>
+            <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
+              <Icon name="icon-play" className="button-icon" />
+              See sample result
+            </button>
           </div>
+          <div className="landing-assurances">
+            <span ><Icon name="icon-lock" className="button-icon" style={{ background: '#5fc08a' }} />No login</span>
+            <span><Icon name="icon-book" className="button-icon" />Dental supply catalog</span>
+            <span><Icon name="icon-bolt" className="button-icon" />Fast barcode match</span>
+          </div>
+        </div>
 
+        <div className="landing-col-left">
           <div className="landing-instant" id="what-you-get">
             <h3>What you&rsquo;ll see instantly</h3>
             <div className="instant-grid">
@@ -773,8 +773,6 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
         </div>
 
         <div className="landing-col-right">
-          <img className="landing-scan-mock" src="/scan-mockup.png" alt="MedMKP scanning a Microbrush product and showing a price benchmark result" />
-
           <div className="landing-cta">
             <div>
               <h2>Want office-specific savings?</h2>
@@ -864,6 +862,7 @@ function SampleReorderList({ onNavigate }) {
             searchLoading={false}
             onToast={showToast}
             listTouched={false}
+            allowSample
             buyingPrefs={prefs}
             onBuyingPrefs={setPrefs}
             onArchiveList={nudge}
@@ -953,10 +952,10 @@ function AboutPage({ onNavigate }) {
 function AuthShell({ subtitle, children, onNavigate }) {
   return (
     <main className="auth-page">
-      <a className="auth-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
-        <BrandMark />
-      </a>
       <div className="auth-card">
+        <a className="auth-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
+          <BrandMark />
+        </a>
         {children}
       </div>
     </main>
@@ -2572,7 +2571,7 @@ function ProductDetail({ handle, onNavigate, onToast }) {
     <div className="pdp">
       <div className="pdp-breadcrumb-row">
         <nav className="pdp-breadcrumb" aria-label="Breadcrumb">
-          <Link href="/catalog/search">Products</Link>
+          <a href="/app/catalog" onClick={(event) => { event.preventDefault(); onNavigate("/app/catalog"); }}>Products</a>
           <Icon name="icon-chevron-right" className="nav-icon" />
           <span>Product detail</span>
         </nav>
@@ -3937,6 +3936,7 @@ function CurrentReorderList({
   searchLoading,
   onToast,
   listTouched,
+  allowSample = false,
   buyingPrefs,
   onBuyingPrefs,
   onArchiveList,
@@ -3948,10 +3948,11 @@ function CurrentReorderList({
 }) {
   const realRows = deriveMatchRows(items, buyingPrefs);
   const usingReal = realRows.length > 0;
-  // Show the sample list only for a brand-new, untouched workspace; once the
-  // buyer has added (or cleared) items, an empty list reads as truly empty.
-  const showSample = !usingReal && !listTouched;
-  const isEmpty = !usingReal && listTouched;
+  // The demo sample list is only for the public, unauthenticated preview
+  // (allowSample). A signed-in buyer — new or returning — with no real items
+  // sees a truly empty list, never the sample.
+  const showSample = allowSample && !usingReal && !listTouched;
+  const isEmpty = !usingReal && !showSample;
   const rows = (usingReal ? realRows : showSample ? matchReviewSample : []).map((row) => ({
     ...row,
     source: row.source || CRL_SAMPLE_SOURCES[row.id] || "pdf",
