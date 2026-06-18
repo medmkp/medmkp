@@ -733,7 +733,7 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
           <div className="landing-actions">
             <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/scan")}>
               <Icon name="icon-scan" className="button-icon" />
-              Scan 3 items free
+              Scan 3 items <em>FREE</em>
             </button>
             <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
               <Icon name="icon-play" className="button-icon" />
@@ -777,51 +777,53 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
               Exact savings require your invoice, last paid price, or office order history. Public scan results show benchmark estimates.
             </p>
           </div>
-
-          <div className="landing-steps" id="how-it-works">
-            <h2>How it works &mdash; 3 simple steps</h2>
-            <div>
-              <article>
-                <span className="landing-step-number">1</span>
-                <Icon name="icon-scan" className="landing-step-icon" />
-                <strong>Scan a barcode</strong>
-                <p>Use your phone camera to scan any product barcode.</p>
-              </article>
-              <Icon name="icon-arrow-right" className="landing-step-arrow" />
-              <article>
-                <span className="landing-step-number">2</span>
-                <Icon name="icon-chart" className="landing-step-icon" />
-                <strong>See the item and benchmark</strong>
-                <p>We identify the item and show typical price ranges and matches.</p>
-              </article>
-              <Icon name="icon-arrow-right" className="landing-step-arrow" />
-              <article>
-                <span className="landing-step-number">3</span>
-                <Icon name="icon-list" className="landing-step-icon" />
-                <strong>Save it or continue free</strong>
-                <p>Add it to your starter reorder list or keep scanning.</p>
-              </article>
-            </div>
-          </div>
         </div>
 
         <div className="landing-col-right">
           <div className="landing-cta">
-            <div>
-              <h2>Want office-specific savings?</h2>
-              <p>Upload one invoice or tell us your last paid price to unlock exact savings comparisons, reorder memory, and supplier-aware recommendations.</p>
-              <div className="landing-actions">
-                <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>
-                  <Icon name="icon-cloud-upload" className="button-icon" />
-                  Start free
-                </button>
-                <button className="secondary-action" type="button" onClick={() => onNavigate("/about")}>
-                  <Icon name="icon-chat" className="button-icon" />
-                  Talk to us
-                </button>
+            <h2>Want office-specific savings?</h2>
+            <div className="landing-cta-body">
+              <div>
+                <p>Upload one invoice or tell us your last paid price to unlock exact savings comparisons, reorder memory, and supplier-aware recommendations.</p>
+                <div className="landing-actions">
+                  <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>
+                    <Icon name="icon-cloud-upload" className="button-icon" />
+                    Start free
+                  </button>
+                  <button className="secondary-action" type="button" onClick={() => onNavigate("/about")}>
+                    <Icon name="icon-chat" className="button-icon" />
+                    Talk to us
+                  </button>
+                </div>
               </div>
+              <Icon name="icon-clipboard" className="landing-cta-icon" />
             </div>
-            <Icon name="icon-clipboard" className="landing-cta-icon" />
+          </div>
+        </div>
+
+        <div className="landing-steps" id="how-it-works">
+          <h2>How it works &mdash; 3 simple steps</h2>
+          <div>
+            <article>
+              <span className="landing-step-number">1</span>
+              <Icon name="icon-scan" className="landing-step-icon" />
+              <strong>Scan a barcode</strong>
+              <p>Use your phone camera to scan any product barcode.</p>
+            </article>
+            <Icon name="icon-arrow-right" className="landing-step-arrow" />
+            <article>
+              <span className="landing-step-number">2</span>
+              <Icon name="icon-chart" className="landing-step-icon" />
+              <strong>See the item and benchmark</strong>
+              <p>We identify the item and show typical price ranges and matches.</p>
+            </article>
+            <Icon name="icon-arrow-right" className="landing-step-arrow" />
+            <article>
+              <span className="landing-step-number">3</span>
+              <Icon name="icon-list" className="landing-step-icon" />
+              <strong>Save it or continue free</strong>
+              <p>Add it to your starter reorder list or keep scanning.</p>
+            </article>
           </div>
         </div>
       </section>
@@ -1054,15 +1056,16 @@ function PublicScanView({ onScan, scanResult, onClearScanResult, freeScansUsed, 
 
 function PublicNav({ onNavigate, active }) {
   return (
-    <header className="public-nav">
-      <a className="public-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
+    <header className="landing-nav">
+      <a className="landing-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
         <BrandMark />
       </a>
-      <nav className="public-links" aria-label="Marketing navigation">
+      <nav aria-label="Marketing navigation">
+        <a href="/#how-it-works" onClick={(event) => { event.preventDefault(); onNavigate("/"); }}>How it works</a>
         <a href="/pricing" className={active === "pricing" ? "active" : ""} onClick={(event) => { event.preventDefault(); onNavigate("/pricing"); }}>Pricing</a>
         <a href="/about" className={active === "about" ? "active" : ""} onClick={(event) => { event.preventDefault(); onNavigate("/about"); }}>About</a>
       </nav>
-      <div className="public-nav-actions">
+      <div className="landing-nav-actions">
         <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
         <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
       </div>
@@ -1079,24 +1082,26 @@ function PricingPage({ onNavigate }) {
   return (
     <main className="public-page">
       <PublicNav onNavigate={onNavigate} active="pricing" />
-      <section className="public-hero">
-        <h1>Simple pricing for dental offices</h1>
-        <p>Start free. Upgrade when you&rsquo;re ready to optimize every reorder.</p>
-      </section>
-      <section className="pricing-tiers">
-        {tiers.map((tier) => (
-          <article className={`pricing-card ${tier.featured ? "featured" : ""}`} key={tier.name}>
-            {tier.featured && <span className="pricing-badge">Most popular</span>}
-            <h3>{tier.name}</h3>
-            <div className="pricing-price"><strong>{tier.price}</strong>{tier.per && <small>{tier.per}</small>}</div>
-            <p className="pricing-blurb">{tier.blurb}</p>
-            <ul className="pricing-features">
-              {tier.features.map((feature) => <li key={feature}><Icon name="icon-check" className="button-icon" />{feature}</li>)}
-            </ul>
-            <button className={tier.featured ? "primary-action" : "secondary-action"} type="button" onClick={() => onNavigate(tier.to)}>{tier.cta}</button>
-          </article>
-        ))}
-      </section>
+      <div className="public-body">
+        <section className="public-hero">
+          <h1>Simple pricing for dental offices</h1>
+          <p>Start free. Upgrade when you&rsquo;re ready to optimize every reorder.</p>
+        </section>
+        <section className="pricing-tiers">
+          {tiers.map((tier) => (
+            <article className={`pricing-card ${tier.featured ? "featured" : ""}`} key={tier.name}>
+              {tier.featured && <span className="pricing-badge">Most popular</span>}
+              <h3>{tier.name}</h3>
+              <div className="pricing-price"><strong>{tier.price}</strong>{tier.per && <small>{tier.per}</small>}</div>
+              <p className="pricing-blurb">{tier.blurb}</p>
+              <ul className="pricing-features">
+                {tier.features.map((feature) => <li key={feature}><Icon name="icon-check" className="button-icon" />{feature}</li>)}
+              </ul>
+              <button className={tier.featured ? "primary-action" : "secondary-action"} type="button" onClick={() => onNavigate(tier.to)}>{tier.cta}</button>
+            </article>
+          ))}
+        </section>
+      </div>
     </main>
   );
 }
@@ -1105,19 +1110,21 @@ function AboutPage({ onNavigate }) {
   return (
     <main className="public-page">
       <PublicNav onNavigate={onNavigate} active="about" />
-      <section className="public-hero">
-        <h1>We help dental offices buy supplies smarter</h1>
-        <p>MedMKP turns your invoices and barcodes into a clean, matched reorder list, so you can compare prices across suppliers and reorder in minutes instead of hours.</p>
-      </section>
-      <section className="about-grid">
-        <div><Icon name="icon-scan" className="about-icon" /><strong>Scan or upload</strong><p>Capture items by barcode, photo, or invoice upload.</p></div>
-        <div><Icon name="icon-shuffle" className="about-icon" /><strong>Match &amp; compare</strong><p>We match to a canonical catalog and surface the best-value supplier.</p></div>
-        <div><Icon name="icon-handshake" className="about-icon" /><strong>Hand off &amp; reorder</strong><p>Group by supplier and hand off a ready-to-order plan.</p></div>
-      </section>
-      <section className="about-cta">
-        <h2>Ready to try it?</h2>
-        <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>Create your free account</button>
-      </section>
+      <div className="public-body">
+        <section className="public-hero">
+          <h1>We help dental offices buy supplies smarter</h1>
+          <p>MedMKP turns your invoices and barcodes into a clean, matched reorder list, so you can compare prices across suppliers and reorder in minutes instead of hours.</p>
+        </section>
+        <section className="about-grid">
+          <div><Icon name="icon-scan" className="about-icon" /><strong>Scan or upload</strong><p>Capture items by barcode, photo, or invoice upload.</p></div>
+          <div><Icon name="icon-shuffle" className="about-icon" /><strong>Match &amp; compare</strong><p>We match to a canonical catalog and surface the best-value supplier.</p></div>
+          <div><Icon name="icon-handshake" className="about-icon" /><strong>Hand off &amp; reorder</strong><p>Group by supplier and hand off a ready-to-order plan.</p></div>
+        </section>
+        <section className="about-cta">
+          <h2>Ready to try it?</h2>
+          <button className="primary-action" type="button" onClick={() => onNavigate("/signup")}>Create your free account</button>
+        </section>
+      </div>
     </main>
   );
 }
