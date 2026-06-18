@@ -2394,12 +2394,35 @@ function newItemId() { return `li_${Date.now().toString(36)}_${(itemIdSeq++).toS
 // supplier|sku|price dedupe key used when offers are built in
 // app/api/requests/route.js, so a chosen offer survives re-derivation.
 function offerKey(offer) { return `${offer?.supplier || ""}|${offer?.sku || ""}|${offer?.price ?? ""}`; }
+// Favicon/small logo per catalog supplier, saved under public/suppliers. Keyed
+// by a distinctive substring of the supplier name so it matches regardless of
+// how the name is formatted upstream.
+const SUPPLIER_LOGOS = [
+  { match: "amazon", src: "/suppliers/amazon.png" },
+  { match: "american dental", src: "/suppliers/amerdental.png" },
+  { match: "carolina", src: "/suppliers/carolinadental.png" },
+  { match: "dc dental", src: "/suppliers/dcdental.png" },
+  { match: "dental city", src: "/suppliers/dentalcity.png" },
+  { match: "pearson", src: "/suppliers/pearsondental.png" },
+  { match: "unimed", src: "/suppliers/unimedusa.png" },
+  { match: "young", src: "/suppliers/youngspecialties.png" },
+  { match: "zirc", src: "/suppliers/zirc.png" },
+];
+
+function supplierLogoSrc(name) {
+  if (!name) return null;
+  const key = name.toLowerCase();
+  if (key.includes("schein")) return "/schein-logo.png";
+  return SUPPLIER_LOGOS.find((supplier) => key.includes(supplier.match))?.src || null;
+}
+
 function MatchSupplier({ name }) {
   if (!name || name === "—") return <span className="mr-supplier-none">—</span>;
   const key = name.toLowerCase();
-  if (key.includes("schein")) return (<span className="mr-supplier"><img className="mr-supplier-img" src="/schein-logo.png" alt="" /><span>Henry Schein</span></span>);
   if (key.includes("3m")) return <span className="mr-supplier mr-logo-3m">3M</span>;
   if (key.includes("metrex")) return <span className="mr-supplier mr-logo-metrex">Metrex</span>;
+  const logo = supplierLogoSrc(name);
+  if (logo) return (<span className="mr-supplier"><img className="mr-supplier-img" src={logo} alt="" /><span>{key.includes("schein") ? "Henry Schein" : name}</span></span>);
   return <span className="mr-supplier">{name}</span>;
 }
 
@@ -2822,6 +2845,18 @@ function candidateSub(supplier, sub) {
   return [supplier, sub].filter(Boolean).join(" · ");
 }
 
+// Supplier + SKU sub-line for offer candidates in the match drawer, prefixed
+// with the supplier's small logo when we have one.
+function CandidateSub({ supplier, sub }) {
+  const logo = supplierLogoSrc(supplier);
+  return (
+    <small className="crl-cand-sub">
+      {logo && <img className="crl-cand-supplier-logo" src={logo} alt="" />}
+      {candidateSub(supplier, sub)}
+    </small>
+  );
+}
+
 // Build the selectable candidate list for an item's verify drawer from its real
 // supplier offers. "recommended" flags our preference-based pick (a fixed badge
 // that never moves); the radio/active state tracks what the buyer has selected.
@@ -2883,7 +2918,7 @@ function ProductSearchResults({ query, results, loading, onPick, emptyHint }) {
             <ProductThumb image={product.image_url} alt={product.name} />
             <span className="crl-cand-info">
               <strong>{product.name}</strong>
-              <small>{candidateSub(offer?.supplier_name, offer?.sku)}</small>
+              <CandidateSub supplier={offer?.supplier_name} sub={offer?.sku} />
             </span>
             <span className="crl-cand-right">
               <strong>{price != null ? mrMoney(price) : "—"}</strong>
@@ -3019,7 +3054,7 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
                   <ProductThumb image={candidate.image} alt={candidate.name} />
                   <span className="crl-cand-info">
                     <strong>{candidate.name}</strong>
-                    <small>{candidateSub(candidate.supplier, candidate.sub)}</small>
+                    <CandidateSub supplier={candidate.supplier} sub={candidate.sub} />
                   </span>
                   <span className="crl-cand-right">
                     <strong>{candidate.price != null ? mrMoney(candidate.price) : "—"}</strong>
@@ -3142,7 +3177,12 @@ function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenR
               <span className="m-card-body">
                 <strong>{row.matchName || row.importedName}</strong>
                 <small>{row.importedSub}</small>
-                {row.supplier && row.supplier !== "—" && <small className="m-card-supplier">{row.supplier}</small>}
+                {row.supplier && row.supplier !== "—" && (
+                  <small className="m-card-supplier">
+                    {supplierLogoSrc(row.supplier) && <img className="m-card-supplier-logo" src={supplierLogoSrc(row.supplier)} alt="" />}
+                    {row.supplier}
+                  </small>
+                )}
               </span>
               <span className="m-card-right">
                 {notFound
@@ -3264,7 +3304,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
               <label className={`m-match best ${selected === 0 ? "active" : ""}`}>
                 <input type="radio" name="m-cand" checked={selected === 0} onChange={() => setSelected(0)} />
                 <ProductThumb image={candidates[0].image} alt={candidates[0].name} />
-                <span className="m-match-info"><strong>{candidates[0].name}</strong><small>{candidateSub(candidates[0].supplier, candidates[0].sub)}</small></span>
+                <span className="m-match-info"><strong>{candidates[0].name}</strong><CandidateSub supplier={candidates[0].supplier} sub={candidates[0].sub} /></span>
                 <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrMoney(candidates[0].price)}</strong>{candidates[0].perEa != null && <small>${mrEa(candidates[0].perEa)} / ea</small>}</span>
               </label>
             </section>
@@ -3274,7 +3314,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
                 {candidates.slice(1).map((candidate, index) => (
                   <label className={`m-match ${selected === index + 1 ? "active" : ""}`} key={candidate.key ?? index + 1}>
                     <input type="radio" name="m-cand" checked={selected === index + 1} onChange={() => setSelected(index + 1)} />
-                    <span className="m-match-info"><strong>{candidate.name}</strong><small>{candidateSub(candidate.supplier, candidate.sub)}</small></span>
+                    <span className="m-match-info"><strong>{candidate.name}</strong><CandidateSub supplier={candidate.supplier} sub={candidate.sub} /></span>
                     <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrMoney(candidate.price)}</strong>{candidate.perEa != null && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
                   </label>
                 ))}
