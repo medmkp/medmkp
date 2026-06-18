@@ -296,10 +296,10 @@ p {
 .landing-copy {
   display: grid;
   gap: 22px;
+  grid-column: 1 / -1;
 }
 
 .landing-copy h1 {
-  max-width: 600px;
   font-size: clamp(40px, 5.4vw, 56px);
   line-height: 1.12;
   letter-spacing: 0;
@@ -352,14 +352,6 @@ p {
   border-radius: 999px;
   background: var(--blue-2);
   color: var(--blue);
-}
-
-/* Phone scan mockup */
-.landing-scan-mock {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 18px;
 }
 
 /* What you'll get */
@@ -8766,6 +8758,7 @@ th {
 
 /* ===================== Auth (login / signup) ===================== */
 .auth-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 40px 20px; background: var(--surface-2); }
+.auth-brand { display: flex; justify-content: center; margin-bottom: 24px; }
 .auth-brand .brand-mark { width: 132px; }
 .auth-card { width: 100%; max-width: 400px; padding: 32px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .auth-card h1 { font-size: 22px; font-weight: 800; color: var(--ink); }
