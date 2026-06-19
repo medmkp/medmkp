@@ -72,6 +72,11 @@ type CategoryListItem = {
     image_url: string
     product_url: string
     price_cents: number
+    unit_price_cents: number | null
+    pack_quantity: number | null
+    base_unit: string | null
+    pack_size: string
+    unit_comparable: boolean
     match_status: string
   }
   offers: never[]
@@ -95,8 +100,14 @@ async function queryCategoryProducts(
   const qLike = q ? `%${q}%` : null
 
   // Group size/spec variants under one card: the listing unit is the family
-  // (COALESCE(family_id, id)), ranked by its cheapest variant's best offer.
-  // variant_count is how many sizes the family has in this category.
+  // (COALESCE(family_id, id)). The card's best offer is the cheapest by PER-UNIT
+  // price (F1), not sticker; families with no unit price fall back to sticker and
+  // rank after the priced ones. unit_price_cents comes straight from the
+  // medmkp_supplier_current_price read model (a column, not a per-row join), so
+  // this stays the one fast indexed query the listing was built around. The
+  // cross-base-unit guard (F2) lives on the product page where offers are
+  // compared side by side; a family is variants of one product, so its offers
+  // share a base unit in practice. variant_count is the family's size count.
   const { rows } = await pool.query(
     `
     WITH cat AS (
@@ -109,19 +120,19 @@ async function queryCategoryProducts(
              OR category ILIKE $2 OR family_name ILIKE $2)
     ),
     priced AS (
-      SELECT cat.grp, m.supplier_product_id, cp.price_cents
+      SELECT cat.grp, m.supplier_product_id, cp.price_cents, cp.unit_price_cents
       FROM medmkp_canonical_product_match m
       JOIN medmkp_supplier_current_price cp ON cp.supplier_product_id = m.supplier_product_id
       JOIN cat ON cat.id = m.canonical_product_id
       WHERE m.match_status <> 'unmatched' AND m.deleted_at IS NULL
     ),
     agg AS (
-      SELECT grp, COUNT(*)::int AS offer_count, MIN(price_cents) AS best_price
-      FROM priced GROUP BY grp
+      SELECT grp, COUNT(*)::int AS offer_count FROM priced GROUP BY grp
     ),
     best AS (
-      SELECT DISTINCT ON (grp) grp, supplier_product_id, price_cents
-      FROM priced ORDER BY grp, price_cents ASC
+      SELECT DISTINCT ON (grp) grp, supplier_product_id, price_cents, unit_price_cents
+      FROM priced
+      ORDER BY grp, (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC
     ),
     grpinfo AS (
       SELECT grp,
@@ -137,10 +148,12 @@ async function queryCategoryProducts(
     SELECT
       g.grp AS id, g.variant_count, g.family_id, g.family_handle, g.family_name,
       g.any_handle, g.any_name, g.any_category,
-      a.offer_count, a.best_price,
+      a.offer_count,
+      b.price_cents AS best_price, b.unit_price_cents AS best_unit_price,
       b.supplier_product_id AS best_sp_id,
       sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
       sp.image_url AS best_image, sp.product_url AS best_url,
+      sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty, sp.base_unit AS best_base_unit,
       sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
       COUNT(*) OVER() AS total_count
     FROM grpinfo g
@@ -148,7 +161,7 @@ async function queryCategoryProducts(
     JOIN best b ON b.grp = g.grp
     JOIN medmkp_supplier_product sp ON sp.id = b.supplier_product_id AND sp.deleted_at IS NULL
     LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
-    ORDER BY a.best_price ASC, g.any_name ASC
+    ORDER BY (b.unit_price_cents IS NULL) ASC, b.unit_price_cents ASC, b.price_cents ASC, g.any_name ASC
     LIMIT $3 OFFSET $4
     `,
     [category, qLike, limit, offset]
@@ -175,6 +188,11 @@ async function queryCategoryProducts(
         image_url: image,
         product_url: row.best_url || "",
         price_cents: Number(row.best_price),
+        unit_price_cents: row.best_unit_price != null ? Number(row.best_unit_price) : null,
+        pack_quantity: row.best_pack_qty != null ? Number(row.best_pack_qty) : null,
+        base_unit: row.best_base_unit ?? null,
+        pack_size: row.best_pack_size || "",
+        unit_comparable: row.best_unit_price != null,
         match_status: "matched",
       },
       offers: [],
