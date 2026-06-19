@@ -247,20 +247,38 @@ p {
     display: none;
   }
 
-  /* Let the reorder list reclaim the ~216px the collapsed sidebar gives up:
-     extend the capped container and widen the table column by the same amount
-     (1320→1536, 990→1206), keeping the rail's width. The detail-open layout is
-     left alone — it already fills the freed space via its own max-width:none. */
+  /* Collapsed reclaims the freed sidebar space: extend the capped container and
+     split the table / right column 2/3 : 1/3 — the SAME split as the detail-open
+     rule below — so the table stays exactly the same width whether the prefs
+     rail or the detail drawer is showing. It does NOT widen when the drawer
+     closes. At the 1829px cap the 1206px table literal binds (0.67 × 1829 = 1225
+     > 1206); the header tracks the table width. */
   .app-shell.nav-collapsed .crl:not(.detail-open) {
-    max-width: 1536px;
+    max-width: 1829px;
   }
 
-  .app-shell.nav-collapsed .crl:not(.detail-open) .crl-header {
-    max-width: min(1206px, 78%);
+  .app-shell.nav-collapsed .crl-header {
+    max-width: min(1206px, 67%);
   }
 
   .app-shell.nav-collapsed .crl-layout:not(.has-detail) {
-    grid-template-columns: min(1206px, 78%) minmax(0, 1fr);
+    grid-template-columns: min(1206px, 67%) minmax(0, 1fr);
+  }
+}
+
+/* When a detail is open, give the drawer a roomy third (67/33, 2:1) at every
+   width — the table uses a 67% fraction, NOT the no-detail 80% reclaim floor,
+   which otherwise squeezed the drawer to ~1/5 until the cap was reached. The
+   table cedes width to the drawer on open (down to 0 once the 1206px literal
+   binds, keeping it level with the no-detail table on wide screens). Gated to
+   ≥1081px (where side-by-side is allowed) and excluded from the 50/50 "expand
+   panel" mode. 1829px cap = 1206 table + 20 gap + 603 drawer, so on a wide
+   monitor the drawer reaches ~600px (a real third) instead of freezing at a
+   quarter; below the cap it holds 67/33 via the percentage. */
+@media (min-width: 1081px) {
+  .app-shell.nav-collapsed .crl-layout.has-detail:not(.detail-wide) {
+    grid-template-columns: min(1206px, 67%) minmax(0, 1fr);
+    max-width: 1829px;
   }
 }
 
@@ -8690,6 +8708,14 @@ th {
    container max-width, letting the right column grow into the freed space.
    The expand toggle trades table width for an even wider panel. */
 .crl-layout.has-detail.detail-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+/* Cap the table+drawer pair at 1829px (matching the collapsed cap) so the
+   drawer fills the space on the right at common widths instead of leaving a gap,
+   while still bounding it on ultrawide monitors. The table holds at 990px (its
+   literal), so the drawer takes the rest. The cap sits on .crl-layout (not .crl)
+   so the header still left-aligns with the table and the 50/50 "expand panel"
+   mode (.detail-wide) keeps filling. */
+.crl-layout.has-detail:not(.detail-wide) { max-width: 1829px; }
 
 .crl-detail { position: sticky; top: 26px; display: flex; flex-direction: column; max-height: calc(100vh - 52px); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
 
