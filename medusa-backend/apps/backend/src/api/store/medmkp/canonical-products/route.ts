@@ -56,6 +56,10 @@ type CategoryListItem = {
   handle: string
   name: string
   category: string
+  // Present when this card represents a multi-variant family (size selector
+  // lives on the product page). variant_count is the number of sizes/specs.
+  family_id: string | null
+  variant_count: number
   offer_count: number
   best_offer: {
     supplier_product_id: string
@@ -89,44 +93,61 @@ async function queryCategoryProducts(
   const pool = getPostgresPool()
   const qLike = q ? `%${q}%` : null
 
+  // Group size/spec variants under one card: the listing unit is the family
+  // (COALESCE(family_id, id)), ranked by its cheapest variant's best offer.
+  // variant_count is how many sizes the family has in this category.
   const { rows } = await pool.query(
     `
     WITH cat AS (
-      SELECT id, handle, name, category
+      SELECT id, handle, name, category,
+             family_id, family_handle, family_name,
+             COALESCE(family_id, id) AS grp
       FROM medmkp_canonical_product
       WHERE category ILIKE $1 AND deleted_at IS NULL
-        AND ($2::text IS NULL OR name ILIKE $2 OR handle ILIKE $2 OR category ILIKE $2)
+        AND ($2::text IS NULL OR name ILIKE $2 OR handle ILIKE $2
+             OR category ILIKE $2 OR family_name ILIKE $2)
     ),
     priced AS (
-      SELECT m.canonical_product_id, m.supplier_product_id, cp.price_cents
+      SELECT cat.grp, m.supplier_product_id, cp.price_cents
       FROM medmkp_canonical_product_match m
       JOIN medmkp_supplier_current_price cp ON cp.supplier_product_id = m.supplier_product_id
-      WHERE m.canonical_product_id IN (SELECT id FROM cat)
-        AND m.match_status <> 'unmatched' AND m.deleted_at IS NULL
+      JOIN cat ON cat.id = m.canonical_product_id
+      WHERE m.match_status <> 'unmatched' AND m.deleted_at IS NULL
     ),
     agg AS (
-      SELECT canonical_product_id, COUNT(*)::int AS offer_count, MIN(price_cents) AS best_price
-      FROM priced GROUP BY canonical_product_id
+      SELECT grp, COUNT(*)::int AS offer_count, MIN(price_cents) AS best_price
+      FROM priced GROUP BY grp
     ),
     best AS (
-      SELECT DISTINCT ON (canonical_product_id)
-             canonical_product_id, supplier_product_id, price_cents
-      FROM priced ORDER BY canonical_product_id, price_cents ASC
+      SELECT DISTINCT ON (grp) grp, supplier_product_id, price_cents
+      FROM priced ORDER BY grp, price_cents ASC
+    ),
+    grpinfo AS (
+      SELECT grp,
+             COUNT(*)::int AS variant_count,
+             MAX(family_id) AS family_id,
+             MAX(family_handle) AS family_handle,
+             MAX(family_name) AS family_name,
+             (ARRAY_AGG(handle ORDER BY name))[1] AS any_handle,
+             (ARRAY_AGG(name ORDER BY name))[1] AS any_name,
+             (ARRAY_AGG(category ORDER BY name))[1] AS any_category
+      FROM cat GROUP BY grp
     )
     SELECT
-      cat.id, cat.handle, cat.name, cat.category,
+      g.grp AS id, g.variant_count, g.family_id, g.family_handle, g.family_name,
+      g.any_handle, g.any_name, g.any_category,
       a.offer_count, a.best_price,
       b.supplier_product_id AS best_sp_id,
       sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
       sp.image_url AS best_image, sp.product_url AS best_url,
       sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
       COUNT(*) OVER() AS total_count
-    FROM cat
-    JOIN agg a ON a.canonical_product_id = cat.id
-    JOIN best b ON b.canonical_product_id = cat.id
+    FROM grpinfo g
+    JOIN agg a ON a.grp = g.grp
+    JOIN best b ON b.grp = g.grp
     JOIN medmkp_supplier_product sp ON sp.id = b.supplier_product_id AND sp.deleted_at IS NULL
     LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
-    ORDER BY a.best_price ASC, cat.name ASC
+    ORDER BY a.best_price ASC, g.any_name ASC
     LIMIT $3 OFFSET $4
     `,
     [category, qLike, limit, offset]
@@ -134,11 +155,14 @@ async function queryCategoryProducts(
 
   const canonical_products: CategoryListItem[] = rows.map((row) => {
     const image = row.best_image || ""
+    const isFamily = Boolean(row.family_id)
     return {
       id: row.id,
-      handle: row.handle,
-      name: row.name,
-      category: row.category,
+      handle: isFamily ? row.family_handle : row.any_handle,
+      name: isFamily ? row.family_name : row.any_name,
+      category: row.any_category,
+      family_id: row.family_id ?? null,
+      variant_count: Number(row.variant_count),
       offer_count: Number(row.offer_count),
       best_offer: {
         supplier_product_id: row.best_sp_id,
@@ -223,7 +247,15 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   // earlier substring/equality matching, but the database does the work.
   const where: Record<string, any>[] = []
   if (handle) {
-    where.push({ $or: [{ handle: { $ilike: handle } }, { id: { $ilike: handle } }] })
+    // Resolve by the product's own handle/id or its family handle, so a family
+    // page (and any variant's handle) loads the whole family below.
+    where.push({
+      $or: [
+        { handle: { $ilike: handle } },
+        { id: { $ilike: handle } },
+        { family_handle: { $ilike: handle } },
+      ],
+    })
   }
   if (q) {
     const term = `%${q}%`
@@ -253,7 +285,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   // candidate fetch in /medmkp/products/search.)
   const listOptions = handle ? undefined : { take: 600 }
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
-  const filteredCanonicalProducts = await medmkp.listCanonicalProducts(
+  let filteredCanonicalProducts = await medmkp.listCanonicalProducts(
     productFilters as any,
     listOptions as any
   )
@@ -261,6 +293,27 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   if (!filteredCanonicalProducts.length) {
     res.json({ count: 0, canonical_products: [] })
     return
+  }
+
+  // On a handle lookup, pull in the rest of the family so the product page can
+  // offer every size/spec as a selectable variant (a member's handle resolves
+  // the whole family, not just that one variant).
+  if (handle) {
+    const familyIds = [
+      ...new Set(
+        filteredCanonicalProducts
+          .map((product) => (product as any).family_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ]
+    if (familyIds.length) {
+      const siblings = await medmkp.listCanonicalProducts({ family_id: familyIds } as any)
+      const byId = new Map(filteredCanonicalProducts.map((p) => [p.id, p]))
+      for (const sibling of siblings) {
+        byId.set(sibling.id, sibling)
+      }
+      filteredCanonicalProducts = [...byId.values()]
+    }
   }
 
   const matches = await medmkp.listCanonicalProductMatches({
@@ -342,6 +395,37 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       price_range_cents: range,
     }
   })
+
+  // Handle lookup powers the product page. Return the family's variants ordered
+  // by their selector rank (size S→XL, 25mm→30mm, …) plus a family summary so
+  // the page can render a size selector and default to the requested variant.
+  if (handle) {
+    const variants = [...enriched].sort((a, b) => {
+      const aRank = (a as any).variant_rank ?? Number.MAX_SAFE_INTEGER
+      const bRank = (b as any).variant_rank ?? Number.MAX_SAFE_INTEGER
+      if (aRank !== bRank) {
+        return aRank - bRank
+      }
+      return a.name.localeCompare(b.name)
+    })
+
+    const familyMember = variants.find((product) => (product as any).family_id)
+    const family =
+      familyMember && variants.length > 1
+        ? {
+            family_id: (familyMember as any).family_id,
+            family_handle: (familyMember as any).family_handle,
+            family_name: (familyMember as any).family_name,
+          }
+        : null
+
+    res.json({
+      count: variants.length,
+      canonical_products: variants,
+      family,
+    })
+    return
+  }
 
   const visible = enriched.filter((product) => {
     if (supplier) {

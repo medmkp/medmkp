@@ -74,10 +74,28 @@ export type SubstituteCandidate = {
   reason: string
 }
 
+/** Display-only grouping of size/spec variants under one browsable product. */
+export type FamilyInfo = {
+  /** Stable, content-addressed family id shared by all variants. */
+  familyId: string
+  /** URL handle for the family's product page. */
+  familyHandle: string
+  /** Clean family title with the varying attribute removed. */
+  familyName: string
+  /** This variant's label, e.g. "Large", "25 mm", "A2". */
+  variantLabel: string
+  /** Sort order of this variant within the family selector. */
+  variantRank: number
+  /** Which modeled axis varies across the family (size, mm, shade, ...). */
+  variantAxis: string
+}
+
 export type MatchRunResult = {
   products: NormalizedProduct[]
   acceptedPairs: ScoredPair[]
   reviewPairs: ScoredPair[]
   clusters: Cluster[]
   substitutes: SubstituteCandidate[]
+  /** Family overlay keyed by Cluster.key; clusters absent are standalone. */
+  families: Map<number, FamilyInfo>
 }

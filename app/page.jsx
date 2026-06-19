@@ -663,8 +663,7 @@ function MobileScanItemView({ onBack, onScan, scanResult, onClearScanResult, sca
   );
 }
 
-function MobileBottomNav({ view, onNavigate, onScan, buyerName, practiceName, buyerInitials, email, onLogout }) {
-  const [accountOpen, setAccountOpen] = useState(false);
+function MobileBottomNav({ view, onNavigate, onScan }) {
   return (
     <nav className="mobile-bottom-nav" aria-label="Mobile primary navigation">
       <div className="m-nav-group">
@@ -682,35 +681,10 @@ function MobileBottomNav({ view, onNavigate, onScan, buyerName, practiceName, bu
         <button className={view === "history" ? "active" : ""} type="button" onClick={() => onNavigate("history")}>
           <span><Icon name="icon-clock" className="mobile-bottom-icon" /></span>History
         </button>
-        <button
-          className={`m-nav-account ${view === "settings" || accountOpen ? "active" : ""}`}
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={accountOpen}
-          onClick={() => setAccountOpen((open) => !open)}
-        >
-          <span className="m-nav-avatar">{buyerInitials || "··"}</span>Account
+        <button className={view === "settings" ? "active" : ""} type="button" onClick={() => onNavigate("settings")}>
+          <span><Icon name="icon-settings" className="mobile-bottom-icon" /></span>Settings
         </button>
       </div>
-      {accountOpen && (
-        <>
-          <div className="m-nav-menu-backdrop" onClick={() => setAccountOpen(false)} />
-          <div className="m-nav-menu" role="menu">
-            <div className="m-nav-menu-head">
-              <strong>{buyerName || "Your account"}</strong>
-              <small>{email || practiceName || "Buyer"}</small>
-            </div>
-            <button role="menuitem" type="button" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}>
-              <Icon name="icon-settings" className="button-icon" />
-              Settings
-            </button>
-            <button role="menuitem" type="button" onClick={() => { setAccountOpen(false); onLogout?.(); }}>
-              <Icon name="icon-logout" className="button-icon" />
-              Sign out
-            </button>
-          </div>
-        </>
-      )}
     </nav>
   );
 }
@@ -2170,6 +2144,9 @@ export default function Home() {
                 onRenameList={setListName}
                 buyerName={buyerName}
                 practiceName={practiceName}
+                buyerInitials={buyerInitials}
+                email={me?.customer?.email}
+                onLogout={handleLogout}
                 addMode={addMode}
                 onAddMode={setAddMode}
                 lastUpload={lastUpload}
@@ -2243,11 +2220,6 @@ export default function Home() {
           view={view}
           onNavigate={setView}
           onScan={openMobileScan}
-          buyerName={buyerName}
-          practiceName={practiceName}
-          buyerInitials={buyerInitials}
-          email={me?.customer?.email}
-          onLogout={handleLogout}
         />
         </div>
       </div>
@@ -2311,6 +2283,18 @@ function parseAttributes(text) {
   } catch (error) {
     return {};
   }
+}
+
+// Name the variant selector from the shape of its labels (e.g. "Small"/"Large"
+// → Size, "25 mm" → Length, "A2" → Shade), defaulting to a generic "Option".
+function variantAxisLabel(variants) {
+  const labels = variants.map((v) => v.variant_label || "");
+  if (labels.some((l) => /small|medium|large/i.test(l))) return "Size";
+  if (labels.some((l) => /\bmm\b|\bcm\b|\bin\b/i.test(l))) return "Length";
+  if (labels.some((l) => /\bga\b/i.test(l))) return "Gauge";
+  if (labels.some((l) => /^[A-D][1-4]/.test(l))) return "Shade";
+  if (labels.some((l) => /taper/i.test(l))) return "Taper";
+  return "Option";
 }
 
 function cap(value) {
@@ -2962,6 +2946,9 @@ function CatalogCategoryView({ slug, onNavigate }) {
                               )}
                             </span>
                             <button type="button" className="cat-pt-name" onClick={open}>{product.name}</button>
+                            {product.variant_count > 1 && (
+                              <span className="cat-pt-options">{product.variant_count} options</span>
+                            )}
                           </div>
                         </td>
                         <td className="cat-pt-path">
@@ -3078,7 +3065,11 @@ function CatalogCategoryView({ slug, onNavigate }) {
 // canonical product + supplier offers from the same API the search uses, then
 // lays out the comparison, specs, substitutes, and reorder rail.
 function ProductDetail({ handle, onNavigate, onToast }) {
-  const [product, setProduct] = useState(null);
+  // A product may be a family of size/spec variants. `variants` holds them in
+  // selector order; `activeIdx` is the chosen one and drives the whole page.
+  const [variants, setVariants] = useState([]);
+  const [family, setFamily] = useState(null);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [status, setStatus] = useState("loading");
   const [subs, setSubs] = useState([]);
   const [qty, setQty] = useState(10);
@@ -3091,43 +3082,72 @@ function ProductDetail({ handle, onNavigate, onToast }) {
       return undefined;
     }
 
-    let active = true;
+    let live = true;
     setStatus("loading");
     setShowHistory(false);
+    setActiveIdx(0);
 
     fetch(`/api/canonical-products?handle=${encodeURIComponent(handle)}`)
       .then((response) => response.json())
-      .then(({ canonical_products: products }) => {
-        if (!active) return;
-        const found = products?.[0];
-        if (!found) {
+      .then(({ canonical_products: products, family: familyInfo }) => {
+        if (!live) return;
+        const list = products || [];
+        if (!list.length) {
           setStatus("missing");
           return;
         }
-        setProduct(found);
-        setUom(cap(found.unit_of_measure) || "Box");
+        // Land on the requested variant; a family handle has no exact match, so
+        // default to the first (lowest-ranked) variant.
+        const idx = Math.max(
+          0,
+          list.findIndex((v) => (v.handle || "").toLowerCase() === handle.toLowerCase())
+        );
+        setVariants(list);
+        setFamily(familyInfo || null);
+        setActiveIdx(idx);
+        setUom(cap(list[idx].unit_of_measure) || "Box");
         setStatus("ready");
 
         // Comparable products: search by the product's family/type keyword so we
         // surface same-type variants (the curated category is often too narrow).
-        const foundAttrs = parseAttributes(found.attributes_text);
-        const term = (foundAttrs.family || found.name || "").split(/\s+/)[0];
+        const base = list[idx];
+        const foundAttrs = parseAttributes(base.attributes_text);
+        const term = (familyInfo?.family_name || foundAttrs.family || base.name || "").split(/\s+/)[0];
         if (term) {
           fetch(`/api/canonical-products?q=${encodeURIComponent(term)}&limit=8`)
             .then((response) => response.json())
             .then(({ canonical_products: related }) => {
-              if (!active) return;
-              setSubs((related || []).filter((entry) => entry.handle !== found.handle).slice(0, 3));
+              if (!live) return;
+              setSubs(
+                (related || [])
+                  .filter(
+                    (entry) =>
+                      entry.handle !== base.handle &&
+                      (!familyInfo || entry.family_id !== familyInfo.family_id)
+                  )
+                  .slice(0, 3)
+              );
             })
-            .catch(() => active && setSubs([]));
+            .catch(() => live && setSubs([]));
         }
       })
-      .catch(() => active && setStatus("missing"));
+      .catch(() => live && setStatus("missing"));
 
     return () => {
-      active = false;
+      live = false;
     };
   }, [handle]);
+
+  // Switch the selected variant in place (no refetch); keep the URL shareable.
+  function selectVariant(index) {
+    setActiveIdx(index);
+    const nextHandle = variants[index]?.handle;
+    if (nextHandle) {
+      window.history.replaceState({}, "", `/app/product/${nextHandle}`);
+    }
+  }
+
+  const product = variants[activeIdx];
 
   if (status === "loading") {
     return <div className="pdp-state">Loading product&hellip;</div>;
@@ -3144,6 +3164,7 @@ function ProductDetail({ handle, onNavigate, onToast }) {
   }
 
   const attrs = parseAttributes(product.attributes_text);
+  const variantGroupLabel = family ? variantAxisLabel(variants) : null;
   // The API returns one offer per supplier variant; collapse to the lowest-priced
   // offer per supplier so the comparison reads as a supplier comparison (one row
   // each) and the "N suppliers" counts stay consistent with the hero badge.
@@ -3216,13 +3237,31 @@ function ProductDetail({ handle, onNavigate, onToast }) {
             </div>
             <div className="pdp-hero-body">
               <div className="pdp-hero-headline">
-                <h1>{product.name}</h1>
+                <h1>{family ? family.family_name : product.name}</h1>
                 <span className="pdp-badge ok">
                   <Icon name="icon-check-circle" className="button-icon" />
                   Matched across {supplierCount} supplier{supplierCount === 1 ? "" : "s"}
                 </span>
               </div>
               {brand && <span className="pdp-brand-link">{brand}<Icon name="icon-link" className="button-icon" /></span>}
+              {variants.length > 1 && (
+                <div className="pdp-variants" role="group" aria-label={`Choose ${variantGroupLabel}`}>
+                  <span className="pdp-variants-label">{variantGroupLabel}: <strong>{product.variant_label}</strong></span>
+                  <div className="pdp-variant-options">
+                    {variants.map((variant, index) => (
+                      <button
+                        key={variant.id}
+                        type="button"
+                        className={`pdp-variant ${index === activeIdx ? "active" : ""}`}
+                        aria-pressed={index === activeIdx}
+                        onClick={() => selectVariant(index)}
+                      >
+                        {variant.variant_label || `Option ${index + 1}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="pdp-spec-row">
                 <div><span>SKU</span><strong>{best?.sku || "—"}</strong></div>
                 <div><span>Pack Size</span><strong>{packSize}</strong></div>
@@ -4162,16 +4201,52 @@ function rowMode(row) {
 
 // Mobile card list for the current reorder list (replaces the desktop table on
 // phones). Stats band + status tabs + tappable product cards.
-function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, searchTerm = "", onSearchTerm, searchResults = [], searchLoading, onNavigate }) {
+function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, searchTerm = "", onSearchTerm, searchResults = [], searchLoading, onNavigate, buyerName = "", practiceName = "", buyerInitials = "", email = "", onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   return (
     <div className="m-list">
       <div className="m-brandbar">
         <BrandMark />
-        <button className="m-iconbtn" type="button" aria-label="Alerts">
-          <Icon name="icon-bell" className="button-icon" />
-          <span className="m-brand-badge">3</span>
-        </button>
+        <div className="m-brand-actions">
+          <button className="m-iconbtn" type="button" aria-label="Alerts">
+            <Icon name="icon-bell" className="button-icon" />
+            <span className="m-brand-badge">3</span>
+          </button>
+          {onLogout && (
+            <div className="m-brand-account">
+              <button
+                className={`m-brand-avatar-btn ${accountOpen ? "active" : ""}`}
+                type="button"
+                aria-label="Account"
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                onClick={() => setAccountOpen((open) => !open)}
+              >
+                {buyerInitials || "··"}
+              </button>
+              {accountOpen && (
+                <>
+                  <div className="m-brand-menu-backdrop" onClick={() => setAccountOpen(false)} />
+                  <div className="m-brand-menu" role="menu">
+                    <div className="m-brand-menu-head">
+                      <strong>{buyerName || "Your account"}</strong>
+                      <small>{email || practiceName || "Buyer"}</small>
+                    </div>
+                    <button role="menuitem" type="button" onClick={() => { setAccountOpen(false); onNavigate?.(pathForView("settings")); }}>
+                      <Icon name="icon-settings" className="button-icon" />
+                      Settings
+                    </button>
+                    <button role="menuitem" type="button" onClick={() => { setAccountOpen(false); onLogout?.(); }}>
+                      <Icon name="icon-logout" className="button-icon" />
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="m-search-wrap">
@@ -4551,6 +4626,9 @@ function CurrentReorderList({
   onRenameList,
   buyerName = "",
   practiceName = "",
+  buyerInitials = "",
+  email = "",
+  onLogout,
   addMode,
   onAddMode,
   lastUpload,
@@ -4702,6 +4780,11 @@ function CurrentReorderList({
           searchResults={searchResults}
           searchLoading={searchLoading}
           onNavigate={onNavigate}
+          buyerName={buyerName}
+          practiceName={practiceName}
+          buyerInitials={buyerInitials}
+          email={email}
+          onLogout={onLogout}
         />
         {detail && (
           <MobileItemDetail

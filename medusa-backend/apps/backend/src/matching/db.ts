@@ -108,12 +108,17 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
 
     const canonicalRows = result.clusters.map((cluster) => {
       const rep = cluster.representative
+      const family = result.families.get(cluster.key) ?? null
       const attributes = {
         brands: [...new Set(cluster.members.map((m) => m.row.brand).filter(Boolean))],
         manufacturer_skus: [...new Set(cluster.members.map((m) => m.row.manufacturer_sku).filter(Boolean))],
         pack_sizes: [...new Set(cluster.members.map((m) => m.row.pack_size).filter(Boolean))],
         supplier_count: cluster.supplierCount,
         member_count: cluster.members.length,
+        // Surfaced on the product page (Size/Type chips read these).
+        ...(family
+          ? { family: family.familyName, size: family.variantLabel }
+          : {}),
       }
       return [
         canonicalId(cluster),
@@ -123,12 +128,20 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
         "",
         mostCommon(cluster.members.map((m) => m.row.unit_of_measure)),
         JSON.stringify(attributes),
+        family?.familyId ?? null,
+        family?.familyHandle ?? null,
+        family?.familyName ?? null,
+        family?.variantLabel ?? null,
+        family ? family.variantRank : null,
       ]
     })
     await batchInsert(
       client,
       "medmkp_canonical_product",
-      ["id", "handle", "name", "category", "description", "unit_of_measure", "attributes_text"],
+      [
+        "id", "handle", "name", "category", "description", "unit_of_measure", "attributes_text",
+        "family_id", "family_handle", "family_name", "variant_label", "variant_rank",
+      ],
       canonicalRows
     )
 
