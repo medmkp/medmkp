@@ -98,25 +98,30 @@ function clusterVariant(cluster: Cluster): ClusterVariant | null {
 }
 
 function formatVariant(axis: string, value: string): { label: string; rank: number } {
+  // variantRank is persisted in an INTEGER column and is only ever used to sort
+  // variants within a (single-axis) family, so every branch must yield a whole
+  // number. Magnitudes that can be fractional (taper 0.04, 2.5mm, shade A1.5)
+  // are scaled ×100 so sub-integer ordering survives the rounding.
+  const scaledMagnitude = Math.round((parseFloat(value) || 0) * 100)
   if (axis === "size") {
     return { label: SIZE_LABEL[value] ?? value, rank: SIZE_RANK[value] ?? 99 }
   }
   if (axis === "shade") {
     const upper = value.toUpperCase()
-    const rank = upper.charCodeAt(0) * 10 + (parseFloat(upper.slice(1)) || 0)
+    const rank = upper.charCodeAt(0) * 1000 + Math.round((parseFloat(upper.slice(1)) || 0) * 100)
     return { label: upper, rank }
   }
   if (axis === "taper") {
-    return { label: `${value} Taper`, rank: parseFloat(value) || 0 }
+    return { label: `${value} Taper`, rank: scaledMagnitude }
   }
   if (axis === "#") {
-    return { label: `#${value}`, rank: parseFloat(value) || 0 }
+    return { label: `#${value}`, rank: scaledMagnitude }
   }
   if (axis === "%") {
-    return { label: `${value}%`, rank: parseFloat(value) || 0 }
+    return { label: `${value}%`, rank: scaledMagnitude }
   }
   const unit = axis === "ga" ? "ga" : axis
-  return { label: `${value} ${unit}`, rank: parseFloat(value) || 0 }
+  return { label: `${value} ${unit}`, rank: scaledMagnitude }
 }
 
 /**

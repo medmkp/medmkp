@@ -65,12 +65,60 @@ export function decodeHtml(value: string) {
   return normalizeText(decodeHtmlEntities(value))
 }
 
+// Some suppliers (carolinadental, dentalcity) emit a literal "?" where a
+// character was lost to a bad charset decode at scrape time — between words
+// ("Nitrile?Gloves"), after a brand where ®/™ stood ("ProNamel?"), or before a
+// pack count ("Jackets?10Pk"). The original glyph is unrecoverable, so fold each
+// to a space (which reads correctly in every observed case) and tidy the spacing
+// the substitution leaves behind. Scoped to product names only — descriptions
+// can legitimately contain "?".
+function repairLostSymbols(value: string) {
+  // No mojibake marker — leave the name untouched (avoids touching legitimate
+  // spacing like " .04 Taper" or " .35gm" that has nothing to do with a "?").
+  if (!value.includes("?")) {
+    return value
+  }
+  return value
+    .replace(/\?/g, " ")
+    .replace(/\s+,/g, ",") // drop the space a "?" left before a comma ("6 ," → "6,")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+}
+
+// Some suppliers append a product's variation options as a trailing
+// " - opt / opt / opt" (e.g. WooCommerce variation labels), duplicating the
+// size/color/pack already stated in the title:
+//   "HSB - Nitrile Gloves, Blue, X-Large 100/Bx - Blue / X-Large / 100/Bx"
+// Strip that suffix only when it has ≥2 slash-separated options and EVERY option
+// already appears earlier in the name, so we never drop information that is only
+// stated in the suffix (e.g. " - Each", or an option not echoed in the title).
+function stripRedundantVariantSuffix(value: string) {
+  const sep = value.lastIndexOf(" - ")
+  if (sep < 0) {
+    return value
+  }
+  const head = value.slice(0, sep).trim()
+  const options = value
+    .slice(sep + 3)
+    .split(" / ")
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (options.length < 2) {
+    return value
+  }
+  const headLower = head.toLowerCase()
+  const allRedundant = options.every((option) =>
+    headLower.includes(option.toLowerCase())
+  )
+  return allRedundant ? head : value
+}
+
 // Canonical product-name cleaner, applied at the supplier-catalog persistence
 // boundary so every ingestion path (all pipeline adapters, CSV, marketplace,
 // Henry Schein) lands a cleaned name regardless of how its adapter extracted it.
 // Idempotent: re-running on an already-clean name is a no-op.
 export function cleanProductName(value: string) {
-  return decodeHtml(value)
+  return stripRedundantVariantSuffix(repairLostSymbols(decodeHtml(value)))
 }
 
 export function stripTags(value: string) {

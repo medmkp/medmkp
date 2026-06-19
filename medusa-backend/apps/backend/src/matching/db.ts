@@ -132,7 +132,9 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
         family?.familyHandle ?? null,
         family?.familyName ?? null,
         family?.variantLabel ?? null,
-        family ? family.variantRank : null,
+        // variant_rank is an INTEGER column; guard the boundary so a fractional
+        // rank can never abort the whole commit.
+        family ? Math.round(family.variantRank) : null,
       ]
     })
     await batchInsert(
