@@ -7434,6 +7434,7 @@ th {
 
   /* Scan result / verify card — the immediate "here's what matched" feedback */
   .scan-result-card {
+    position: relative;
     display: grid;
     grid-template-columns: 46px 1fr auto;
     align-items: center;
@@ -7443,6 +7444,31 @@ th {
     border-radius: 16px;
     background: #ffffff;
     box-shadow: 0 10px 30px rgba(10, 26, 56, 0.16);
+  }
+  .scan-result-card.duplicate {
+    border-color: #c7d6f5;
+    background: #f6f9ff;
+  }
+  .scan-result-card .src-dismiss {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(8, 21, 54, 0.06);
+    color: #5a6b86;
+    cursor: pointer;
+  }
+  .scan-result-card .src-dismiss .button-icon {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    fill: none;
   }
   .scan-result-card.match {
     cursor: pointer;
@@ -7538,6 +7564,7 @@ th {
   .scan-result-card .src-pill.confirmed { background: #e5f8ef; color: #18915e; }
   .scan-result-card .src-pill.possible { background: #fdf0d9; color: #b5740a; }
   .scan-result-card .src-pill.nomatch { background: #fdecec; color: #d23b3b; }
+  .scan-result-card .src-pill.duplicate { background: #e7eefc; color: #0f62ff; }
   .scan-result-card .src-qty { background: #eef3fb; color: #0f62ff; }
   .scan-result-card .src-action {
     grid-column: 1 / -1;
@@ -9665,6 +9692,11 @@ th {
 .pscan-card .scan-result-card .src-pill.nomatch { background: #fdecec; color: #d23b3b; }
 .pscan-card .scan-result-card .src-qty { background: #eef3fb; color: #0f62ff; }
 .pscan-card .scan-result-card .src-action { grid-column: 1 / -1; height: 40px; border: none; border-radius: 10px; background: #0f62ff; color: #fff; font-size: 13.5px; font-weight: 700; }
+.pscan-card .scan-result-card { position: relative; }
+.pscan-card .scan-result-card.duplicate { border-color: #c7d6f5; background: #f6f9ff; }
+.pscan-card .scan-result-card .src-pill.duplicate { background: #e7eefc; color: #0f62ff; }
+.pscan-card .scan-result-card .src-dismiss { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: rgba(8, 21, 54, 0.06); color: #5a6b86; cursor: pointer; }
+.pscan-card .scan-result-card .src-dismiss .button-icon { width: 15px; height: 15px; stroke: currentColor; fill: none; }
 
 .pscan-gate {
   position: fixed;

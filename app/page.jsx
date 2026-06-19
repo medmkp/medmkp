@@ -503,11 +503,19 @@ function ScanResultCard({ result, className = "", onClear, onEnterManually }) {
 
   return (
     <div
-      className={`scan-result-card ${notFound ? "nomatch" : "match"} ${className}`}
+      className={`scan-result-card ${notFound ? "nomatch" : "match"} ${isDuplicate ? "duplicate" : ""} ${className}`}
       role="status"
       aria-live="polite"
       onClick={notFound ? undefined : onClear}
     >
+      <button
+        className="src-dismiss"
+        type="button"
+        aria-label="Dismiss"
+        onClick={(event) => { event.stopPropagation(); onClear?.(); }}
+      >
+        <Icon name="icon-x" className="button-icon" />
+      </button>
       <span className="src-thumb">
         {item.imageUrl
           ? <img src={item.imageUrl} alt="" loading="lazy" />
@@ -518,14 +526,16 @@ function ScanResultCard({ result, className = "", onClear, onEnterManually }) {
         <small>
           {notFound
             ? (item.barcode ? `Code ${item.barcode} — key it in or search` : "No code read — enter it manually")
-            : `${offer?.supplier || item.oldVendor || "Supplier pending"}${item.unit ? ` · ${item.unit}` : ""}`}
+            : isDuplicate
+              ? "Already on your list — adjust the quantity there"
+              : `${offer?.supplier || item.oldVendor || "Supplier pending"}${item.unit ? ` · ${item.unit}` : ""}`}
         </small>
       </div>
       <div className="src-right">
-        {!notFound && price != null && <strong>{mrMoney(price)}</strong>}
-        {!notFound && offer?.perUnit != null && <small>${mrEa(offer.perUnit)} / ea</small>}
+        {!notFound && !isDuplicate && price != null && <strong>{mrMoney(price)}</strong>}
+        {!notFound && !isDuplicate && offer?.perUnit != null && <small>${mrEa(offer.perUnit)} / ea</small>}
         {isDuplicate
-          ? <em className="src-qty">×{qty}</em>
+          ? <em className="src-pill duplicate">Already added</em>
           : <em className={`src-pill ${meta.cls}`}>{meta.label}</em>}
       </div>
       {notFound && (
