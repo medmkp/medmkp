@@ -8926,7 +8926,10 @@ th {
 .m-tabs button.active { color: var(--blue); border-bottom-color: var(--blue); }
 
 .m-cards { display: flex; flex-direction: column; }
-.m-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; width: 100%; padding: 14px 2px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; }
+.m-swipe { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+.m-swipe-remove { position: absolute; top: 7px; right: 8px; bottom: 7px; width: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; border-radius: 12px; background: var(--danger, #dc2626); color: #fff; font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+.m-swipe-remove-icon { width: 22px; height: 22px; color: #fff; stroke: currentColor; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.m-card { position: relative; z-index: 1; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; width: 100%; padding: 14px 2px; border: 0; background: var(--surface, #fff); text-align: left; touch-action: pan-y; will-change: transform; }
 .m-card .crl-thumb { width: 44px; height: 44px; }
 .m-card-body { display: grid; gap: 2px; min-width: 0; }
 .m-card-body strong { color: var(--ink); font-size: 14px; font-weight: 700; }

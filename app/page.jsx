@@ -165,6 +165,12 @@ function IconSprite() {
         <path d="M7.5 7.5 8.2 19a1.2 1.2 0 0 0 1.2 1.1h5.2a1.2 1.2 0 0 0 1.2-1.1l.7-11.5" />
         <path d="M10 10v5M14 10v5" />
       </symbol>
+      <symbol id="icon-trash-ios" viewBox="0 0 24 24">
+        <path d="M4 6.5h16" />
+        <path d="M9 6.5V5.4A1.4 1.4 0 0 1 10.4 4h3.2A1.4 1.4 0 0 1 15 5.4V6.5" />
+        <path d="M6.2 6.5l.9 12.1A1.5 1.5 0 0 0 8.6 20h6.8a1.5 1.5 0 0 0 1.5-1.4l.9-12.1" />
+        <path d="M10 10v6M14 10v6" />
+      </symbol>
       <symbol id="icon-edit" viewBox="0 0 24 24">
         <path d="M14.5 5.5 18.5 9.5 8 20H4v-4Z" />
         <path d="m13 7 4 4" />
@@ -5083,9 +5089,99 @@ function rowMode(row) {
   return row.status === "Not found" ? "resolve" : row.status === "Review" ? "review" : "view";
 }
 
+// One reorder-list card with swipe-left-to-reveal Remove. Drag tracks the
+// finger; past the threshold it snaps open, otherwise it springs back closed.
+const SWIPE_REVEAL = 88;
+function MobileReorderCard({ row, onOpen, onRemove }) {
+  const [dx, setDx] = useState(0);
+  const [open, setOpen] = useState(false);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const dragging = useRef(false);
+  const moved = useRef(false);
+
+  function onTouchStart(event) {
+    const touch = event.touches[0];
+    startX.current = touch.clientX;
+    startY.current = touch.clientY;
+    dragging.current = true;
+    moved.current = false;
+  }
+  function onTouchMove(event) {
+    if (!dragging.current) return;
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - startX.current;
+    const deltaY = touch.clientY - startY.current;
+    // Ignore mostly-vertical gestures so the list can still scroll.
+    if (!moved.current && Math.abs(deltaX) < Math.abs(deltaY)) { dragging.current = false; return; }
+    if (Math.abs(deltaX) > 6) moved.current = true;
+    const base = open ? -SWIPE_REVEAL : 0;
+    const next = Math.min(0, Math.max(-SWIPE_REVEAL, base + deltaX));
+    setDx(next);
+  }
+  function onTouchEnd() {
+    if (!dragging.current && !moved.current) return;
+    dragging.current = false;
+    const shouldOpen = dx <= -SWIPE_REVEAL / 2;
+    setOpen(shouldOpen);
+    setDx(shouldOpen ? -SWIPE_REVEAL : 0);
+  }
+  function handleClick() {
+    if (moved.current) return; // swipe, not a tap
+    if (open) { setOpen(false); setDx(0); return; }
+    onOpen();
+  }
+
+  const notFound = row.status === "Not found";
+  return (
+    <div className={`m-swipe ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="m-swipe-remove"
+        aria-label={`Remove ${row.matchName || row.importedName} from list`}
+        tabIndex={open ? 0 : -1}
+        onClick={() => { setOpen(false); setDx(0); onRemove(); }}
+      >
+        <Icon name="icon-trash-ios" className="m-swipe-remove-icon" />
+        <span>Remove</span>
+      </button>
+      <button
+        className="m-card"
+        type="button"
+        onClick={handleClick}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{ transform: `translateX(${dx}px)`, transition: dragging.current ? "none" : "transform .2s ease" }}
+      >
+        <ProductThumb image={row.image} alt={row.matchName || row.importedName} />
+        <span className="m-card-body">
+          <strong>{row.matchName || row.importedName}</strong>
+          <small>{row.importedSub}</small>
+          {row.supplier && row.supplier !== "—" && (
+            <small className="m-card-supplier">
+              {supplierLogoSrc(row.supplier) && <img className="m-card-supplier-logo" src={supplierLogoSrc(row.supplier)} alt="" />}
+              {row.supplier}
+            </small>
+          )}
+        </span>
+        <span className="m-card-right">
+          {notFound
+            ? <em className="m-conf nomatch">Not found</em>
+            : <em className={`m-conf ${mrConfTone(row.confidence)}`}>{row.confidence}%</em>}
+          {row.price != null && <strong>{mrMoney(row.price)}</strong>}
+          {row.perEa != null && <small>${mrEa(row.perEa)} / ea</small>}
+          {row.lineSavings > 0 && <small className="m-card-save">Save {mrMoney(row.lineSavings)}</small>}
+        </span>
+        <Icon name="icon-chevron-right" className="button-icon m-card-chev" />
+      </button>
+    </div>
+  );
+}
+
 // Mobile card list for the current reorder list (replaces the desktop table on
 // phones). Stats band + status tabs + tappable product cards.
-function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, searchTerm = "", onSearchTerm, searchResults = [], searchLoading, onNavigate, buyerName = "", practiceName = "", buyerInitials = "", email = "", onLogout }) {
+function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, onRemoveItem, searchTerm = "", onSearchTerm, searchResults = [], searchLoading, onNavigate, buyerName = "", practiceName = "", buyerInitials = "", email = "", onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   return (
@@ -5213,33 +5309,17 @@ function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenR
               </>
             )}
           </div>
-        ) : rows.map((row) => {
-          const notFound = row.status === "Not found";
-          return (
-            <button className="m-card" type="button" key={row.id} onClick={() => onOpenRow(row)}>
-              <ProductThumb image={row.image} alt={row.matchName || row.importedName} />
-              <span className="m-card-body">
-                <strong>{row.matchName || row.importedName}</strong>
-                <small>{row.importedSub}</small>
-                {row.supplier && row.supplier !== "—" && (
-                  <small className="m-card-supplier">
-                    {supplierLogoSrc(row.supplier) && <img className="m-card-supplier-logo" src={supplierLogoSrc(row.supplier)} alt="" />}
-                    {row.supplier}
-                  </small>
-                )}
-              </span>
-              <span className="m-card-right">
-                {notFound
-                  ? <em className="m-conf nomatch">Not found</em>
-                  : <em className={`m-conf ${mrConfTone(row.confidence)}`}>{row.confidence}%</em>}
-                {row.price != null && <strong>{mrMoney(row.price)}</strong>}
-                {row.perEa != null && <small>${mrEa(row.perEa)} / ea</small>}
-                {row.lineSavings > 0 && <small className="m-card-save">Save {mrMoney(row.lineSavings)}</small>}
-              </span>
-              <Icon name="icon-chevron-right" className="button-icon m-card-chev" />
-            </button>
-          );
-        })}
+        ) : rows.map((row) => (
+          <MobileReorderCard
+            key={row.id}
+            row={row}
+            onOpen={() => onOpenRow(row)}
+            onRemove={() => {
+              if (row.itemId) onRemoveItem?.(row.itemId);
+              onToast("Item removed from list");
+            }}
+          />
+        ))}
       </div>
 
       {stats.matched + stats.review > 0 && (
@@ -5741,6 +5821,7 @@ function CurrentReorderList({
           onToast={onToast}
           onArchiveList={onArchiveList}
           onClearList={onClearList}
+          onRemoveItem={onRemoveItem}
           searchTerm={searchTerm}
           onSearchTerm={onSearchTerm}
           searchResults={searchResults}
