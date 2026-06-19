@@ -2,7 +2,6 @@ import { createHash } from "crypto"
 import { parsePack, unitPriceCents } from "./pack"
 import { cleanProductName } from "./supplier-pipeline/html"
 
-type MatchStatus = "exact" | "variant" | "substitute" | "needs_review" | "unmatched"
 type SourceType = "website" | "pdf" | "csv" | "manual" | "api" | "email" | "agent"
 type RefreshFrequency = "weekly" | "monthly" | "quarterly" | "manual"
 type PriceBasis = "each" | "box" | "case" | "pack" | "unknown"
@@ -105,66 +104,6 @@ function firstImageUrl(row: SupplierCatalogRow) {
   return stringArray(raw?.image_urls)[0] ?? ""
 }
 
-function scoreCanonicalMatch(
-  row: SupplierCatalogRow,
-  canonicalProducts: CanonicalProductCandidate[]
-) {
-  const haystack = compact([
-    row.manufacturer_sku,
-    row.brand,
-    row.name,
-    row.description,
-    row.category,
-    row.subcategory,
-    row.product_line,
-    row.pack_size,
-  ]).toLowerCase()
-
-  let best:
-    | {
-        canonicalProductId: string
-        status: MatchStatus
-        confidence: number
-        reason: string
-      }
-    | undefined
-
-  canonicalProducts.forEach((product) => {
-    const category = product.category.toLowerCase()
-    const nameTokens = product.name
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((token) => token.length > 3)
-    const categoryHit = category && haystack.includes(category)
-    const tokenHits = nameTokens.filter((token) => haystack.includes(token)).length
-    const tokenScore = nameTokens.length ? Math.round((tokenHits / nameTokens.length) * 70) : 0
-    const score = (categoryHit ? 25 : 0) + tokenScore
-
-    if (!best || score > best.confidence) {
-      best = {
-        canonicalProductId: product.id,
-        status: score >= 80 ? "exact" : score >= 55 ? "variant" : score >= 35 ? "needs_review" : "unmatched",
-        confidence: score,
-        reason:
-          score > 0
-            ? "Deterministic text overlap against canonical product name/category"
-            : "No deterministic canonical match rule fired",
-      }
-    }
-  })
-
-  if (!best || best.confidence < 35) {
-    return {
-      canonicalProductId: "",
-      status: "unmatched" as const,
-      confidence: 0,
-      reason: "No deterministic canonical match rule fired",
-    }
-  }
-
-  return best
-}
-
 export function buildSupplierCatalogIngestion(
   input: SupplierCatalogIngestionInput,
   canonicalProducts: CanonicalProductCandidate[]
@@ -233,7 +172,6 @@ export function buildSupplierCatalogIngestion(
     const name = cleanProductName(row.name?.trim() || row.description?.trim() || sku)
     const description = row.description?.trim() || name
     const category = row.category?.trim() || "Dental supplies"
-    const match = scoreCanonicalMatch(row, canonicalProducts)
     const pack = parsePack(row.pack_size, name, category)
 
     supplierProducts.push({
@@ -266,14 +204,23 @@ export function buildSupplierCatalogIngestion(
       raw_text: JSON.stringify(row.raw ?? row),
     })
 
+    // Ingestion writes only an UNMATCHED placeholder; the canonical match
+    // engine (scripts/match-canonical-products.ts) is the single source of
+    // truth for clustering. It fills these rows in place via an UPDATE gated
+    // on match_status='unmatched'. Previously ingestion ran a crude name/
+    // category token-overlap scorer here, which produced servable "variant"
+    // matches into oversized junk clusters and, worse, re-polluted a supplier
+    // every time it was re-ingested after a match run. Deferring entirely
+    // removes that whole class of bug — re-ingestion can no longer clobber the
+    // matcher's output.
     canonicalProductMatches.push({
       id: boundedId("mcpm", idKey(sku), 96),
-      canonical_product_id: match.canonicalProductId,
+      canonical_product_id: "",
       supplier_product_id: supplierProductId,
       supplier_id: input.supplier_id,
-      match_status: match.status,
-      confidence_score: match.confidence,
-      match_reason: match.reason,
+      match_status: "unmatched",
+      confidence_score: 0,
+      match_reason: "Deferred to canonical match job",
       extracted_attributes_text: JSON.stringify({
         sku,
         manufacturer_sku: row.manufacturer_sku ?? "",

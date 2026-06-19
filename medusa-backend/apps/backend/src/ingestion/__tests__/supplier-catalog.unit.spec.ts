@@ -36,6 +36,41 @@ describe("buildSupplierCatalogIngestion", () => {
     expect(ids.every((id) => id.length <= 96)).toBe(true)
   })
 
+  it("writes only unmatched canonical placeholders, even when candidates would overlap", () => {
+    // The canonical match engine is the single source of truth for clustering.
+    // Ingestion must never write a servable match, otherwise a re-ingest would
+    // clobber the matcher's output. Pass a candidate whose name/category overlap
+    // the product heavily; the old token-overlap scorer would have produced a
+    // "variant"/"exact" match — we now defer unconditionally.
+    const ingestion = buildSupplierCatalogIngestion(
+      {
+        supplier_id: "msup_test",
+        source_type: "website",
+        source_catalog: "test-catalog",
+        rows: [
+          {
+            sku: "GAUZE-1",
+            name: "Cotton Gauze Sponge 4x4",
+            category: "Infection Control",
+            brand: "Acme",
+            price_cents: 100,
+          },
+        ],
+        captured_at: "2026-06-19T00:00:00.000Z",
+      },
+      [{ id: "mcp_existing", name: "Cotton Gauze Sponge 4x4", category: "Infection Control" }]
+    )
+
+    const match = ingestion.canonicalProductMatches[0] as {
+      canonical_product_id: string
+      match_status: string
+      confidence_score: number
+    }
+    expect(match.canonical_product_id).toBe("")
+    expect(match.match_status).toBe("unmatched")
+    expect(match.confidence_score).toBe(0)
+  })
+
   it("cleans weird characters out of the persisted product name", () => {
     const ingestion = buildSupplierCatalogIngestion(
       {
