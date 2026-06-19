@@ -2838,7 +2838,7 @@ function CatalogCategoryView({ slug, onNavigate }) {
   const [topSuppliers, setTopSuppliers] = useState([]);
   const [status, setStatus] = useState("loading");
   const [sub, setSub] = useState("");
-  const [subLayout, setSubLayout] = useState("grid");
+  const [productLayout, setProductLayout] = useState("list");
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [recent, setRecent] = useState([]);
   const productsRef = useRef(null);
@@ -2950,6 +2950,12 @@ function CatalogCategoryView({ slug, onNavigate }) {
   const bestPrice = products[0]?.best_offer?.price_cents;
   const productsTitle = sub ? `Products in ${sub}` : `Popular products in ${category.name}`;
   const fmt = (value) => (typeof value === "number" ? value.toLocaleString() : "—");
+  const viewAllBtn = !showAllProducts && products.length > 8 ? (
+    <button type="button" className="cat-pt-all" onClick={() => setShowAllProducts(true)}>
+      View all {fmt(productCount)} products in {category.name}
+      <Icon name="icon-chevron-right" className="button-icon" />
+    </button>
+  ) : null;
 
   return (
     <div className="cat">
@@ -2987,18 +2993,9 @@ function CatalogCategoryView({ slug, onNavigate }) {
 
           <div className="cat-section-head">
             <h2>Subcategories</h2>
-            <div className="cat-viewtoggle" role="group" aria-label="View as">
-              <span>View as:</span>
-              <button type="button" className={subLayout === "grid" ? "active" : ""} onClick={() => setSubLayout("grid")} aria-label="Grid view">
-                <Icon name="icon-grid" className="button-icon" />
-              </button>
-              <button type="button" className={subLayout === "list" ? "active" : ""} onClick={() => setSubLayout("list")} aria-label="List view">
-                <Icon name="icon-list" className="button-icon" />
-              </button>
-            </div>
           </div>
 
-          <div className={`cat-grid ${subLayout}`}>
+          <div className="cat-grid grid">
             {category.subcategories.map((option, index) => (
               <article className={`cat-card ${sub === option.name ? "active" : ""}`} key={option.name}>
                 <button type="button" className="cat-card-open" onClick={() => browseSub(option.name)}>
@@ -3018,12 +3015,23 @@ function CatalogCategoryView({ slug, onNavigate }) {
 
           <div className="cat-section-head cat-products-head" ref={productsRef}>
             <h2>{productsTitle}</h2>
-            {sub && (
-              <button type="button" className="cat-clear-filter" onClick={() => setSub("")}>
-                <Icon name="icon-x" className="button-icon" />
-                Clear filter
-              </button>
-            )}
+            <div className="cat-products-controls">
+              {sub && (
+                <button type="button" className="cat-clear-filter" onClick={() => setSub("")}>
+                  <Icon name="icon-x" className="button-icon" />
+                  Clear filter
+                </button>
+              )}
+              <div className="cat-viewtoggle" role="group" aria-label="View as">
+                <span>View as:</span>
+                <button type="button" className={productLayout === "grid" ? "active" : ""} onClick={() => setProductLayout("grid")} aria-label="Grid view">
+                  <Icon name="icon-grid" className="button-icon" />
+                </button>
+                <button type="button" className={productLayout === "list" ? "active" : ""} onClick={() => setProductLayout("list")} aria-label="List view">
+                  <Icon name="icon-list" className="button-icon" />
+                </button>
+              </div>
+            </div>
           </div>
 
           {status === "loading" ? (
@@ -3031,6 +3039,48 @@ function CatalogCategoryView({ slug, onNavigate }) {
               {Array.from({ length: 5 }).map((_, i) => <div className="cat-pt-skeleton" key={i} />)}
             </div>
           ) : products.length ? (
+            productLayout === "grid" ? (
+            <div className="cat-pgrid-wrap">
+              <div className="cat-pgrid">
+                {visibleProducts.map((product, index) => {
+                  const best = product.best_offer;
+                  const open = () => onNavigate(`/app/product/${product.handle}`);
+                  return (
+                    <article className="cat-pcard" key={product.id}>
+                      <button type="button" className="cat-pcard-media" onClick={open} aria-label={`View ${product.name}`}>
+                        {product.image_url ? (
+                          <img src={product.image_url} alt="" loading="lazy" />
+                        ) : (
+                          <Icon name="icon-image" className="nav-icon" />
+                        )}
+                      </button>
+                      <div className="cat-pcard-body">
+                        <button type="button" className="cat-pcard-name" onClick={open}>{product.name}</button>
+                        <span className="cat-pcard-path">
+                          {category.name} <Icon name="icon-chevron-right" className="cat-pt-pathsep" /> {product.category}
+                        </span>
+                        <div className="cat-pcard-foot">
+                          <div className="cat-pt-price">
+                            <strong>{best ? catMoney(best.price_cents) : "—"}</strong>
+                            {index === 0 && !sub && <span className="cat-pt-badge">Best price</span>}
+                          </div>
+                          <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
+                        </div>
+                        <button type="button" className="cat-pt-view" onClick={open}>
+                          View product
+                          <Icon name="icon-link" className="button-icon" />
+                        </button>
+                      </div>
+                      {product.variant_count > 1 && (
+                        <span className="cat-pcard-options">{product.variant_count} options</span>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+              {viewAllBtn}
+            </div>
+            ) : (
             <div className="cat-ptable-wrap">
               <table className="cat-ptable">
                 <thead>
@@ -3085,13 +3135,9 @@ function CatalogCategoryView({ slug, onNavigate }) {
                   })}
                 </tbody>
               </table>
-              {!showAllProducts && products.length > 8 && (
-                <button type="button" className="cat-pt-all" onClick={() => setShowAllProducts(true)}>
-                  View all {fmt(productCount)} products in {category.name}
-                  <Icon name="icon-chevron-right" className="button-icon" />
-                </button>
-              )}
+              {viewAllBtn}
             </div>
+            )
           ) : (
             <div className="empty-state">
               <strong>No products{sub ? ` for ${sub}` : ""}</strong>

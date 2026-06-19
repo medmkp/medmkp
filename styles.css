@@ -9328,6 +9328,7 @@ th {
   .cat-title { font-size: 24px; }
   .cat-stats { grid-template-columns: 1fr 1fr; }
   .cat-grid.grid { grid-template-columns: 1fr; }
+  .cat-pgrid { grid-template-columns: 1fr; }
   .cat-rail { flex-direction: column; }
   .cat { padding-bottom: 90px; }
 }
@@ -9375,6 +9376,24 @@ th {
 .cat-pt-all:hover { background: var(--surface-2); }
 .cat-pt-skeleton { height: 53px; border-top: 1px solid var(--line); background: linear-gradient(100deg, var(--surface-2) 30%, #eef2fa 50%, var(--surface-2) 70%); background-size: 200% 100%; animation: catShimmer 1.2s infinite; }
 .cat-pt-skeleton:first-child { border-top: 0; }
+
+/* Popular products — card grid (View as: grid) */
+.cat-products-controls { display: flex; align-items: center; gap: 12px; }
+.cat-pgrid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.cat-pcard { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease; }
+.cat-pcard:hover { transform: translateY(-2px); border-color: #cfd9ec; box-shadow: 0 22px 48px rgba(23, 44, 92, 0.12); }
+.cat-pcard-media { display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; padding: 0; border: 0; background: var(--surface-2); color: #b3bccd; overflow: hidden; }
+.cat-pcard-media img { width: 100%; height: 100%; object-fit: contain; }
+.cat-pcard-media .nav-icon { width: 30px; height: 30px; }
+.cat-pcard-body { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 16px; flex: 1; }
+.cat-pcard-name { border: 0; background: none; padding: 0; font: inherit; font-size: 14px; font-weight: 650; color: var(--ink); text-align: left; line-height: 1.4; }
+.cat-pcard-name:hover { color: var(--blue); }
+.cat-pcard-path { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #46536d; }
+.cat-pcard-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
+.cat-pcard-suppliers { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.cat-pcard .cat-pt-view { width: 100%; justify-content: center; }
+.cat-pcard-options { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: #eef2fb; color: var(--blue); font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; }
+.cat-pgrid-wrap .cat-pt-all { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
 
 /* Drill-down rail: jump-to actions + subcategory quick links */
 .cat-callout-actions { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; }
