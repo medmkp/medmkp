@@ -59,6 +59,7 @@ function toOffer(offer) {
     packQty: offer.pack_quantity ?? null,
     packSize: offer.pack_size || "",
     imageUrl: offer.image_url || "",
+    productUrl: offer.product_url || "",
   };
 }
 
