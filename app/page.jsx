@@ -64,7 +64,7 @@ function viewFromPath(pathname = "/") {
   if (path === "/app") return { view: "home", isLoggedIn: true };
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
   if (path === "/app/plan") return { view: "plan", isLoggedIn: true };
-  if (path === "/app/plan/handoff") return { view: "handoff", isLoggedIn: true };
+  if (path === "/app/plan/handoff") return { view: "handoff", isLoggedIn: true, handoffId: query.get("ho") || "" };
   if (path === "/app/history") return { view: "history", isLoggedIn: true };
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
   if (path === "/app/catalog") return { view: "catalog", isLoggedIn: true };
@@ -1337,6 +1337,7 @@ export default function Home() {
   const [me, setMe] = useState(null);
   const [view, setViewState] = useState("landing");
   const [historyId, setHistoryId] = useState(null);
+  const [selectedHandoffId, setSelectedHandoffId] = useState(null);
   const [productHandle, setProductHandle] = useState(null);
   const [categorySlug, setCategorySlug] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1368,6 +1369,9 @@ export default function Home() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [archivedLists, setArchivedLists] = useState([]);
   const [handoffs, setHandoffs] = useState([]);
+  // Id of the handoff prepared for the live list, or null. Drives the live
+  // list's "Handed off" status and links the archive entry to its handoff.
+  const [currentHandoffId, setCurrentHandoffId] = useState(null);
   const [cartGroup, setCartGroup] = useState(null);
   const [listTouched, setListTouched] = useState(false);
   const [listName, setListName] = useState("June Restock");
@@ -1394,6 +1398,7 @@ export default function Home() {
     setUploadedDocs(saved.uploadedDocs || []);
     setArchivedLists(saved.archivedLists || []);
     setHandoffs(saved.handoffs || []);
+    setCurrentHandoffId(saved.currentHandoffId || null);
     setListTouched(Boolean(saved.listTouched));
     if (saved.listName) setListName(saved.listName);
     setDefaultBuyingPrefs(savedDefaults);
@@ -1470,7 +1475,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!stateLoaded) return;
-    const blob = { draftItems, uploadedDocs, archivedLists, handoffs, listTouched, listName, buyingPrefs, defaultBuyingPrefs };
+    const blob = { draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listTouched, listName, buyingPrefs, defaultBuyingPrefs };
     try {
       window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(blob));
     } catch {
@@ -1491,7 +1496,7 @@ export default function Home() {
       }, 800);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
+  }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
 
   // Supplier names for the preferred-supplier picker, plus each supplier's
   // shipping policy for landed-cost estimates on the reorder list.
@@ -1515,6 +1520,7 @@ export default function Home() {
       setIsLoggedIn(nextRoute.isLoggedIn);
       setViewState(nextRoute.view);
       setHistoryId(nextRoute.historyId || null);
+      setSelectedHandoffId(nextRoute.handoffId || null);
       setProductHandle(nextRoute.productHandle || null);
       setCategorySlug(nextRoute.categorySlug || null);
       setSearchQuery(nextRoute.searchQuery || "");
@@ -1639,6 +1645,13 @@ export default function Home() {
     return { items: rows.length, suppliers: suppliers.size, spend };
   }, [activeDraftItems, buyingPrefs]);
 
+  // Lifecycle status of the live list (Draft → Verified → Handed off) for the
+  // Home header pill, derived the same way archives compute their final status.
+  const liveListStatus = useMemo(
+    () => deriveListStatus(deriveMatchRows(activeDraftItems, buyingPrefs), Boolean(currentHandoffId)),
+    [activeDraftItems, buyingPrefs, currentHandoffId]
+  );
+
   // Who's signed in, for the topbar / profile / upload metadata. Falls back to
   // neutral labels until /api/auth/me resolves (or if a field is missing).
   const buyerName = me?.customer
@@ -1698,6 +1711,7 @@ export default function Home() {
     setIsLoggedIn(next.isLoggedIn);
     setViewState(next.view);
     setHistoryId(next.historyId || null);
+    setSelectedHandoffId(next.handoffId || null);
     setProductHandle(next.productHandle || null);
     setCategorySlug(next.categorySlug || null);
     setSearchQuery(next.searchQuery || "");
@@ -2024,18 +2038,26 @@ export default function Home() {
     const now = new Date();
     const entry = {
       id: `list_${now.getTime()}`,
-      name: `${now.toLocaleString("en-US", { month: "long" })} Reorder List`,
+      name: listName || `${now.toLocaleString("en-US", { month: "long" })} Reorder List`,
       date: now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       items: rows.length,
       suppliers: totals.suppliers,
       total: money.format(totals.landedTotal),
+      // Final lifecycle status + the handoff it was tied to, for the History pill.
+      status: deriveListStatus(rows, Boolean(currentHandoffId)),
+      handoffId: currentHandoffId,
       rows,
+      // Raw inputs so Duplicate can rebuild a working, visible list (items are
+      // only shown when their documentIds match a doc in uploadedDocs).
+      sourceItems: activeDraftItems,
+      sourceDocs: uploadedDocs,
     };
     setArchivedLists((lists) => [entry, ...lists]);
     setDraftItems([]);
     setUploadedDocs([]);
     setLastUpload(null);
     setHasUploadedInvoice(false);
+    setCurrentHandoffId(null);
     setBuyingPrefs(defaultBuyingPrefs);
     showToast("List archived to History");
   }
@@ -2049,6 +2071,7 @@ export default function Home() {
     setUploadedDocs([]);
     setLastUpload(null);
     setHasUploadedInvoice(false);
+    setCurrentHandoffId(null);
     setBuyingPrefs(defaultBuyingPrefs);
     showToast("List cleared");
   }
@@ -2080,14 +2103,42 @@ export default function Home() {
       supplierCount: groups.length,
     };
     setHandoffs((list) => [snapshot, ...list]);
+    setCurrentHandoffId(snapshot.id);
     showToast("Supplier handoff prepared");
-    navigate("/app/plan/handoff");
+    navigate(`/app/plan/handoff?ho=${snapshot.id}`);
   }
 
   // Archive the live list and return to a fresh Home — the frozen handoff lives
   // on in History, so archiving here doesn't lose the order details.
   function archiveFromHandoff() {
     archiveCurrentList();
+    navigate("/app");
+  }
+
+  // Rename an archived list in History (live list renames via setListName).
+  function renameArchivedList(id, name) {
+    setArchivedLists((lists) => lists.map((entry) => (entry.id === id ? { ...entry, name } : entry)));
+  }
+
+  // Copy an archived list into a fresh Current Reorder List. Restores the raw
+  // items (with new ids) and their docs so visibility holds; the original stays
+  // in History. Guards against silently overwriting an in-progress live list.
+  function duplicateList(entry) {
+    if (!entry?.sourceItems?.length) {
+      showToast("This sample list has no items to duplicate");
+      return;
+    }
+    if (activeDraftItems.length && !window.confirm(`Replace your current reorder list with a copy of "${entry.name}"?`)) {
+      return;
+    }
+    setDraftItems(entry.sourceItems.map((item) => ({ ...item, id: newItemId() })));
+    setUploadedDocs(entry.sourceDocs || []);
+    setListName(`${entry.name} (copy)`);
+    setCurrentHandoffId(null);
+    setListTouched(true);
+    setLastUpload(null);
+    setHasUploadedInvoice(false);
+    showToast(`Duplicated "${entry.name}" to a new list`);
     navigate("/app");
   }
 
@@ -2248,6 +2299,7 @@ export default function Home() {
               <CurrentReorderList
                 items={activeDraftItems}
                 listName={listName}
+                listStatus={liveListStatus}
                 onRenameList={setListName}
                 buyerName={buyerName}
                 practiceName={practiceName}
@@ -2311,7 +2363,7 @@ export default function Home() {
 
           {view === "handoff" && (
             <SupplierHandoffView
-              handoff={handoffs[0] || null}
+              handoff={(selectedHandoffId && handoffs.find((h) => h.id === selectedHandoffId)) || handoffs[0] || null}
               onArchive={archiveFromHandoff}
               onBuildCart={setCartGroup}
               onNavigate={navigate}
@@ -2321,7 +2373,17 @@ export default function Home() {
 
           {view === "history" && <HistoryView archivedLists={archivedLists} onOpen={(id) => navigate(`/app/history/${id}`)} />}
 
-          {view === "historyDetail" && <HistoryDetail id={historyId} archivedLists={archivedLists} onBack={() => navigate("/app/history")} />}
+          {view === "historyDetail" && (
+            <HistoryDetail
+              id={historyId}
+              archivedLists={archivedLists}
+              handoffs={handoffs}
+              onBack={() => navigate("/app/history")}
+              onRename={renameArchivedList}
+              onDuplicate={duplicateList}
+              onViewHandoff={(hid) => navigate(`/app/plan/handoff?ho=${hid}`)}
+            />
+          )}
 
           {view === "catalog" && <CatalogView onNavigate={navigate} />}
 
@@ -4251,6 +4313,18 @@ function deriveMatchRows(items, prefs) {
   });
 }
 
+// Derive a reorder list's lifecycle status from its rows + whether a supplier
+// handoff has been prepared for it. Draft → Verified (every item reviewed) →
+// Handed off (a handoff snapshot exists). Used for the live list and archives.
+function deriveListStatus(rows, hasHandoff) {
+  if (hasHandoff) return "handoff";
+  if (!rows.length) return "draft";
+  const needsWork = rows.some(
+    (r) => (r.status === "Review" && !r.verified) || r.status === "Not found"
+  );
+  return needsWork ? "draft" : "verified";
+}
+
 function mrComputeStats(rows) {
   const total = rows.length;
   const matched = rows.filter((r) => r.status === "Matched").length;
@@ -4356,6 +4430,23 @@ const CRL_STATUS = {
   "Not found": { cls: "nomatch", label: "No match", icon: "icon-x-circle" },
   Verified: { cls: "verified", label: "Verified", icon: "icon-shield-check" },
 };
+
+// List-level lifecycle pill, keyed by deriveListStatus() output.
+const LIST_STATUS = {
+  draft: { label: "Draft", cls: "draft" },
+  verified: { label: "Verified", cls: "verified" },
+  handoff: { label: "Handed off", cls: "handoff" },
+};
+
+function ListStatusPill({ status }) {
+  const meta = LIST_STATUS[status] || LIST_STATUS.draft;
+  return (
+    <span className={`list-pill list-pill--${meta.cls}`}>
+      <span className="list-pill-dot" aria-hidden="true" />
+      {meta.label}
+    </span>
+  );
+}
 
 // Sample rows (used before any real items are added) get a plausible source icon
 // so the empty-state demo matches the populated design.
@@ -5154,6 +5245,7 @@ function BuyingPreferencesCard({ prefs, supplierOptions, onSave, onToast, title 
 function CurrentReorderList({
   items,
   listName = "June Restock",
+  listStatus = "draft",
   onRenameList,
   buyerName = "",
   practiceName = "",
@@ -5387,6 +5479,8 @@ function CurrentReorderList({
               aria-label="Reorder list name"
               style={{ font: "inherit", color: "inherit", border: "none", background: "transparent", padding: 0, width: `${Math.max(listName.length, 8)}ch` }}
             />
+            <span className="crl-dot" aria-hidden="true">·</span>
+            <ListStatusPill status={listStatus} />
             <span className="crl-dot" aria-hidden="true">·</span>
             <span className="crl-autosave"><Icon name="icon-check-circle" className="button-icon" />Auto saved just now</span>
           </p>
@@ -6343,9 +6437,9 @@ function SupplierHandoffView({ handoff, onArchive, onBuildCart, onNavigate, onTo
 }
 
 const ARCHIVED_LISTS = [
-  { id: "june-restock", name: "June Restock", date: "Jun 2, 2025", items: 124, suppliers: 5, total: "$5,842.16" },
-  { id: "may-hygiene", name: "May Hygiene Reorder", date: "May 9, 2025", items: 86, suppliers: 4, total: "$3,217.40" },
-  { id: "april-ortho", name: "April Ortho Supplies", date: "Apr 14, 2025", items: 52, suppliers: 3, total: "$1,905.00" },
+  { id: "june-restock", name: "June Restock", date: "Jun 2, 2025", items: 124, suppliers: 5, total: "$5,842.16", status: "handoff" },
+  { id: "may-hygiene", name: "May Hygiene Reorder", date: "May 9, 2025", items: 86, suppliers: 4, total: "$3,217.40", status: "handoff" },
+  { id: "april-ortho", name: "April Ortho Supplies", date: "Apr 14, 2025", items: 52, suppliers: 3, total: "$1,905.00", status: "draft" },
 ];
 
 function HistoryView({ onOpen, archivedLists = [] }) {
@@ -6363,6 +6457,7 @@ function HistoryView({ onOpen, archivedLists = [] }) {
               <strong>{list.name}</strong>
               <small>Archived {list.date} · {list.items} items · {list.suppliers} suppliers</small>
             </span>
+            <ListStatusPill status={list.status} />
             <span className="history-total">{list.total}</span>
             <Icon name="icon-chevron-right" className="button-icon history-chev" />
           </button>
@@ -6372,17 +6467,30 @@ function HistoryView({ onOpen, archivedLists = [] }) {
   );
 }
 
-function HistoryDetail({ id, onBack, archivedLists = [] }) {
+function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename, onDuplicate, onViewHandoff }) {
   const lists = [...archivedLists, ...ARCHIVED_LISTS];
   const list = lists.find((entry) => entry.id === id) || lists[0];
   const rows = list?.rows || [];
+  // Renaming only persists for real archived entries (not the demo samples).
+  const isReal = archivedLists.some((entry) => entry.id === list.id);
+  const linkedHandoff = list.handoffId ? handoffs.find((h) => h.id === list.handoffId) : null;
   return (
     <div className="crl">
       <header className="crl-header">
         <div className="crl-title">
           <button className="history-back" type="button" onClick={onBack}><Icon name="icon-chevron-left" className="button-icon" />History</button>
-          <h2>{list.name}</h2>
-          <span className="history-archived-pill">Archived</span>
+          {isReal ? (
+            <input
+              className="history-rename-input"
+              value={list.name}
+              onChange={(event) => onRename?.(list.id, event.target.value)}
+              aria-label="List name"
+              style={{ width: `${Math.max(list.name.length, 8)}ch` }}
+            />
+          ) : (
+            <h2>{list.name}</h2>
+          )}
+          <ListStatusPill status={list.status} />
         </div>
       </header>
       <div className="history-detail-stats">
@@ -6425,11 +6533,12 @@ function HistoryDetail({ id, onBack, archivedLists = [] }) {
           })}
         </div>
       )}
-      <p className="history-detail-note">This reorder list is archived and read-only. Reopen or duplicate it to start a new reorder, or revisit the supplier handoff.</p>
+      <p className="history-detail-note">This reorder list is archived and read-only. Duplicate it to start a new reorder{linkedHandoff ? ", or revisit the supplier handoff" : ""}.</p>
       <div className="history-detail-actions">
-        <button className="primary-action compact" type="button">Reopen list</button>
-        <button className="secondary-action compact" type="button">Duplicate</button>
-        <button className="secondary-action compact" type="button">View handoff</button>
+        <button className="primary-action compact" type="button" onClick={() => onDuplicate?.(list)}><Icon name="icon-file-plus" className="button-icon" />Duplicate to new list</button>
+        {linkedHandoff && (
+          <button className="secondary-action compact" type="button" onClick={() => onViewHandoff?.(list.handoffId)}><Icon name="icon-handshake" className="button-icon" />View handoff</button>
+        )}
       </div>
     </div>
   );
