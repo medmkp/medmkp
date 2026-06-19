@@ -4,6 +4,7 @@ import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { tokenizeName } from "../../../../matching/normalize"
 import { nameSimilarity, trigrams } from "../../../../matching/search"
 import { gtinVariants } from "../../../../matching/gtin"
+import { parseHibc } from "../../../../matching/hibc"
 
 // Live product lookup for the search box (fuzzy text) and the scanner
 // (exact SKU). Reuses the offline matching engine's tokenizer so ranking stays
@@ -191,6 +192,90 @@ async function resolveHitsToProducts(
   return products
 }
 
+// Fuzzy text search over canonical products: pull DB candidates by the most
+// distinctive token, then rerank in memory so word order and small typos still
+// surface the product. Returned products are enriched with cross-supplier offers
+// and ordered offers-first, then by similarity. Shared by the search box (?q=)
+// and the scan substitute fallback.
+async function fuzzyCanonicalSearch(
+  medmkp: MedMKPModuleService,
+  q: string,
+  limit: number
+): Promise<Array<{ product: any; score: number }>> {
+  const queryTokens = tokenizeName(q)
+  const distinctive = [...queryTokens].sort((a, b) => b.length - a.length)[0] || q
+  const candidates = await medmkp.listCanonicalProducts(
+    { q: distinctive.length >= 3 ? distinctive : q },
+    { take: 600 }
+  )
+
+  const queryGrams = trigrams(queryTokens.join(" ") || q.toLowerCase())
+  const scored = candidates
+    .map((product) => ({ product, score: nameSimilarity(queryTokens, queryGrams, product.name) }))
+    .filter((entry) => entry.score >= 0.12)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit * 2)
+
+  const scoreById = new Map(scored.map((entry) => [entry.product.id, entry.score]))
+  const enriched = await enrichWithOffers(medmkp, scored.map((entry) => entry.product))
+  return enriched
+    .map((product) => ({ product, score: Math.round((scoreById.get(product.id) ?? 0) * 100) / 100 }))
+    // Products with real offers first, then by similarity.
+    .sort((a, b) =>
+      (b.product.offer_count > 0 ? 1 : 0) - (a.product.offer_count > 0 ? 1 : 0) || b.score - a.score
+    )
+    .slice(0, limit)
+}
+
+// When a scan resolves to an item we can identify but can't price (e.g. a Henry
+// Schein house-brand product ingested as identity only), suggest priced
+// substitutes: fuzzy-search the identified name and keep candidates that carry
+// offers, labeled so the UI can present them as alternatives.
+async function substitutesFor(
+  medmkp: MedMKPModuleService,
+  name: string,
+  limit: number
+): Promise<any[]> {
+  if (!name.trim()) return []
+  const results = await fuzzyCanonicalSearch(medmkp, name, limit)
+  return results
+    .filter((r) => r.product.offer_count > 0)
+    .map((r) => ({ ...r.product, match: { kind: "substitute", score: r.score } }))
+}
+
+// Shared scan response: return the matched products when they carry a price,
+// otherwise fall back to priced substitutes for the identified item.
+async function scanResponse(
+  medmkp: MedMKPModuleService,
+  query: string,
+  kind: string,
+  hits: SupplierProductHit[],
+  matchKind: "sku" | "barcode",
+  limit: number
+) {
+  const products = await resolveHitsToProducts(medmkp, hits, matchKind)
+  if (products.some((p) => (p.offer_count ?? 0) > 0)) {
+    return { query, kind, count: products.length, products: products.slice(0, limit) }
+  }
+
+  const identifiedName = products[0]?.name || hits[0]?.name || ""
+  const substitutes = await substitutesFor(medmkp, identifiedName, limit)
+  if (substitutes.length) {
+    return {
+      query,
+      kind: "substitute",
+      count: substitutes.length,
+      identified: hits[0]
+        ? { name: hits[0].name, brand: hits[0].brand, sku: hits[0].sku }
+        : null,
+      products: substitutes,
+    }
+  }
+
+  // Identified but neither priced nor substitutable: return what we have.
+  return { query, kind, count: products.length, products: products.slice(0, limit) }
+}
+
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
   const url = new URL(req.url, "http://localhost")
@@ -209,13 +294,30 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       ? dedupeById(await medmkp.listSupplierProducts({ barcode: variants }))
       : []
 
-    if (!hits.length) {
-      res.json({ query: barcode, kind: "none", count: 0, products: [] })
+    if (hits.length) {
+      res.json(await scanResponse(medmkp, barcode, "barcode", hits, "barcode", limit))
       return
     }
 
-    const products = await resolveHitsToProducts(medmkp, hits, "barcode")
-    res.json({ query: barcode, kind: "barcode", count: products.length, products: products.slice(0, limit) })
+    // HIBC fallback: many dental SKUs carry an HIBC code, not a GS1 GTIN. We hold
+    // no HIBC data, but a manufacturer's product/catalog number (PCN) is its
+    // catalog number — so resolve the PCN through the same SKU index as the SKU
+    // scan path (e.g. Pulpdent "ER24" → manufacturer_sku ER24).
+    const hibc = parseHibc(barcode)
+    if (hibc) {
+      const codeVariants = [...new Set([hibc.pcn, hibc.pcn.toUpperCase()])]
+      const [bySku, byMfrSku] = await Promise.all([
+        medmkp.listSupplierProducts({ sku: codeVariants }),
+        medmkp.listSupplierProducts({ manufacturer_sku: codeVariants }),
+      ])
+      const hibcHits = dedupeById([...bySku, ...byMfrSku])
+      if (hibcHits.length) {
+        res.json(await scanResponse(medmkp, barcode, "hibc", hibcHits, "sku", limit))
+        return
+      }
+    }
+
+    res.json({ query: barcode, kind: "none", count: 0, products: [] })
     return
   }
 
@@ -233,8 +335,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       return
     }
 
-    const products = await resolveHitsToProducts(medmkp, hits, "sku")
-    res.json({ query: code, kind: "sku", count: products.length, products: products.slice(0, limit) })
+    res.json(await scanResponse(medmkp, code, "sku", hits, "sku", limit))
     return
   }
 
@@ -243,32 +344,8 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
-  // Fuzzy text path: pull DB candidates by the most distinctive token, then
-  // rerank in memory so word order and small typos still surface the product.
-  const queryTokens = tokenizeName(q)
-  const distinctive = [...queryTokens].sort((a, b) => b.length - a.length)[0] || q
-  const candidates = await medmkp.listCanonicalProducts(
-    { q: distinctive.length >= 3 ? distinctive : q },
-    { take: 600 }
-  )
-
-  const queryGrams = trigrams(queryTokens.join(" ") || q.toLowerCase())
-  const scored = candidates
-    .map((product) => ({ product, score: nameSimilarity(queryTokens, queryGrams, product.name) }))
-    .filter((entry) => entry.score >= 0.12)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit * 2)
-
-  const scoreById = new Map(scored.map((entry) => [entry.product.id, entry.score]))
-  const enriched = await enrichWithOffers(medmkp, scored.map((entry) => entry.product))
-  const products = enriched
-    .map((product) => ({
-      ...product,
-      match: { kind: "fuzzy", score: Math.round((scoreById.get(product.id) ?? 0) * 100) / 100 },
-    }))
-    // Products with real offers first, then by similarity.
-    .sort((a, b) => (b.offer_count > 0 ? 1 : 0) - (a.offer_count > 0 ? 1 : 0) || b.match.score - a.match.score)
-    .slice(0, limit)
-
+  // Fuzzy text path for the search box.
+  const results = await fuzzyCanonicalSearch(medmkp, q, limit)
+  const products = results.map((r) => ({ ...r.product, match: { kind: "fuzzy", score: r.score } }))
   res.json({ query: q, kind: "fuzzy", count: products.length, products })
 }
