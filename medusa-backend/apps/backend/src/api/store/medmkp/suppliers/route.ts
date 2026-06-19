@@ -3,24 +3,49 @@ import { getPostgresPool } from "../../../../utils/postgres"
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 
-type SupplierRow = { id: string; name: string; product_count: string }
+type SupplierRow = {
+  id: string
+  name: string
+  product_count: string
+  free_shipping_threshold_cents: number | null
+  flat_shipping_cents: number | null
+  shipping_policy_notes: string | null
+}
 
-let cache: { loadedAt: number; suppliers: { id: string; name: string; product_count: number }[] } | null = null
+type Supplier = {
+  id: string
+  name: string
+  product_count: number
+  free_shipping_threshold_cents: number | null
+  flat_shipping_cents: number | null
+  shipping_policy_notes: string | null
+}
+
+let cache: { loadedAt: number; suppliers: Supplier[] } | null = null
 
 // Distinct ingested suppliers that have at least one active product. Drives the
-// preferred-supplier picker in the buyer's default buying preferences.
-async function loadSuppliers() {
+// preferred-supplier picker in the buyer's default buying preferences and the
+// per-supplier shipping policy used to estimate landed cost on the reorder list.
+async function loadSuppliers(): Promise<Supplier[]> {
   const pool = getPostgresPool()
   const result = await pool.query<SupplierRow>(
-    `SELECT s.id, s.name, count(p.id) AS product_count
+    `SELECT s.id, s.name, count(p.id) AS product_count,
+            s.free_shipping_threshold_cents, s.flat_shipping_cents, s.shipping_policy_notes
      FROM medmkp_supplier s
      JOIN medmkp_supplier_product p ON p.supplier_id = s.id AND p.deleted_at IS NULL
      WHERE s.deleted_at IS NULL
-     GROUP BY s.id, s.name
+     GROUP BY s.id, s.name, s.free_shipping_threshold_cents, s.flat_shipping_cents, s.shipping_policy_notes
      HAVING count(p.id) > 0
      ORDER BY s.name ASC`
   )
-  return result.rows.map((row) => ({ id: row.id, name: row.name, product_count: Number(row.product_count) }))
+  return result.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    product_count: Number(row.product_count),
+    free_shipping_threshold_cents: row.free_shipping_threshold_cents,
+    flat_shipping_cents: row.flat_shipping_cents,
+    shipping_policy_notes: row.shipping_policy_notes,
+  }))
 }
 
 export async function GET(_req: MedusaRequest, res: MedusaResponse) {

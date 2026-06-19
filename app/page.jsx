@@ -1395,6 +1395,9 @@ export default function Home() {
   const [buyingPrefs, setBuyingPrefs] = useState(DEFAULT_BUYING_PREFS);
   const [defaultBuyingPrefs, setDefaultBuyingPrefs] = useState(DEFAULT_BUYING_PREFS);
   const [supplierOptions, setSupplierOptions] = useState([]);
+  // Per-supplier shipping policy keyed by normalized supplier name, used to
+  // estimate landed cost on the reorder list. Empty until /api/suppliers loads.
+  const [supplierShipping, setSupplierShipping] = useState({});
   const [stateLoaded, setStateLoaded] = useState(false);
   const [serverReady, setServerReady] = useState(false);
   const serverLoadStartedRef = useRef(false);
@@ -1510,12 +1513,20 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateLoaded, draftItems, uploadedDocs, archivedLists, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
 
-  // Supplier names for the preferred-supplier picker in default preferences.
+  // Supplier names for the preferred-supplier picker, plus each supplier's
+  // shipping policy for landed-cost estimates on the reorder list.
   useEffect(() => {
     fetch("/api/suppliers")
       .then((response) => response.json())
-      .then(({ suppliers }) => setSupplierOptions((suppliers || []).map((supplier) => supplier.name)))
-      .catch(() => setSupplierOptions([]));
+      .then(({ suppliers }) => {
+        const list = suppliers || [];
+        setSupplierOptions(list.map((supplier) => supplier.name));
+        setSupplierShipping(buildShippingByName(list));
+      })
+      .catch(() => {
+        setSupplierOptions([]);
+        setSupplierShipping({});
+      });
   }, []);
 
   useEffect(() => {
@@ -1976,16 +1987,17 @@ export default function Home() {
       return;
     }
     const rows = deriveMatchRows(activeDraftItems, buyingPrefs);
-    const suppliers = new Set(rows.map((row) => row.supplier).filter((name) => name && name !== "—"));
-    const total = rows.reduce((sum, row) => sum + (row.lineTotal || 0), 0);
+    // Snapshot the landed total (items + estimated shipping) so History matches
+    // the Plan Preview the buyer saw when archiving.
+    const totals = computePlanTotals(rows, supplierShipping);
     const now = new Date();
     const entry = {
       id: `list_${now.getTime()}`,
       name: `${now.toLocaleString("en-US", { month: "long" })} Reorder List`,
       date: now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       items: rows.length,
-      suppliers: suppliers.size,
-      total: money.format(total),
+      suppliers: totals.suppliers,
+      total: money.format(totals.landedTotal),
       rows,
     };
     setArchivedLists((lists) => [entry, ...lists]);
@@ -2198,6 +2210,7 @@ export default function Home() {
                 onToast={showToast}
                 listTouched={listTouched}
                 buyingPrefs={buyingPrefs}
+                supplierShipping={supplierShipping}
                 onBuyingPrefs={setBuyingPrefs}
                 onArchiveList={archiveCurrentList}
                 onClearList={clearCurrentList}
@@ -3767,6 +3780,86 @@ function pickBestOffer(offers, prefs, item) {
   return [...pool].sort((a, b) => cost(a) - cost(b))[0];
 }
 
+// Normalize a supplier name so reorder-list rows (which carry the display name)
+// can be matched to the shipping policy loaded from /api/suppliers.
+function normSupplierName(name) {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+// Build a { normalizedName -> policy } map from the /api/suppliers payload.
+// Cents are converted to dollars to match the reorder list's row math.
+function buildShippingByName(suppliers) {
+  const map = {};
+  for (const supplier of suppliers || []) {
+    const key = normSupplierName(supplier.name);
+    if (!key) continue;
+    map[key] = {
+      name: supplier.name,
+      freeThreshold: supplier.free_shipping_threshold_cents != null ? supplier.free_shipping_threshold_cents / 100 : null,
+      flat: supplier.flat_shipping_cents != null ? supplier.flat_shipping_cents / 100 : null,
+    };
+  }
+  return map;
+}
+
+// Shipping for one supplier's basket given its item subtotal. Returns null when
+// the policy can't price this basket, so the UI says "not estimated" rather than
+// implying free shipping.
+function computeSupplierShipping(policy, subtotal) {
+  if (!policy) return null;
+  const { freeThreshold, flat } = policy;
+  if (freeThreshold != null && subtotal >= freeThreshold) return 0;
+  if (flat != null) return flat;
+  return null;
+}
+
+// Landed-cost totals for the plan: item subtotal, shipping estimated per
+// supplier basket (free-over-threshold kicks in at the basket level), and the
+// combined landed total. Also returns the single most actionable free-shipping
+// nudge — the supplier closest to clearing its free threshold.
+function computePlanTotals(rows, shippingByName) {
+  const groups = new Map();
+  for (const row of rows || []) {
+    if (!row || row.supplier === "—" || row.lineTotal == null) continue;
+    const key = normSupplierName(row.supplier);
+    const group = groups.get(key) || { name: row.supplier, subtotal: 0 };
+    group.subtotal += row.lineTotal;
+    groups.set(key, group);
+  }
+
+  let itemsSubtotal = 0;
+  let shippingTotal = 0;
+  let knownCount = 0;
+  let nudge = null;
+  for (const [key, group] of groups) {
+    itemsSubtotal += group.subtotal;
+    const policy = shippingByName?.[key] || null;
+    const shipping = computeSupplierShipping(policy, group.subtotal);
+    if (shipping == null) continue;
+    shippingTotal += shipping;
+    knownCount += 1;
+    // Keep the closest reachable free-shipping threshold as the nudge.
+    if (shipping > 0 && policy?.freeThreshold != null) {
+      const remaining = policy.freeThreshold - group.subtotal;
+      if (remaining > 0 && (!nudge || remaining < nudge.remaining)) {
+        nudge = { supplier: group.name, remaining, saves: shipping };
+      }
+    }
+  }
+
+  const suppliers = groups.size;
+  return {
+    itemsSubtotal,
+    shippingTotal,
+    landedTotal: itemsSubtotal + shippingTotal,
+    suppliers,
+    hasShippingData: knownCount > 0,
+    // Every supplier with items has a known policy → the estimate is complete.
+    shippingComplete: suppliers > 0 && knownCount === suppliers,
+    nudge,
+  };
+}
+
 function deriveMatchRows(items, prefs) {
   return (items || []).map((item, index) => {
     const conf = Math.round((item.confidence ?? item.recommendation?.confidence ?? 0) * 100);
@@ -4647,6 +4740,7 @@ function CurrentReorderList({
   listTouched,
   allowSample = false,
   buyingPrefs,
+  supplierShipping = {},
   onBuyingPrefs,
   onArchiveList,
   onClearList,
@@ -4700,11 +4794,10 @@ function CurrentReorderList({
   }, [items]);
 
   const planSummary = useMemo(() => {
-    const total = rows.reduce((sum, row) => sum + (row.lineTotal || 0), 0);
-    const suppliers = new Set(rows.map((row) => row.supplier).filter((name) => name && name !== "—"));
+    const totals = computePlanTotals(rows, supplierShipping);
     const coverage = rows.length ? Math.round((stats.matched / rows.length) * 100) : 0;
-    return { total, suppliers: suppliers.size, coverage };
-  }, [rows, stats]);
+    return { ...totals, coverage };
+  }, [rows, stats, supplierShipping]);
 
   const tabFilter = {
     all: () => true,
@@ -5058,12 +5151,28 @@ function CurrentReorderList({
           <section className="crl-card">
             <h3>Plan Preview</h3>
             {usingReal ? (
-              <div className="crl-plan">
-                <div><span>Estimated total</span><strong>{money.format(planSummary.total)}</strong></div>
-                <div><span>Suppliers</span><strong>{planSummary.suppliers}</strong></div>
-                <div><span>Coverage</span><strong>{planSummary.coverage}%</strong></div>
-                <div><span>Items</span><strong>{totalItems}</strong></div>
-              </div>
+              <>
+                <div className="crl-plan">
+                  <div><span>Items subtotal</span><strong>{money.format(planSummary.itemsSubtotal)}</strong></div>
+                  <div>
+                    <span>Est. shipping</span>
+                    <strong>
+                      {planSummary.hasShippingData
+                        ? `${planSummary.shippingComplete ? "" : "~"}${money.format(planSummary.shippingTotal)}`
+                        : "Not estimated"}
+                    </strong>
+                  </div>
+                  <div><span>Landed total</span><strong>{money.format(planSummary.landedTotal)}</strong></div>
+                  <div><span>Suppliers</span><strong>{planSummary.suppliers}</strong></div>
+                  <div><span>Coverage</span><strong>{planSummary.coverage}%</strong></div>
+                </div>
+                {planSummary.nudge && (
+                  <p className="crl-ship-nudge">
+                    Add {money.format(planSummary.nudge.remaining)} from {planSummary.nudge.supplier} to unlock free shipping
+                    {planSummary.nudge.saves ? ` (saves ${money.format(planSummary.nudge.saves)})` : ""}.
+                  </p>
+                )}
+              </>
             ) : (
               <div className="crl-plan">
                 <div><span>Estimated total</span><strong>$5,842.16</strong></div>

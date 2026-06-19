@@ -27,6 +27,7 @@
     "supplier:ingest:db": "medusa exec ./src/scripts/ingest-supplier-catalogs.ts --",
     "marketplace:ingest": "medusa exec ./src/scripts/ingest-marketplace-catalog.ts --",
     "henryschein:ingest": "medusa exec ./src/scripts/ingest-henryschein-catalog.ts --",
+    "supplier:estimate-shipping": "medusa exec ./src/scripts/estimate-supplier-shipping.ts --",
     "marketplace:status": "medusa exec ./src/scripts/marketplace-catalog-status.ts --",
     "pack:backfill": "medusa exec ./src/scripts/backfill-pack-normalization.ts --",
     "catalog:dedupe": "medusa exec ./src/scripts/dedupe-supplier-products.ts --",
