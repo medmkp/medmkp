@@ -9753,6 +9753,12 @@ th {
   margin: 0 12px 11px; padding: 8px 12px;
   background: #fdeaea; border-radius: 8px;
 }
+.crl-cand-stock {
+  align-self: flex-start; margin-top: 3px;
+  font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px; white-space: nowrap;
+}
+.crl-cand-stock.stock-bad { background: #fdeaea; color: var(--red); }
+.crl-cand-stock.stock-warn { background: #fcf0db; color: var(--gold); }
 .pp-switch-msg { display: inline-flex; align-items: center; gap: 6px; color: var(--red); font-size: 12px; font-weight: 600; }
 .pp-switch-msg .button-icon { width: 14px; height: 14px; }
 .pp-switch-msg.pp-switch-none { color: var(--muted); }

@@ -1679,11 +1679,11 @@ export default function Home() {
     }
   }, []);
 
-  // On plan entry, confirm only selected Shopify-looking offers. Successful and
-  // failed attempts are cached for the tab session so revisiting the plan does
-  // not repeatedly hit supplier storefronts.
+  // On the reorder list or plan, confirm only selected Shopify-looking offers.
+  // Successful and failed attempts are cached for the tab session so revisiting
+  // either view does not repeatedly hit supplier storefronts.
   useEffect(() => {
-    if (view !== "plan") return undefined;
+    if (view !== "plan" && view !== "home") return undefined;
 
     if (!liveStockHydratedRef.current) {
       liveStockHydratedRef.current = true;
@@ -2401,7 +2401,7 @@ export default function Home() {
               />
             ) : (
               <CurrentReorderList
-                items={activeDraftItems}
+                items={activePlanItems}
                 listName={listName}
                 listStatus={liveListStatus}
                 onRenameList={setListName}
@@ -4243,6 +4243,16 @@ function pickBestOffer(offers, prefs, item) {
       preferred.some((name) => (offer.supplier || "").toLowerCase().includes(name.toLowerCase())));
     if (inPref.length) pool = inPref;
   }
+  // Never recommend an out-of-stock offer when an orderable one exists. Prefer
+  // in-stock within the chosen pool; if the whole pool is out of stock, fall
+  // back to any in-stock offer before settling for an unorderable one. When
+  // nothing is orderable, the cheapest still wins (and surfaces the OOS badge).
+  const orderable = pool.filter(isOrderable);
+  if (orderable.length) pool = orderable;
+  else {
+    const anyOrderable = offers.filter(isOrderable);
+    if (anyOrderable.length) pool = anyOrderable;
+  }
   const cost = (offer) => offer.perUnit ?? offer.comparablePrice ?? offer.price ?? Infinity;
   if (prefs?.strategy === "brand-match") {
     const want = (item?.oldVendor || "").toLowerCase();
@@ -4703,6 +4713,21 @@ function CandidateSub({ supplier, sub }) {
   );
 }
 
+// Per-offer stock chip for the candidate list, so the buyer can see which
+// suppliers are out of (or low on) stock when choosing the match.
+function CandidateStock({ availability, liveAvailable }) {
+  const badge = availabilityBadge(availability, liveAvailable);
+  if (!badge) return null;
+  return (
+    <span
+      className={`crl-cand-stock stock-${badge.tone}`}
+      title={typeof liveAvailable === "boolean" ? "Live stock checked this session" : "Stock as of last catalog sync — verify before ordering"}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 // Build the selectable candidate list for an item's verify drawer from its real
 // supplier offers. "recommended" flags our preference-based pick (a fixed badge
 // that never moves); the radio/active state tracks what the buyer has selected.
@@ -4717,10 +4742,12 @@ function offerCandidates(row) {
     perEa: offer.perUnit ?? null,
     image: offer.imageUrl || "",
     recommended: offer.key === row.recommendedOfferKey,
+    availability: offer.availability,
+    liveAvailable: offer.liveAvailable,
   }));
   if (fromOffers.length) return fromOffers;
   if (row.matchName) {
-    return [{ key: row.selectedOfferKey || null, name: row.matchName, supplier: row.supplier, sub: row.matchSub, price: row.price, perEa: row.perEa, image: row.image, recommended: true }];
+    return [{ key: row.selectedOfferKey || null, name: row.matchName, supplier: row.supplier, sub: row.matchSub, price: row.price, perEa: row.perEa, image: row.image, recommended: true, availability: row.availability, liveAvailable: row.liveAvailable }];
   }
   return [];
 }
@@ -4928,6 +4955,7 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
                   <span className="crl-cand-info">
                     <strong>{candidate.name}</strong>
                     <CandidateSub supplier={candidate.supplier} sub={candidate.sub} />
+                    <CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} />
                   </span>
                   <span className="crl-cand-right">
                     <strong>{candidate.price != null ? mrMoney(candidate.price) : "—"}</strong>
@@ -5186,9 +5214,11 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
     image: offer.imageUrl || "",
     recommended: offer.key === row.recommendedOfferKey,
     confidence: offer.key === row.recommendedOfferKey ? row.confidence : Math.max((row.confidence ?? 50) - 10, 40),
+    availability: offer.availability,
+    liveAvailable: offer.liveAvailable,
   }));
   if (!isResolve && !candidates.length && row.matchName) {
-    candidates.push({ key: row.selectedOfferKey || null, name: row.matchName, supplier: row.supplier, sub: row.matchSub, price: row.price, perEa: row.perEa, image: row.image, recommended: true, confidence: row.confidence });
+    candidates.push({ key: row.selectedOfferKey || null, name: row.matchName, supplier: row.supplier, sub: row.matchSub, price: row.price, perEa: row.perEa, image: row.image, recommended: true, confidence: row.confidence, availability: row.availability, liveAvailable: row.liveAvailable });
   }
   const recIdx = candidates.findIndex((candidate) => candidate.recommended);
   if (recIdx > 0) candidates.unshift(...candidates.splice(recIdx, 1));
@@ -5290,7 +5320,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
               <label className={`m-match best ${selected === 0 ? "active" : ""}`}>
                 <input type="radio" name="m-cand" checked={selected === 0} onChange={() => setSelected(0)} />
                 <ProductThumb image={candidates[0].image} alt={candidates[0].name} />
-                <span className="m-match-info"><strong>{candidates[0].name}</strong><CandidateSub supplier={candidates[0].supplier} sub={candidates[0].sub} /></span>
+                <span className="m-match-info"><strong>{candidates[0].name}</strong><CandidateSub supplier={candidates[0].supplier} sub={candidates[0].sub} /><CandidateStock availability={candidates[0].availability} liveAvailable={candidates[0].liveAvailable} /></span>
                 <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrMoney(candidates[0].price)}</strong>{candidates[0].perEa != null && <small>${mrEa(candidates[0].perEa)} / ea</small>}</span>
               </label>
             </section>
@@ -5300,7 +5330,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
                 {candidates.slice(1).map((candidate, index) => (
                   <label className={`m-match ${selected === index + 1 ? "active" : ""}`} key={candidate.key ?? index + 1}>
                     <input type="radio" name="m-cand" checked={selected === index + 1} onChange={() => setSelected(index + 1)} />
-                    <span className="m-match-info"><strong>{candidate.name}</strong><CandidateSub supplier={candidate.supplier} sub={candidate.sub} /></span>
+                    <span className="m-match-info"><strong>{candidate.name}</strong><CandidateSub supplier={candidate.supplier} sub={candidate.sub} /><CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} /></span>
                     <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrMoney(candidate.price)}</strong>{candidate.perEa != null && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
                   </label>
                 ))}
