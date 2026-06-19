@@ -2479,6 +2479,26 @@ function catMoney(cents) {
   return typeof cents === "number" && !Number.isNaN(cents) ? money.format(cents / 100) : "Price pending";
 }
 
+// Category card/row price: lead with the comparable per-unit price (the real
+// best deal across pack sizes) and show the pack price + size beneath; fall back
+// to the pack price when the best offer has no per-unit price.
+function CatBestPrice({ best, showBadge }) {
+  const perUnit = best && best.unit_comparable && best.unit_price_cents != null ? best.unit_price_cents : null;
+  return (
+    <div className="cat-pt-price">
+      {perUnit != null ? (
+        <strong>{catMoney(perUnit)}<span className="cat-pt-per"> / {best.base_unit || "ea"}</span></strong>
+      ) : (
+        <strong>{best ? catMoney(best.price_cents) : "—"}</strong>
+      )}
+      {perUnit != null && (
+        <span className="cat-pt-pack">{catMoney(best.price_cents)}{best.pack_size ? ` · ${best.pack_size}` : ""}</span>
+      )}
+      {showBadge && <span className="cat-pt-badge">Best price</span>}
+    </div>
+  );
+}
+
 function supplierInitials(name) {
   return (name || "?")
     .replace(/[^a-zA-Z0-9 ]/g, "")
@@ -2796,9 +2816,7 @@ function CatalogSearchView({ query, onNavigate }) {
                       <em>{best?.sku || "—"}</em>
                     </td>
                     <td>
-                      <div className="cat-pt-price">
-                        <strong>{best ? catMoney(best.price_cents) : "—"}</strong>
-                      </div>
+                      <CatBestPrice best={best} showBadge={false} />
                     </td>
                     <td className="cat-pt-num">{product.offer_count}</td>
                     <td className="cat-pt-act">
@@ -3060,10 +3078,7 @@ function CatalogCategoryView({ slug, onNavigate }) {
                           {category.name} <Icon name="icon-chevron-right" className="cat-pt-pathsep" /> {product.category}
                         </span>
                         <div className="cat-pcard-foot">
-                          <div className="cat-pt-price">
-                            <strong>{best ? catMoney(best.price_cents) : "—"}</strong>
-                            {index === 0 && !sub && <span className="cat-pt-badge">Best price</span>}
-                          </div>
+                          <CatBestPrice best={best} showBadge={index === 0 && !sub} />
                           <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
                         </div>
                         <button type="button" className="cat-pt-view" onClick={open}>
@@ -3118,10 +3133,7 @@ function CatalogCategoryView({ slug, onNavigate }) {
                           <em>{best?.sku || "—"}</em>
                         </td>
                         <td>
-                          <div className="cat-pt-price">
-                            <strong>{best ? catMoney(best.price_cents) : "—"}</strong>
-                            {index === 0 && !sub && <span className="cat-pt-badge">Best price</span>}
-                          </div>
+                          <CatBestPrice best={best} showBadge={index === 0 && !sub} />
                         </td>
                         <td className="cat-pt-num">{product.offer_count}</td>
                         <td className="cat-pt-act">

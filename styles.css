@@ -9365,6 +9365,8 @@ th {
 
 .cat-pt-price { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .cat-pt-price strong { font-size: 14px; font-weight: 750; }
+.cat-pt-per { font-size: 11px; font-weight: 600; color: var(--muted); }
+.cat-pt-pack { font-size: 11px; color: var(--muted); }
 .cat-pt-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: #e5f6ec; color: #0a9861; font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; }
 
 .cat-pt-view { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 7px 12px; font-size: 12.5px; font-weight: 650; color: var(--blue); }
