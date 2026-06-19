@@ -40,7 +40,7 @@ const routeByView = {
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
   home: "/app",
-  plan: "/app/plan",
+  plan: "/app/review",
   catalog: "/app/catalog",
   history: "/app/history",
   settings: "/app/settings",
@@ -65,8 +65,9 @@ function viewFromPath(pathname = "/") {
   // Authenticated app
   if (path === "/app") return { view: "home", isLoggedIn: true };
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
-  if (path === "/app/plan") return { view: "plan", isLoggedIn: true };
-  if (path === "/app/plan/handoff") return { view: "handoff", isLoggedIn: true, handoffId: query.get("ho") || "" };
+  // /app/plan is the former name — kept so old links/bookmarks still resolve.
+  if (path === "/app/review/handoff" || path === "/app/plan/handoff") return { view: "handoff", isLoggedIn: true, handoffId: query.get("ho") || "" };
+  if (path === "/app/review" || path === "/app/plan") return { view: "plan", isLoggedIn: true };
   if (path === "/app/history") return { view: "history", isLoggedIn: true };
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
   if (path === "/app/catalog") return { view: "catalog", isLoggedIn: true };
@@ -320,6 +321,12 @@ function IconSprite() {
         <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
         <path d="M10 17l-5-5 5-5" />
         <path d="M15 12H5" />
+      </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5" />
+        <path d="M4 4v4.5h4.5" />
+        <path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5" />
+        <path d="M20 20v-4.5h-4.5" />
       </symbol>
     </svg>
   );
@@ -1397,6 +1404,11 @@ export default function Home() {
   // Id of the handoff prepared for the live list, or null. Drives the live
   // list's "Handed off" status and links the archive entry to its handoff.
   const [currentHandoffId, setCurrentHandoffId] = useState(null);
+  // Whether the buyer has deliberately advanced the list from "draft" to
+  // "review" (the Review & optimize gate). The pill state is still *derived* —
+  // this only "sticks" while every item is reviewed (see deriveListStatus + the
+  // auto-revert effect below), so the pill can never overstate the list.
+  const [listStage, setListStage] = useState("draft");
   const [cartGroup, setCartGroup] = useState(null);
   const [liveStockByUrl, setLiveStockByUrl] = useState({});
   const liveStockCacheRef = useRef(new Map());
@@ -1428,6 +1440,7 @@ export default function Home() {
     setArchivedLists(saved.archivedLists || []);
     setHandoffs(saved.handoffs || []);
     setCurrentHandoffId(saved.currentHandoffId || null);
+    setListStage(saved.listStage === "review" ? "review" : "draft");
     setListTouched(Boolean(saved.listTouched));
     if (saved.listName) setListName(saved.listName);
     setDefaultBuyingPrefs(savedDefaults);
@@ -1504,7 +1517,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!stateLoaded) return;
-    const blob = { draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listTouched, listName, buyingPrefs, defaultBuyingPrefs };
+    const blob = { draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listStage, listTouched, listName, buyingPrefs, defaultBuyingPrefs };
     try {
       window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(blob));
     } catch {
@@ -1525,7 +1538,7 @@ export default function Home() {
       }, 800);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
+  }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listStage, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
 
   // Supplier names for the preferred-supplier picker, plus each supplier's
   // shipping policy for landed-cost estimates on the reorder list.
@@ -1755,12 +1768,20 @@ export default function Home() {
     return { items: rows.length, suppliers: suppliers.size, spend };
   }, [activeDraftItems, buyingPrefs]);
 
-  // Lifecycle status of the live list (Draft → Verified → Handed off) for the
-  // Home header pill, derived the same way archives compute their final status.
+  // Lifecycle status of the live list (Draft → Review & optimize → Handed off)
+  // for the Home header pill, derived the same way archives compute their final
+  // status. listStage only promotes the pill to "review" while every item is
+  // reviewed — the derivation, not the stored flag, is the source of truth.
   const liveListStatus = useMemo(
-    () => deriveListStatus(deriveMatchRows(activeDraftItems, buyingPrefs), Boolean(currentHandoffId)),
-    [activeDraftItems, buyingPrefs, currentHandoffId]
+    () => deriveListStatus(deriveMatchRows(activeDraftItems, buyingPrefs), Boolean(currentHandoffId), listStage),
+    [activeDraftItems, buyingPrefs, currentHandoffId, listStage]
   );
+
+  // Auto-revert to "draft" if the list empties out while in "review" (e.g. every
+  // item removed), so a freshly-repopulated list starts as a Draft again.
+  useEffect(() => {
+    if (listStage === "review" && activeDraftItems.length === 0) setListStage("draft");
+  }, [activeDraftItems, listStage]);
 
   // Who's signed in, for the topbar / profile / upload metadata. Falls back to
   // neutral labels until /api/auth/me resolves (or if a field is missing).
@@ -2066,6 +2087,20 @@ export default function Home() {
     setDraftItems((items) => items.map((item) => (item.id === id ? { ...item, included: false } : item)));
   }
 
+  // Pull the practice's latest list from the server on demand — lets a buyer at
+  // their desk see items just scanned on a phone (the list is last-write-wins
+  // synced, so a manual refresh is the safe way to merge in cross-device work).
+  async function refreshFromServer() {
+    if (authed !== true) return;
+    try {
+      const response = await fetch("/api/reorder-list", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (data && data.state) hydrateFromState(data.state);
+    } catch {
+      // offline / server down — keep current state
+    }
+  }
+
   // Persist a buyer's per-item verification decision: chosen offer, quantity,
   // note, and whether it's confirmed. Patch keys are optional.
   function applyMatchDecision(itemId, patch = {}) {
@@ -2156,7 +2191,7 @@ export default function Home() {
       suppliers: totals.suppliers,
       total: money.format(totals.landedTotal),
       // Final lifecycle status + the handoff it was tied to, for the History pill.
-      status: deriveListStatus(rows, Boolean(currentHandoffId)),
+      status: deriveListStatus(rows, Boolean(currentHandoffId), listStage),
       handoffId: currentHandoffId,
       rows,
       // Raw inputs so Duplicate can rebuild a working, visible list (items are
@@ -2170,6 +2205,7 @@ export default function Home() {
     setLastUpload(null);
     setHasUploadedInvoice(false);
     setCurrentHandoffId(null);
+    setListStage("draft");
     setBuyingPrefs(defaultBuyingPrefs);
     showToast("List archived to History");
   }
@@ -2184,8 +2220,21 @@ export default function Home() {
     setLastUpload(null);
     setHasUploadedInvoice(false);
     setCurrentHandoffId(null);
+    setListStage("draft");
     setBuyingPrefs(defaultBuyingPrefs);
     showToast("List cleared");
+  }
+
+  // Explicit reverse transition: Review & optimize → Draft (the "Keep editing"
+  // affordance). Handoff is intentionally not reversible — see prepareHandoff.
+  function backToDraft() {
+    setListStage("draft");
+  }
+
+  // Advance the gate: Draft → Review & optimize. Only meaningful when the list
+  // is fully reviewed; the derivation enforces that the pill agrees.
+  function advanceToReview() {
+    setListStage("review");
   }
 
   // Freeze the current plan into a read-only supplier handoff. Captures the
@@ -2217,7 +2266,7 @@ export default function Home() {
     setHandoffs((list) => [snapshot, ...list]);
     setCurrentHandoffId(snapshot.id);
     showToast("Supplier handoff prepared");
-    navigate(`/app/plan/handoff?ho=${snapshot.id}`);
+    navigate(`/app/review/handoff?ho=${snapshot.id}`);
   }
 
   // Archive the live list and return to a fresh Home — the frozen handoff lives
@@ -2247,6 +2296,7 @@ export default function Home() {
     setUploadedDocs(entry.sourceDocs || []);
     setListName(`${entry.name} (copy)`);
     setCurrentHandoffId(null);
+    setListStage("draft");
     setListTouched(true);
     setLastUpload(null);
     setHasUploadedInvoice(false);
@@ -2414,6 +2464,8 @@ export default function Home() {
                 items={activePlanItems}
                 listName={listName}
                 listStatus={liveListStatus}
+                listStage={listStage}
+                onAdvanceStage={advanceToReview}
                 onRenameList={setListName}
                 buyerName={buyerName}
                 practiceName={practiceName}
@@ -2457,6 +2509,7 @@ export default function Home() {
                 onLinkProduct={linkProductToItem}
                 onRemoveItem={removeDraftItem}
                 onVerifyItems={verifyItems}
+                onRefresh={refreshFromServer}
                 onNavigate={navigate}
               />
             )
@@ -2466,6 +2519,8 @@ export default function Home() {
             <ProcurementPlanView
               items={activePlanItems}
               listName={listName}
+              listStatus={liveListStatus}
+              onBackToDraft={() => { backToDraft(); navigate("/app"); }}
               buyingPrefs={buyingPrefs}
               onBuyingPrefs={setBuyingPrefs}
               onPrepareHandoff={prepareHandoff}
@@ -2496,7 +2551,7 @@ export default function Home() {
               onBack={() => navigate("/app/history")}
               onRename={renameArchivedList}
               onDuplicate={duplicateList}
-              onViewHandoff={(hid) => navigate(`/app/plan/handoff?ho=${hid}`)}
+              onViewHandoff={(hid) => navigate(`/app/review/handoff?ho=${hid}`)}
             />
           )}
 
@@ -4553,15 +4608,14 @@ function deriveMatchRows(items, prefs) {
 }
 
 // Derive a reorder list's lifecycle status from its rows + whether a supplier
-// handoff has been prepared for it. Draft → Verified (every item reviewed) →
-// Handed off (a handoff snapshot exists). Used for the live list and archives.
-function deriveListStatus(rows, hasHandoff) {
+// handoff has been prepared for it. Draft → Review & optimize (buyer advanced
+// the list — allowed at any point; unresolved items are simply excluded) →
+// Handed off (a handoff snapshot exists). An empty list is always "draft". Used
+// for the live list and archives.
+function deriveListStatus(rows, hasHandoff, stage = "draft") {
   if (hasHandoff) return "handoff";
   if (!rows.length) return "draft";
-  const needsWork = rows.some(
-    (r) => (r.status === "Review" && !r.verified) || r.status === "Not found"
-  );
-  return needsWork ? "draft" : "verified";
+  return stage === "review" ? "review" : "draft";
 }
 
 function mrComputeStats(rows) {
@@ -4673,6 +4727,8 @@ const CRL_STATUS = {
 // List-level lifecycle pill, keyed by deriveListStatus() output.
 const LIST_STATUS = {
   draft: { label: "Draft", cls: "draft" },
+  review: { label: "Review & optimize", cls: "review" },
+  // Retained for archives saved under the old auto-derived "Verified" state.
   verified: { label: "Verified", cls: "verified" },
   handoff: { label: "Handed off", cls: "handoff" },
 };
@@ -4914,6 +4970,13 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
     onClose();
   }
 
+  // Step the quantity and persist it live so the table row stays in sync without
+  // waiting for the "Update Match" confirm.
+  function setStepQty(next) {
+    setQty(next);
+    if (row.itemId) onConfirmMatch?.(row.itemId, { qty: next });
+  }
+
   return (
     <aside className="crl-detail" role="region" aria-label={title}>
       <header className="crl-drawer-head">
@@ -4950,9 +5013,9 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
               <small>{row.importedName}</small>
               <div className="crl-qty-step">
                 <span>Qty:</span>
-                <button type="button" aria-label="Decrease quantity" onClick={() => setQty((value) => Math.max(1, value - 1))}>−</button>
+                <button type="button" aria-label="Decrease quantity" onClick={() => setStepQty(Math.max(1, qty - 1))}>−</button>
                 <em>{qty} {row.uom}</em>
-                <button type="button" aria-label="Increase quantity" onClick={() => setQty((value) => value + 1)}>+</button>
+                <button type="button" aria-label="Increase quantity" onClick={() => setStepQty(qty + 1)}>+</button>
               </div>
               <div className="crl-imported-status">Status: <span className={`crl-status ${status.cls}`}><Icon name={status.icon} className="button-icon" />{status.label}</span></div>
             </div>
@@ -5222,8 +5285,8 @@ function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenR
 
       {stats.matched + stats.review > 0 && (
         <div className="m-plan-cta">
-          <button type="button" className="primary-action" onClick={() => onNavigate?.("/app/plan")}>
-            <Icon name="icon-handshake" className="button-icon" />View procurement plan
+          <button type="button" className="primary-action" onClick={() => onNavigate?.("/app/review")}>
+            <Icon name="icon-handshake" className="button-icon" />Review &amp; optimize
           </button>
         </div>
       )}
@@ -5529,6 +5592,8 @@ function CurrentReorderList({
   items,
   listName = "June Restock",
   listStatus = "draft",
+  listStage = "draft",
+  onAdvanceStage,
   onRenameList,
   buyerName = "",
   practiceName = "",
@@ -5573,6 +5638,7 @@ function CurrentReorderList({
   onLinkProduct,
   onRemoveItem,
   onVerifyItems,
+  onRefresh,
 }) {
   const realRows = deriveMatchRows(items, buyingPrefs);
   const usingReal = realRows.length > 0;
@@ -5587,10 +5653,44 @@ function CurrentReorderList({
   }));
   const stats = usingReal ? mrComputeStats(rows) : showSample ? matchReviewSampleStats : mrComputeStats(rows);
   const totalItems = usingReal ? rows.length : showSample ? stats.total : 0;
+  // Items that won't make it into the supplier plan (no match, or out of stock
+  // everywhere) — surfaced in the warning modal before advancing to Review.
+  const unresolvedRows = usingReal ? rows.filter((row) => !isPlanIncluded(row)) : [];
+  const allReviewed = usingReal && totalItems > 0 && unresolvedRows.length === 0 && !rows.some(
+    (r) => r.status === "Review" && !r.verified
+  );
   const [tab, setTab] = useState("all");
   const [detail, setDetail] = useState(null);
   const [detailWide, setDetailWide] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [reviewConfirm, setReviewConfirm] = useState(false);
+  const listNameRef = useRef(null);
+
+  // Advance to Review & optimize. If anything is unresolved, confirm first so the
+  // buyer knows those items won't be included; otherwise go straight in.
+  function goToReview() {
+    // Already advanced — just continue into the plan (no need to re-warn).
+    if (listStage !== "review" && unresolvedRows.length > 0) { setReviewConfirm(true); return; }
+    onAdvanceStage?.("review");
+    onNavigate?.("/app/review");
+  }
+
+  function confirmReview() {
+    setReviewConfirm(false);
+    onAdvanceStage?.("review");
+    onNavigate?.("/app/review");
+  }
+
+  async function handleRefresh() {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
@@ -5658,9 +5758,11 @@ function CurrentReorderList({
     return moves;
   }, [optimizedPlan, rows]);
 
-  // Consolidation is offered only once the list is settled (every match dealt
-  // with) so we don't optimize a moving target. Apply happens from the preview.
-  const listSettled = listStatus === "verified";
+  // Consolidation / shipping-savings analysis is offered once the buyer has
+  // advanced the list into "Review & optimize" — a deliberate, fully-reviewed
+  // checkpoint, so we don't optimize a moving target. Apply happens from the
+  // preview.
+  const listSettled = listStatus === "review";
   const [showConsolidate, setShowConsolidate] = useState(false);
 
   const tabFilter = {
@@ -5778,13 +5880,25 @@ function CurrentReorderList({
         <div className="crl-title crl-title-main">
           <h2 id="homeHeading">Current Reorder List</h2>
           <p className="crl-subtitle">
-            <input
-              className="crl-listname crl-listname-input"
-              value={listName}
-              onChange={(event) => onRenameList?.(event.target.value)}
-              aria-label="Reorder list name"
-              style={{ font: "inherit", color: "inherit", border: "none", background: "transparent", padding: 0, width: `${Math.max(listName.length, 8)}ch` }}
-            />
+            <span className="crl-listname-edit">
+              <input
+                ref={listNameRef}
+                className="crl-listname crl-listname-input"
+                value={listName}
+                onChange={(event) => onRenameList?.(event.target.value)}
+                aria-label="Reorder list name"
+                style={{ width: `${Math.max(listName.length, 8)}ch` }}
+              />
+              <button
+                type="button"
+                className="crl-listname-pencil"
+                aria-label="Rename list"
+                title="Rename list"
+                onClick={() => { const el = listNameRef.current; if (el) { el.focus(); el.select(); } }}
+              >
+                <Icon name="icon-edit" className="button-icon" />
+              </button>
+            </span>
             <span className="crl-dot" aria-hidden="true">·</span>
             <ListStatusPill status={listStatus} />
             <span className="crl-dot" aria-hidden="true">·</span>
@@ -5792,13 +5906,15 @@ function CurrentReorderList({
           </p>
         </div>
         <div className="crl-header-actions">
-          {(stats.matched + stats.review) > 0 && (
+          {totalItems > 0 && (
             <button
               type="button"
-              className="crl-plan-header-btn"
-              onClick={() => onNavigate?.("/app/plan")}
+              className="crl-plan-header-btn crl-plan-header-btn--primary"
+              onClick={goToReview}
+              title="Optimize supplier consolidation, shipping, and delivery for this list"
             >
-              <Icon name="icon-handshake" className="button-icon" />Procurement Plan
+              <Icon name="icon-handshake" className="button-icon" />
+              {listStage === "review" ? "Continue in plan" : "Review & optimize"}
             </button>
           )}
           <button
@@ -5885,6 +6001,19 @@ function CurrentReorderList({
                   <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>
                 ))}
               </nav>
+              {onRefresh && (
+                <button
+                  type="button"
+                  className={`crl-refresh ${refreshing ? "spinning" : ""}`}
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  title="Refresh — pull in items scanned on another device"
+                  aria-label="Refresh list"
+                >
+                  <Icon name="icon-refresh" className="button-icon" />
+                  <span>Refresh</span>
+                </button>
+              )}
             </div>
 
             {selectedCount > 0 && (
@@ -5963,9 +6092,11 @@ function CurrentReorderList({
                       )}
                     </span>
                     <span className="crl-actions">
-                      <button className={`crl-action-btn ${notFound ? "danger" : row.status === "Review" ? "warn" : ""}`} type="button" onClick={() => setDetail({ row, mode })}>{actionLabel}</button>
+                      {mode !== "view" && (
+                        <button className={`crl-action-btn ${notFound ? "danger" : "warn"}`} type="button" onClick={() => setDetail({ row, mode })}>{actionLabel}</button>
+                      )}
                       <span className="crl-rowmenu-wrap">
-                        <button className="crl-kebab" type="button" aria-label="Row actions" aria-haspopup="menu" aria-expanded={rowMenu === row.id} onClick={(event) => { event.stopPropagation(); setRowMenu(rowMenu === row.id ? null : row.id); }}><Icon name="icon-list" className="button-icon" /></button>
+                        <button className="crl-kebab" type="button" aria-label="Row actions" aria-haspopup="menu" aria-expanded={rowMenu === row.id} onClick={(event) => { event.stopPropagation(); setRowMenu(rowMenu === row.id ? null : row.id); }}><svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg></button>
                         {rowMenu === row.id && row.itemId && (
                           <>
                             <div className="crl-add-menu-backdrop" onClick={(event) => { event.stopPropagation(); setRowMenu(null); }} />
@@ -6063,7 +6194,9 @@ function CurrentReorderList({
                 )}
                 {optimizedPlan && !listSettled && (
                   <p className="crl-ship-nudge">
-                    Resolve the remaining items to review consolidating suppliers and save {money.format(optimizedPlan.savings)} on shipping.
+                    {allReviewed
+                      ? `Move to Review & optimize to consolidate suppliers and save ${money.format(optimizedPlan.savings)} on shipping.`
+                      : `Resolve the remaining items to review consolidating suppliers and save ${money.format(optimizedPlan.savings)} on shipping.`}
                   </p>
                 )}
                 {planSummary.missingPrice > 0 && (
@@ -6080,7 +6213,7 @@ function CurrentReorderList({
                 <div><span>Potential savings</span><strong className="green">$842.15</strong></div>
               </div>
             )}
-            <button className="crl-plan-btn" type="button" onClick={() => onNavigate?.("/app/plan")}>Open procurement plan <Icon name="icon-arrow-right" className="button-icon" /></button>
+            <button className="crl-plan-btn" type="button" onClick={() => onNavigate?.("/app/review")}>Open Review &amp; optimize <Icon name="icon-arrow-right" className="button-icon" /></button>
           </section>
         </aside>
         )}
@@ -6110,6 +6243,15 @@ function CurrentReorderList({
         />
       )}
 
+      {reviewConfirm && (
+        <ReviewUnresolvedModal
+          unresolved={unresolvedRows}
+          includedCount={totalItems - unresolvedRows.length}
+          onContinue={confirmReview}
+          onClose={() => setReviewConfirm(false)}
+        />
+      )}
+
       {showConsolidate && optimizedPlan && (
         <ConsolidatePreviewModal
           moves={consolidationMoves}
@@ -6123,6 +6265,44 @@ function CurrentReorderList({
         />
       )}
 
+    </div>
+  );
+}
+
+// Shown when a buyer advances to Review & optimize with items that won't make
+// it into any supplier order (no match, or out of stock everywhere). Warns
+// which items get excluded; Continue advances anyway, Cancel keeps them on the
+// Draft list to resolve.
+function ReviewUnresolvedModal({ unresolved, includedCount, onContinue, onClose }) {
+  const n = unresolved.length;
+  return (
+    <div className="crl-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="reviewUnresolvedTitle" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="crl-modal">
+        <header className="crl-modal-head">
+          <div>
+            <h3 id="reviewUnresolvedTitle">{n} unresolved item{n === 1 ? "" : "s"} won&rsquo;t be included</h3>
+            <p>These items aren&rsquo;t matched to an in-stock supplier, so they won&rsquo;t be part of Review &amp; optimize. {includedCount} item{includedCount === 1 ? "" : "s"} will be included.</p>
+          </div>
+          <button className="crl-modal-close" type="button" aria-label="Close" onClick={onClose}><Icon name="icon-x" className="button-icon" /></button>
+        </header>
+        <div className="crl-modal-body">
+          <ul className="crl-unresolved-list">
+            {unresolved.map((row) => (
+              <li className="crl-unresolved-item" key={row.id}>
+                <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
+                <span className="crl-unresolved-info">
+                  <strong>{row.canonicalName || row.importedName}</strong>
+                  <small>{row.status === "Not found" ? "No match found" : "Out of stock at every supplier"}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <footer className="crl-modal-foot">
+          <button className="crl-ghost-btn" type="button" onClick={onClose}>Back to draft list</button>
+          <button className="primary-action compact" type="button" onClick={onContinue}>Continue to review</button>
+        </footer>
+      </div>
     </div>
   );
 }
@@ -6315,7 +6495,7 @@ function UploadModal({
   );
 }
 
-// ── Procurement Plan + Supplier Handoff ──────────────────────────────────────
+// ── Review & optimize (/app/review) + Supplier Handoff ───────────────────────
 
 // Group derived match rows into per-supplier buckets (heaviest spend first) so
 // the plan and the frozen handoff both present orders supplier-by-supplier.
@@ -6664,7 +6844,7 @@ function SupplierGroupCard({ group, onNavigate, onBuildCart, onSwitchOffer, onTo
   );
 }
 
-function ProcurementPlanView({ items, listName, buyingPrefs, onBuyingPrefs, onPrepareHandoff, onBuildCart, onSwitchOffer, onNavigate, onToast }) {
+function ProcurementPlanView({ items, listName, listStatus = "draft", onBackToDraft, buyingPrefs, onBuyingPrefs, onPrepareHandoff, onBuildCart, onSwitchOffer, onNavigate, onToast }) {
   const rows = deriveMatchRows(items || [], buyingPrefs);
   const included = rows.filter(isPlanIncluded);
   // No-match lines plus "out of stock everywhere" lines both land here so the
@@ -6692,14 +6872,21 @@ function ProcurementPlanView({ items, listName, buyingPrefs, onBuyingPrefs, onPr
       <header className="crl-header pp-header">
         <div className="crl-title crl-title-main">
           <button className="history-back" type="button" onClick={() => onNavigate("/app")}><Icon name="icon-chevron-left" className="button-icon" />Current Reorder List</button>
-          <h2>Procurement Plan</h2>
+          <h2>Review &amp; optimize</h2>
           <p className="crl-subtitle">
             <span className="crl-listname">{listName}</span>
+            <span className="crl-dot" aria-hidden="true">·</span>
+            <ListStatusPill status={listStatus} />
             <span className="crl-dot" aria-hidden="true">·</span>
             <span>{included.length} item{included.length === 1 ? "" : "s"} · {groups.length} supplier{groups.length === 1 ? "" : "s"}</span>
           </p>
         </div>
         <div className="crl-header-actions">
+          {listStatus === "review" && onBackToDraft && (
+            <button className="text-action compact" type="button" onClick={onBackToDraft} title="Return to Draft to keep editing this list">
+              <Icon name="icon-chevron-left" className="button-icon" />Back to draft
+            </button>
+          )}
           <button className="secondary-action compact" type="button" onClick={() => onNavigate("/app")}>Back to list</button>
           <button className="primary-action compact" type="button" disabled={!included.length} onClick={onPrepareHandoff}>
             <Icon name="icon-handshake" className="button-icon" />Prepare Supplier Handoff
@@ -6713,7 +6900,7 @@ function ProcurementPlanView({ items, listName, buyingPrefs, onBuyingPrefs, onPr
             <div className="crl-card pp-empty">
               <Icon name="icon-package" className="button-icon" />
               <strong>No matched items yet</strong>
-              <p>Match items on your reorder list to build a procurement plan grouped by supplier.</p>
+              <p>Match items on your reorder list to review and optimize suppliers, grouped by supplier.</p>
               <button className="secondary-action compact" type="button" onClick={() => onNavigate("/app")}>Go to reorder list</button>
             </div>
           ) : (
@@ -6806,8 +6993,8 @@ function SupplierHandoffView({ handoff, onArchive, onBuildCart, onNavigate, onTo
         <div className="crl-card pp-empty">
           <Icon name="icon-handshake" className="button-icon" />
           <strong>No handoff prepared yet</strong>
-          <p>Open your procurement plan and prepare a supplier handoff to see frozen order details here.</p>
-          <button className="secondary-action compact" type="button" onClick={() => onNavigate("/app/plan")}>Open procurement plan</button>
+          <p>Open Review &amp; optimize and prepare a supplier handoff to see frozen order details here.</p>
+          <button className="secondary-action compact" type="button" onClick={() => onNavigate("/app/review")}>Open Review &amp; optimize</button>
         </div>
       </div>
     );
@@ -6838,7 +7025,7 @@ function SupplierHandoffView({ handoff, onArchive, onBuildCart, onNavigate, onTo
     <div className="crl ho">
       <header className="crl-header ho-header">
         <div className="crl-title crl-title-main">
-          <button className="history-back" type="button" onClick={() => onNavigate("/app/plan")}><Icon name="icon-chevron-left" className="button-icon" />Procurement Plan</button>
+          <button className="history-back" type="button" onClick={() => onNavigate("/app/review")}><Icon name="icon-chevron-left" className="button-icon" />Review &amp; optimize</button>
           <h2>Supplier Handoff</h2>
           <p className="crl-subtitle">
             <span className="ho-frozen-pill"><Icon name="icon-lock" className="button-icon" />Frozen snapshot</span>

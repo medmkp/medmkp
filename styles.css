@@ -8392,6 +8392,40 @@ th {
 .crl-listname { color: var(--ink); font-weight: 600; }
 .crl-dot { color: var(--muted); }
 
+/* Editable list name: reads as a link/field with a pencil affordance so it's
+   obvious it can be renamed (the bare input looked like static text). */
+.crl-listname-edit { display: inline-flex; align-items: center; gap: 2px; }
+.crl-listname-input {
+  font: inherit;
+  color: var(--ink);
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  padding: 0 1px;
+  min-width: 6ch;
+  border-radius: 3px;
+}
+.crl-listname-edit:hover .crl-listname-input,
+.crl-listname-input:hover { border-bottom-color: var(--line); }
+.crl-listname-input:focus { outline: none; border-bottom: 1px solid var(--accent, var(--ink)); }
+.crl-listname-pencil {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, color .12s ease;
+}
+.crl-listname-edit:hover .crl-listname-pencil { opacity: 1; }
+.crl-listname-pencil:hover { color: var(--ink); background: var(--surface-2, rgba(0,0,0,.05)); }
+.crl-listname-pencil .button-icon { width: 14px; height: 14px; }
+
 .crl-title h2 {
   font-size: 22px;
   font-weight: 800;
@@ -8462,6 +8496,8 @@ th {
 }
 .crl-plan-header-btn:hover { background: var(--blue-dark, #1a56db); border-color: var(--blue-dark, #1a56db); }
 .crl-plan-header-btn .button-icon { width: 17px; height: 17px; }
+/* The gate button: a fully-reviewed list is ready to advance — emphasize it. */
+.crl-plan-header-btn--primary { box-shadow: 0 0 0 3px var(--blue-2, rgba(37,99,235,.18)); }
 
 .crl-add-scan {
   display: inline-flex; align-items: center; gap: 8px;
@@ -8530,6 +8566,26 @@ th {
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
 }
+
+.crl-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+.crl-refresh:hover:not(:disabled) { color: var(--ink); border-color: var(--ink); }
+.crl-refresh:disabled { cursor: default; opacity: .7; }
+.crl-refresh .button-icon { width: 15px; height: 15px; }
+.crl-refresh.spinning .button-icon { animation: crl-spin .8s linear infinite; }
+@keyframes crl-spin { to { transform: rotate(360deg); } }
 
 .crl-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .crl-tabs button {
@@ -8729,6 +8785,12 @@ th {
 .crl-modal-summary .confirmed strong { color: var(--green); }
 .crl-modal-summary .possible strong { color: var(--gold); }
 .crl-modal-summary .nomatch strong { color: var(--red); }
+
+.crl-unresolved-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 320px; overflow: auto; }
+.crl-unresolved-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.crl-unresolved-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.crl-unresolved-info strong { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crl-unresolved-info small { font-size: 12px; color: var(--red); }
 
 .crl-modal-results { display: grid; gap: 8px; }
 .crl-modal-result { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
@@ -9056,6 +9118,7 @@ th {
 .list-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; width: fit-content; }
 .list-pill-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .list-pill--draft { background: var(--surface-2); color: var(--muted); }
+.list-pill--review { background: var(--blue-2, #e7efff); color: var(--blue, #2563eb); }
 .list-pill--verified { background: #e7f6ee; color: var(--green); }
 .list-pill--handoff { background: var(--blue-2); color: var(--blue); }
 
