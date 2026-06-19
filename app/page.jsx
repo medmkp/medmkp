@@ -6186,11 +6186,17 @@ function groupRowsBySupplier(rows) {
   const map = new Map();
   for (const row of rows || []) {
     const supplier = row.supplier || "—";
-    if (!map.has(supplier)) map.set(supplier, { supplier, rows: [], subtotal: 0, count: 0 });
+    if (!map.has(supplier)) map.set(supplier, { supplier, supplierId: null, rows: [], subtotal: 0, count: 0 });
     const group = map.get(supplier);
     group.rows.push(row);
     group.subtotal += row.lineTotal || 0;
     group.count += 1;
+    // Pin the supplier id from the offer the buyer selected so the buying agent
+    // can target the right supplier; the first non-null wins.
+    if (!group.supplierId) {
+      const selected = (row.offers || []).find((offer) => offer.key === row.selectedOfferKey);
+      group.supplierId = selected?.supplierId || row.supplierId || null;
+    }
   }
   return [...map.values()].sort((a, b) => b.subtotal - a.subtotal);
 }
@@ -6207,6 +6213,7 @@ function slimHandoffRow(row) {
     matchName: row.matchName || row.canonicalName || "",
     matchSub: row.matchSub || "",
     supplier: row.supplier,
+    supplierId: selected?.supplierId || row.supplierId || null,
     sku: selected?.sku || "",
     productUrl: selected?.productUrl || row.productUrl || "",
     availability: selected?.availability ?? row.availability ?? "unknown",
@@ -6336,6 +6343,78 @@ function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, onSwitc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group]);
 
+  // Headless buying-agent path: when the practice has stored a login for this
+  // supplier, we can log in and build the cart for them instead of handing over
+  // links. `agent.phase` drives the UI: checking → available/unavailable, then
+  // queued → running → done/failed/needs_auth once a build is enqueued.
+  const [agent, setAgent] = useState({ phase: "checking", job: null });
+  const supplierId = group.supplierId || null;
+
+  useEffect(() => {
+    if (!supplierId) { setAgent({ phase: "unavailable", job: null }); return; }
+    let cancelled = false;
+    setAgent({ phase: "checking", job: null });
+    fetch("/api/supplier-credentials")
+      .then((r) => (r.ok ? r.json() : { credentials: [] }))
+      .then(({ credentials }) => {
+        if (cancelled) return;
+        const has = (credentials || []).some((c) => c.supplier_id === supplierId);
+        setAgent({ phase: has ? "available" : "unavailable", job: null });
+      })
+      .catch(() => { if (!cancelled) setAgent({ phase: "unavailable", job: null }); });
+    return () => { cancelled = true; };
+  }, [supplierId]);
+
+  // Poll a queued/running job until it settles.
+  useEffect(() => {
+    if (agent.phase !== "queued" && agent.phase !== "running") return;
+    const jobId = agent.job?.id;
+    if (!jobId) return;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      fetch(`/api/cart-builds?id=${encodeURIComponent(jobId)}`)
+        .then((r) => (r.ok ? r.json() : { jobs: [] }))
+        .then(({ jobs }) => {
+          if (cancelled) return;
+          const job = (jobs || [])[0];
+          if (!job) return;
+          if (job.status === "done") setAgent({ phase: "done", job });
+          else if (job.status === "failed") setAgent({ phase: "failed", job });
+          else if (job.status === "needs_auth") setAgent({ phase: "needs_auth", job });
+          else if (job.status === "running") setAgent((a) => ({ ...a, phase: "running", job }));
+        })
+        .catch(() => {});
+    }, 2500);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [agent.phase, agent.job?.id]);
+
+  function startAgentBuild() {
+    setAgent((a) => ({ ...a, phase: "queued" }));
+    fetch("/api/cart-builds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        supplier_id: supplierId,
+        lines: linkable.map((row) => ({
+          name: row.matchName || row.canonicalName || "",
+          qty: row.qty,
+          productUrl: row.productUrl,
+          sku: row.sku || "",
+        })),
+      }),
+    })
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok || !data.job) {
+          onToast(data?.error === "needs_credentials" ? "Add your supplier login in Settings first" : "Couldn’t start the cart build");
+          setAgent((a) => ({ ...a, phase: "available" }));
+          return;
+        }
+        setAgent({ phase: "running", job: data.job });
+      })
+      .catch(() => { onToast("Couldn’t start the cart build"); setAgent((a) => ({ ...a, phase: "available" })); });
+  }
+
   const result = state.result;
   const isShopify = state.status === "ready" && result?.kind === "shopify-cart";
 
@@ -6364,6 +6443,70 @@ function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, onSwitc
         </header>
 
         <div className="crl-modal-body cart-modal-body">
+          {/* Headless buying-agent path — preferred when a login is stored. */}
+          {agent.phase === "available" && (
+            <div className="cart-agent cart-agent-offer">
+              <div className="cart-prefill-icon"><Icon name="icon-bolt" /></div>
+              <strong>Build this cart for you</strong>
+              <small>We’ll sign in to {group.supplier} with your saved login and add all {linkable.length} item{linkable.length === 1 ? "" : "s"} to your cart.</small>
+              <button className="primary-action compact" type="button" onClick={startAgentBuild}>
+                <Icon name="icon-cart" className="button-icon" />Build my {group.supplier} cart
+              </button>
+            </div>
+          )}
+
+          {(agent.phase === "queued" || agent.phase === "running") && (
+            <div className="cart-status"><span className="cart-spinner" aria-hidden="true" />Signing in to {group.supplier} and adding your items… this can take a minute.</div>
+          )}
+
+          {agent.phase === "needs_auth" && (
+            <div className="cart-status">Your saved {group.supplier} login didn’t work — update it in Settings and try again.</div>
+          )}
+
+          {agent.phase === "failed" && (
+            <div className="cart-status">Couldn’t finish building your {group.supplier} cart{agent.job?.error ? ` (${agent.job.error})` : ""}. You can open the products below instead.</div>
+          )}
+
+          {agent.phase === "done" && (
+            <div className="cart-agent cart-agent-done">
+              <div className="cart-prefill-icon"><Icon name="icon-cart" /></div>
+              <strong>Your {group.supplier} cart is ready</strong>
+              {(() => {
+                const added = (agent.job?.results || []).filter((r) => r.status === "added").length;
+                const issues = (agent.job?.results || []).filter((r) => r.status !== "added");
+                return (
+                  <>
+                    <small>{added} of {agent.job?.results?.length || 0} item{(agent.job?.results?.length || 0) === 1 ? "" : "s"} added to your cart on {group.supplier}.</small>
+                    {agent.job?.cart_url && (
+                      <a className="primary-action compact" href={agent.job.cart_url} target="_blank" rel="noreferrer" onClick={() => onToast(`Opening your ${group.supplier} cart`)}>
+                        <Icon name="icon-cart" className="button-icon" />Open your cart
+                      </a>
+                    )}
+                    {issues.length > 0 && (
+                      <ul className="cart-agent-issues">
+                        {issues.map((r, i) => (
+                          <li key={i}>{r.status === "out_of_stock" ? "Out of stock" : r.status === "not_found" ? "Couldn’t find" : "Couldn’t add"}: {linkable.find((row) => row.productUrl === r.productUrl)?.matchName || r.productUrl}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Offer to connect a login when the buyer has none and the one-click
+              Shopify path isn't available for this supplier. */}
+          {agent.phase === "unavailable" && supplierId && state.status === "ready" && !isShopify && (
+            <div className="cart-agent cart-agent-connect">
+              <strong>Skip the busywork</strong>
+              <small>Save your {group.supplier} login in Settings and we’ll build your cart automatically next time.</small>
+              <a className="crl-ghost-btn" href="/app/settings" onClick={(e) => { e.preventDefault(); onClose(); window.location.assign("/app/settings"); }}>
+                <Icon name="icon-settings" className="button-icon" />Add {group.supplier} login
+              </a>
+            </div>
+          )}
+
           {state.status === "loading" && (
             <div className="cart-status"><span className="cart-spinner" aria-hidden="true" />Finding the best way to fill your {group.supplier} cart…</div>
           )}
@@ -6865,6 +7008,7 @@ function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename
 
 const SETTINGS_TABS = [
   ["profile", "Profile"],
+  ["suppliers", "Supplier logins"],
   ["users", "Users"],
   ["billing", "Billing"],
   ["notifications", "Notifications"],
@@ -6983,6 +7127,8 @@ function SettingsView({ me, onMeUpdate, defaultBuyingPrefs, onSaveDefaults, supp
           supplierOptions={supplierOptions}
           onToast={onToast}
         />
+      ) : tab === "suppliers" ? (
+        <SupplierLoginsSettings onToast={onToast} />
       ) : (
         <SettingsComingSoon tab={tab} />
       )}
@@ -6998,6 +7144,132 @@ function SettingsComingSoon({ tab }) {
       <h3>{stub.title}</h3>
       <p>{stub.body}</p>
       <span className="settings-stub-badge">Coming soon</span>
+    </div>
+  );
+}
+
+// Manage the per-supplier logins the headless buying agent uses to build carts.
+// Passwords are write-only — the API only ever returns a masked username hint.
+function SupplierLoginsSettings({ onToast }) {
+  const [suppliers, setSuppliers] = useState([]);
+  const [credentials, setCredentials] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ supplier_id: "", username: "", password: "" });
+  const [saving, setSaving] = useState(false);
+
+  function refresh() {
+    return fetch("/api/supplier-credentials")
+      .then((r) => (r.ok ? r.json() : { credentials: [] }))
+      .then(({ credentials }) => setCredentials(credentials || []))
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/suppliers").then((r) => (r.ok ? r.json() : { suppliers: [] })),
+      fetch("/api/supplier-credentials").then((r) => (r.ok ? r.json() : { credentials: [] })),
+    ])
+      .then(([s, c]) => {
+        if (cancelled) return;
+        setSuppliers(s.suppliers || []);
+        setCredentials(c.credentials || []);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const supplierName = (id) => suppliers.find((s) => s.id === id)?.name || id;
+
+  function save(e) {
+    e.preventDefault();
+    if (!form.supplier_id || !form.username || !form.password) {
+      onToast("Pick a supplier and enter a username and password");
+      return;
+    }
+    setSaving(true);
+    fetch("/api/supplier-credentials", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    })
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) { onToast(data?.error || "Couldn’t save login"); return; }
+        onToast(`Saved your ${supplierName(form.supplier_id)} login`);
+        setForm({ supplier_id: "", username: "", password: "" });
+        return refresh();
+      })
+      .catch(() => onToast("Couldn’t save login"))
+      .finally(() => setSaving(false));
+  }
+
+  function remove(supplierId) {
+    fetch("/api/supplier-credentials", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ supplier_id: supplierId }),
+    })
+      .then(() => { onToast(`Removed your ${supplierName(supplierId)} login`); return refresh(); })
+      .catch(() => onToast("Couldn’t remove login"));
+  }
+
+  return (
+    <div className="settings-section supplier-logins">
+      <div className="settings-card">
+        <h3>Supplier logins</h3>
+        <p className="settings-hint">
+          Save your supplier account logins and we’ll build your carts for you — we sign in and add
+          every item, so you just review and check out. Passwords are encrypted and never shown back.
+        </p>
+
+        {loading ? (
+          <div className="cart-status"><span className="cart-spinner" aria-hidden="true" />Loading…</div>
+        ) : (
+          <>
+            {credentials.length > 0 && (
+              <ul className="cred-list">
+                {credentials.map((c) => (
+                  <li className="cred-row" key={c.supplier_id}>
+                    <div className="cred-supplier"><MatchSupplier name={supplierName(c.supplier_id)} /></div>
+                    <span className="cred-hint">{c.username_hint}</span>
+                    <span className={`cred-status cred-status-${c.last_status}`}>
+                      {c.last_status === "ok" ? "Verified" : c.last_status === "auth_failed" ? "Login failed" : c.last_status === "error" ? "Last build errored" : "Not yet used"}
+                    </span>
+                    <button className="crl-ghost-btn cred-remove" type="button" onClick={() => remove(c.supplier_id)}>
+                      <Icon name="icon-trash" className="button-icon" />Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <form className="cred-form" onSubmit={save}>
+              <h4>{credentials.length ? "Add another login" : "Add a supplier login"}</h4>
+              <label>
+                <span>Supplier</span>
+                <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))}>
+                  <option value="">Choose a supplier…</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Username or email</span>
+                <input type="text" autoComplete="off" value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} placeholder="you@practice.com" />
+              </label>
+              <label>
+                <span>Password</span>
+                <input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="••••••••" />
+              </label>
+              <button className="primary-action compact" type="submit" disabled={saving}>
+                <Icon name="icon-lock" className="button-icon" />{saving ? "Saving…" : "Save login"}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
     </div>
   );
 }

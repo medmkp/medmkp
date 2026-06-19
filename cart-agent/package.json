@@ -1,0 +1,17 @@
+{
+  "name": "medmkp-cart-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless buying agent: logs into suppliers as the practice and builds carts. Runs on the home NUC, polls the Medusa backend for queued cart-build jobs.",
+  "bin": {
+    "cart-agent": "./runner.mjs"
+  },
+  "scripts": {
+    "start": "node runner.mjs",
+    "once": "node runner.mjs --once"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

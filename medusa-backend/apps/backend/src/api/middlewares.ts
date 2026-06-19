@@ -20,5 +20,15 @@ export default defineMiddlewares({
       method: ["POST"],
       middlewares: [authenticate("customer", ["bearer", "session"])],
     },
+    {
+      matcher: "/medmkp/supplier-credentials",
+      method: ["GET", "POST", "DELETE"],
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
+    {
+      matcher: "/medmkp/cart-builds",
+      method: ["GET", "POST"],
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
   ],
 })

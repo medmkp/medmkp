@@ -9871,6 +9871,34 @@ th {
 .cart-prefill .primary-action { margin-top: 6px; text-decoration: none; }
 .cart-leftover-note { color: var(--gold); }
 
+/* Headless buying-agent blocks reuse the prefill card styling. */
+.cart-agent {
+  display: grid; justify-items: center; gap: 6px; text-align: center;
+  padding: 18px 16px; border: 1px solid var(--blue); border-radius: 12px; background: var(--blue-2);
+}
+.cart-agent strong { color: var(--ink); font-size: 15px; }
+.cart-agent small { color: var(--muted); font-size: 12.5px; max-width: 42ch; }
+.cart-agent .primary-action { margin-top: 6px; text-decoration: none; }
+.cart-agent-connect { border-style: dashed; border-color: var(--line); background: var(--surface); }
+.cart-agent-connect .crl-ghost-btn { margin-top: 4px; text-decoration: none; }
+.cart-agent-issues { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12px; color: var(--gold); text-align: left; width: 100%; }
+
+/* Supplier-login settings. */
+.supplier-logins .settings-hint { color: var(--muted); font-size: 13px; max-width: 60ch; margin: 0 0 14px; }
+.cred-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; }
+.cred-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.cred-supplier { min-width: 150px; }
+.cred-hint { color: var(--muted); font-size: 13px; flex: 1; }
+.cred-status { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+.cred-status-ok { background: var(--green-2, #e8f5ee); color: var(--green, #1a7f4b); }
+.cred-status-auth_failed { background: var(--red-2, #fdecec); color: var(--red, #c0392b); }
+.cred-remove { margin-left: auto; }
+.cred-form { display: grid; gap: 12px; max-width: 420px; }
+.cred-form h4 { margin: 0; font-size: 14px; color: var(--ink); }
+.cred-form label { display: grid; gap: 4px; font-size: 13px; color: var(--ink); }
+.cred-form input, .cred-form select { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--bg); color: var(--ink); }
+.cred-form .primary-action { justify-content: center; }
+
 .cart-openall { justify-content: center; }
 
 .cart-item-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

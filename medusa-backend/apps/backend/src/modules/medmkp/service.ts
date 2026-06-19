@@ -12,9 +12,11 @@ import ReorderList from "./models/reorder-list"
 import SavingsOpportunity from "./models/savings-opportunity"
 import SavingsReport from "./models/savings-report"
 import SupplierCatalogSource from "./models/supplier-catalog-source"
+import SupplierCredential from "./models/supplier-credential"
 import SupplierPriceSnapshot from "./models/supplier-price-snapshot"
 import Supplier from "./models/supplier"
 import SupplierProduct from "./models/supplier-product"
+import CartBuildJob from "./models/cart-build-job"
 
 class MedMKPModuleService extends MedusaService({
   DentalPractice,
@@ -26,6 +28,8 @@ class MedMKPModuleService extends MedusaService({
   SupplierProduct,
   CanonicalProductMatch,
   SupplierCatalogSource,
+  SupplierCredential,
+  CartBuildJob,
   SupplierPriceSnapshot,
   SavingsOpportunity,
   SavingsReport,
