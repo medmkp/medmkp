@@ -5690,6 +5690,15 @@ function CurrentReorderList({
           </p>
         </div>
         <div className="crl-header-actions">
+          {(stats.matched + stats.review) > 0 && (
+            <button
+              type="button"
+              className="crl-plan-header-btn"
+              onClick={() => onNavigate?.("/app/plan")}
+            >
+              <Icon name="icon-handshake" className="button-icon" />Procurement Plan
+            </button>
+          )}
           <button
             type="button"
             className={`crl-add-scan ${addMode === "scan" ? "active" : ""}`}
