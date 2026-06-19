@@ -173,6 +173,13 @@ export function categoryBySlug(slug) {
   return CATALOG_CATEGORIES.find((category) => category.slug === slug) || null
 }
 
+// Resolve a live (supplier-named) category to its curated department for the
+// product-page breadcrumb. Returns { slug, name } or null when nothing matches.
+export function departmentForCategory(liveName) {
+  const dept = curatedFor(liveName)
+  return dept ? { slug: dept.slug, name: dept.name } : null
+}
+
 // Match a live (supplier-named) category to a curated department. First match
 // in CATALOG_CATEGORIES order wins, so specific departments are listed first.
 function curatedFor(liveName) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CATALOG_CATEGORIES, CATALOG_TINTS, bucketCategories, categoryBySlug } from "./catalogData";
+import { CATALOG_CATEGORIES, CATALOG_TINTS, bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -1618,6 +1618,15 @@ export default function Home() {
   const visibleDraftItems = draftItems.filter((item) => item.documentIds.some((documentId) => uploadedDocs.some((doc) => doc.id === documentId)));
   const activeDraftItems = visibleDraftItems.filter((item) => item.included);
 
+  // Real summary of the current reorder list for the product-page rail (matches
+  // how archiveCurrentList tallies items/suppliers/spend).
+  const listSummary = useMemo(() => {
+    const rows = deriveMatchRows(activeDraftItems, buyingPrefs);
+    const suppliers = new Set(rows.map((row) => row.supplier).filter((name) => name && name !== "—"));
+    const spend = rows.reduce((sum, row) => sum + (row.lineTotal || 0), 0);
+    return { items: rows.length, suppliers: suppliers.size, spend };
+  }, [activeDraftItems, buyingPrefs]);
+
   // Who's signed in, for the topbar / profile / upload metadata. Falls back to
   // neutral labels until /api/auth/me resolves (or if a field is missing).
   const buyerName = me?.customer
@@ -1886,6 +1895,31 @@ export default function Home() {
     setScanResult({ status: statusFromItem(item), item, isDuplicate: false, qty: item.draftQty || 1 });
     showToast(product ? `Added ${product.name}` : code ? `Scanned ${code} — needs review` : "Item added");
     return true;
+  }
+
+  // Add a catalog product (from the product page) to the current reorder list.
+  // Reuses the scan draft shape (offers, best supplier, canonical handle) but
+  // tags the source as a catalog add and respects the buyer's chosen quantity.
+  function addCatalogItem(product, quantity = 1, unitOfMeasure) {
+    if (!product) return;
+    setListTouched(true);
+    setUploadedDocs((docs) => docs.some((doc) => doc.id === "catalog")
+      ? docs
+      : [...docs, { id: "catalog", name: "Catalog adds", itemCount: 0 }]);
+
+    const base = makeScanDraftItem(null, product);
+    const item = {
+      ...base,
+      source: "catalog",
+      barcode: "",
+      draftQty: quantity,
+      qty: quantity,
+      unit: (unitOfMeasure || base.unit || "ea"),
+      documentIds: ["catalog"],
+      documentQuantities: { catalog: quantity },
+      extractedFrom: product.name || base.product || "Catalog item",
+    };
+    setDraftItems((items) => [...items, item]);
   }
 
   function removeDraftItem(target) {
@@ -2270,7 +2304,14 @@ export default function Home() {
           )}
 
           {view === "productDetail" && (
-            <ProductDetail handle={productHandle} onNavigate={navigate} onToast={showToast} />
+            <ProductDetail
+              handle={productHandle}
+              onNavigate={navigate}
+              onToast={showToast}
+              onAddToList={addCatalogItem}
+              listName={listName}
+              listSummary={listSummary}
+            />
           )}
 
           {view === "settings" && (
@@ -2381,24 +2422,14 @@ function initials(name) {
     .join("");
 }
 
-// Deterministic per-supplier rating + lead time so the comparison reads like the
-// catalog mock without inventing values that jump around on every render.
-function supplierMeta(seed) {
-  const key = String(seed || "");
-  let hash = 0;
-  for (let i = 0; i < key.length; i += 1) {
-    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
-  }
-  const rating = (4.2 + (hash % 8) / 10).toFixed(1);
-  const lead = 1 + (hash % 4);
-  return { rating, lead: `${lead}–${lead + 1} days` };
-}
-
+// Real availability from the latest price snapshot. We don't have ship-time
+// estimates, so we report only the status the supplier actually published and
+// leave anything unknown explicitly unconfirmed rather than inventing an ETA.
 function availabilityInfo(value) {
-  if (value === "in_stock") return { label: "In stock", sub: "Ships today", tone: "ok" };
-  if (value === "limited") return { label: "Limited", sub: "Ships in 1–2 days", tone: "warn" };
-  if (value === "backordered") return { label: "Backordered", sub: "Ships in 1–2 weeks", tone: "bad" };
-  return { label: "Availability on request", sub: "Confirm with supplier", tone: "muted" };
+  if (value === "in_stock") return { label: "In stock", tone: "ok" };
+  if (value === "limited") return { label: "Limited stock", tone: "warn" };
+  if (value === "backordered") return { label: "Backordered", tone: "bad" };
+  return { label: "Check with supplier", tone: "muted" };
 }
 
 function QtyStepper({ qty, setQty }) {
@@ -3132,7 +3163,7 @@ function CatalogCategoryView({ slug, onNavigate }) {
 // Product detail surface reached from search (/app/product/[handle]). Pulls the
 // canonical product + supplier offers from the same API the search uses, then
 // lays out the comparison, specs, substitutes, and reorder rail.
-function ProductDetail({ handle, onNavigate, onToast }) {
+function ProductDetail({ handle, onNavigate, onToast, onAddToList, listName, listSummary }) {
   // A product may be a family of size/spec variants. `variants` holds them in
   // selector order; `activeIdx` is the chosen one and drives the whole page.
   const [variants, setVariants] = useState([]);
@@ -3142,7 +3173,8 @@ function ProductDetail({ handle, onNavigate, onToast }) {
   const [subs, setSubs] = useState([]);
   const [qty, setQty] = useState(10);
   const [uom, setUom] = useState("Box");
-  const [showHistory, setShowHistory] = useState(false);
+  // Full-screen image viewer (the "View larger image" affordance).
+  const [lightbox, setLightbox] = useState(false);
 
   useEffect(() => {
     if (!handle) {
@@ -3152,7 +3184,7 @@ function ProductDetail({ handle, onNavigate, onToast }) {
 
     let live = true;
     setStatus("loading");
-    setShowHistory(false);
+    setLightbox(false);
     setActiveIdx(0);
 
     fetch(`/api/canonical-products?handle=${encodeURIComponent(handle)}`)
@@ -3232,6 +3264,9 @@ function ProductDetail({ handle, onNavigate, onToast }) {
   }
 
   const attrs = parseAttributes(product.attributes_text);
+  // Breadcrumb middle crumb: the curated department this product's live category
+  // rolls up into (null when the category doesn't map to one).
+  const department = departmentForCategory(product.category);
   const variantGroupLabel = family ? variantAxisLabel(variants) : null;
   // The API returns one offer per supplier variant; collapse to the lowest-priced
   // offer per supplier so the comparison reads as a supplier comparison (one row
@@ -3297,13 +3332,24 @@ function ProductDetail({ handle, onNavigate, onToast }) {
       <div className="pdp-breadcrumb-row">
         <nav className="pdp-breadcrumb" aria-label="Breadcrumb">
           <a href="/app/catalog" onClick={(event) => { event.preventDefault(); onNavigate("/app/catalog"); }}>Products</a>
+          {department && (
+            <>
+              <Icon name="icon-chevron-right" className="nav-icon" />
+              <a
+                href={`/app/catalog/${department.slug}`}
+                onClick={(event) => { event.preventDefault(); onNavigate(`/app/catalog/${department.slug}`); }}
+              >
+                {department.name}
+              </a>
+            </>
+          )}
           <Icon name="icon-chevron-right" className="nav-icon" />
-          <span>Product detail</span>
+          <span>{family ? family.family_name : product.name}</span>
         </nav>
         <div className="pdp-top-actions">
           <button className="secondary-action compact" type="button" onClick={() => window.history.back()}>
             <Icon name="icon-chevron-left" className="button-icon" />
-            Back to results
+            Back
           </button>
           <button className="secondary-action compact" type="button" onClick={() => window.print()}>
             <Icon name="icon-file-text" className="button-icon" />
@@ -3316,11 +3362,17 @@ function ProductDetail({ handle, onNavigate, onToast }) {
         <div className="pdp-main">
           <section className="crl-card pdp-hero">
             <div className="pdp-hero-media">
-              {image ? <img src={image} alt={product.name} /> : <div className="pdp-hero-placeholder">No image available</div>}
-              <button type="button" className="pdp-view-larger">
-                <Icon name="icon-search" className="button-icon" />
-                View larger image
-              </button>
+              {image ? (
+                <img src={image} alt={product.name} onClick={() => setLightbox(true)} style={{ cursor: "zoom-in" }} />
+              ) : (
+                <div className="pdp-hero-placeholder">No image available</div>
+              )}
+              {image && (
+                <button type="button" className="pdp-view-larger" onClick={() => setLightbox(true)}>
+                  <Icon name="icon-search" className="button-icon" />
+                  View larger image
+                </button>
+              )}
             </div>
             <div className="pdp-hero-body">
               <div className="pdp-hero-headline">
@@ -3384,11 +3436,7 @@ function ProductDetail({ handle, onNavigate, onToast }) {
                   </span>
                 )}
               </div>
-              <div className="pdp-qty-inline">
-                <span>Quantity</span>
-                <QtyStepper qty={qty} setQty={setQty} />
-                <UomSelect uom={uom} setUom={setUom} />
-              </div>
+              <span className="pdp-compare-note">Extended price shown for {qty} &times; {cap(uom)}</span>
             </div>
 
             <div className="pdp-table-wrap">
@@ -3411,15 +3459,17 @@ function ProductDetail({ handle, onNavigate, onToast }) {
                     : null;
                   const packLabel = offer.pack_size
                     || (offer.pack_quantity ? `${offer.pack_quantity}/pack` : "");
-                  const meta = supplierMeta(offer.supplier_id || offer.supplier_name || index);
+                  const logo = supplierLogoSrc(offer.supplier_name);
                   const avail = availabilityInfo(offer.availability);
                   return (
                     <div className={`pdp-row ${index === 0 ? "best" : ""}`} key={offer.supplier_product_id || index}>
                       <div className="pdp-row-supplier">
-                        <span className="pdp-supplier-logo">{initials(offer.supplier_name)}</span>
+                        <span className={`pdp-supplier-logo ${logo ? "has-img" : ""}`}>
+                          {logo ? <img src={logo} alt="" /> : initials(offer.supplier_name)}
+                        </span>
                         <div>
-                          <strong>{offer.supplier_name}<Icon name="icon-check-circle" className="pdp-verified" /></strong>
-                          <small>&#9733; {meta.rating} &middot; {meta.lead}</small>
+                          <strong>{offer.supplier_name}</strong>
+                          {offer.brand && <small>{offer.brand}</small>}
                         </div>
                       </div>
                       <div className="pdp-row-sku">{offer.sku || "—"}</div>
@@ -3440,7 +3490,6 @@ function ProductDetail({ handle, onNavigate, onToast }) {
                       <div className="pdp-row-ext">{money.format(packPrice * qty)}</div>
                       <div className={`pdp-row-avail ${avail.tone}`}>
                         <span><span className="pdp-dot" aria-hidden="true" />{avail.label}</span>
-                        <small>{avail.sub}</small>
                       </div>
                       <div className="pdp-row-actions">
                         {offer.product_url ? (
@@ -3454,7 +3503,6 @@ function ProductDetail({ handle, onNavigate, onToast }) {
                             Open supplier
                           </button>
                         )}
-                        <button className="pdp-more" type="button" aria-label="More actions">&#8943;</button>
                       </div>
                     </div>
                   );
@@ -3462,12 +3510,9 @@ function ProductDetail({ handle, onNavigate, onToast }) {
               </div>
             </div>
 
-            <button className="pdp-history-toggle" type="button" onClick={() => setShowHistory((value) => !value)}>
-              Show price history
-              <Icon name="icon-chevron-down" className={`button-icon ${showHistory ? "flip" : ""}`} />
-            </button>
-            {showHistory && range && (
+            {range && range.lowest !== range.highest && (
               <div className="pdp-history">
+                <div className="pdp-history-head">Price range across suppliers</div>
                 <div className="pdp-history-row">
                   <span>Lowest offer</span>
                   <strong>{money.format(range.lowest / 100)}</strong>
@@ -3527,18 +3572,10 @@ function ProductDetail({ handle, onNavigate, onToast }) {
         <aside className="pdp-rail">
           <section className="crl-card pdp-add">
             <h3>Add to Current Reorder List</h3>
-            <label className="pdp-field">
+            <div className="pdp-field">
               <span>Current list</span>
-              <div className="pdp-select">
-                <Icon name="icon-list" className="nav-icon" />
-                <select aria-label="Reorder list" defaultValue="June Restock">
-                  <option>June Restock</option>
-                  <option>Q3 Restock</option>
-                  <option>New list&hellip;</option>
-                </select>
-                <Icon name="icon-chevron-down" className="nav-icon" />
-              </div>
-            </label>
+              <div className="pdp-current-list"><Icon name="icon-list" className="nav-icon" />{listName || "Current reorder list"}</div>
+            </div>
             <div className="pdp-qty-grid">
               <label className="pdp-field">
                 <span>Quantity</span>
@@ -3559,13 +3596,16 @@ function ProductDetail({ handle, onNavigate, onToast }) {
                   <span>Est. total</span>
                   <strong>{money.format(bestUnit * qty)}</strong>
                 </div>
-                <small className="pdp-best-foot">{availabilityInfo(best.availability).label} &middot; {availabilityInfo(best.availability).sub}</small>
+                <small className="pdp-best-foot">{availabilityInfo(best.availability).label}</small>
               </div>
             )}
             <button
               className="primary-action"
               type="button"
-              onClick={() => onToast(`Added ${qty} ${uomLabel}${qty === 1 ? "" : "s"} of ${product.name} to June Restock`)}
+              onClick={() => {
+                onAddToList?.(product, qty, cap(uom));
+                onToast(`Added ${qty} × ${cap(uom)} of ${product.name} to ${listName || "your reorder list"}`);
+              }}
             >
               Add to Reorder List
             </button>
@@ -3575,18 +3615,19 @@ function ProductDetail({ handle, onNavigate, onToast }) {
             </button>
           </section>
 
-          <section className="crl-card pdp-summary">
-            <div className="pdp-card-head">
-              <h3>Current list summary</h3>
-              <button className="pdp-link" type="button" onClick={() => onNavigate("/app")}>Open list</button>
-            </div>
-            <div className="pdp-summary-list">
-              <div><span>Total items</span><strong>24</strong></div>
-              <div><span>Total suppliers</span><strong>6</strong></div>
-              <div><span>Estimated spend</span><strong>$1,284.67</strong></div>
-              <div><span>Potential savings</span><strong className="green">$212.45</strong></div>
-            </div>
-          </section>
+          {listSummary && listSummary.items > 0 && (
+            <section className="crl-card pdp-summary">
+              <div className="pdp-card-head">
+                <h3>Current list summary</h3>
+                <button className="pdp-link" type="button" onClick={() => onNavigate("/app")}>Open list</button>
+              </div>
+              <div className="pdp-summary-list">
+                <div><span>Total items</span><strong>{listSummary.items}</strong></div>
+                <div><span>Total suppliers</span><strong>{listSummary.suppliers}</strong></div>
+                <div><span>Estimated spend</span><strong>{money.format(listSummary.spend)}</strong></div>
+              </div>
+            </section>
+          )}
 
           <section className="crl-card pdp-help">
             <h3>Need help?</h3>
@@ -3598,6 +3639,13 @@ function ProductDetail({ handle, onNavigate, onToast }) {
           </section>
         </aside>
       </div>
+
+      {lightbox && image && (
+        <div className="pdp-lightbox" role="dialog" aria-modal="true" onClick={() => setLightbox(false)}>
+          <button type="button" className="pdp-lightbox-close" aria-label="Close" onClick={() => setLightbox(false)}>&times;</button>
+          <img src={image} alt={product.name} onClick={(event) => event.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
