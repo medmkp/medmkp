@@ -1357,6 +1357,8 @@ function ResetPasswordPage({ onNavigate }) {
 export default function Home() {
   const uploadFormRef = useRef(null);
   const searchRef = useRef(null);
+  const searchWrapRef = useRef(null);
+  const userWrapRef = useRef(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authed, setAuthed] = useState(null);
   const [me, setMe] = useState(null);
@@ -1640,6 +1642,32 @@ export default function Home() {
       controller.abort();
     };
   }, [searchTerm]);
+
+  // Close the account menu and search-results dropdown on outside click or Esc,
+  // like a normal UI. (A fixed backdrop alone is unreliable here because the
+  // sticky/blurred topbar forms its own stacking context.)
+  useEffect(() => {
+    if (!userMenuOpen && !searchTerm.trim()) return undefined;
+    const onPointerDown = (event) => {
+      if (userMenuOpen && userWrapRef.current && !userWrapRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+      if (searchTerm.trim() && searchWrapRef.current && !searchWrapRef.current.contains(event.target)) {
+        setSearchTerm("");
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      if (userMenuOpen) setUserMenuOpen(false);
+      if (searchTerm.trim()) setSearchTerm("");
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [userMenuOpen, searchTerm]);
 
   // Honest progress: creep toward — but never reach — 100% while the request is
   // in flight, so the bar only completes when the server actually responds
@@ -2298,7 +2326,7 @@ export default function Home() {
           <button className="topbar-brand" type="button" onClick={() => setView("home")} aria-label="MedMKP home">
             <BrandMark />
           </button>
-          <div className="topbar-search-wrap">
+          <div className="topbar-search-wrap" ref={searchWrapRef}>
             <label className="topbar-search">
               <Icon name="icon-search" className="button-icon" />
               <input
@@ -2320,15 +2348,12 @@ export default function Home() {
               <kbd className="topbar-kbd">⌘K</kbd>
             </label>
             {searchTerm.trim() && (
-              <>
-                <div className="topbar-search-backdrop" onClick={() => setSearchTerm("")} />
-                <SearchResults
-                  results={searchResults}
-                  loading={searchLoading}
-                  query={searchTerm.trim()}
-                  onNavigate={navigate}
-                />
-              </>
+              <SearchResults
+                results={searchResults}
+                loading={searchLoading}
+                query={searchTerm.trim()}
+                onNavigate={navigate}
+              />
             )}
           </div>
           <div className="topbar-right">
@@ -2336,7 +2361,7 @@ export default function Home() {
               <Icon name="icon-bell" className="button-icon" />
               <span className="topbar-badge">3</span>
             </button>
-            <div className="topbar-user-wrap">
+            <div className="topbar-user-wrap" ref={userWrapRef}>
               <button
                 className="topbar-user"
                 type="button"
@@ -2349,23 +2374,20 @@ export default function Home() {
                 <Icon name="icon-chevron-down" className={`button-icon ${userMenuOpen ? "rot" : ""}`} />
               </button>
               {userMenuOpen && (
-                <>
-                  <div className="topbar-menu-backdrop" onClick={() => setUserMenuOpen(false)} />
-                  <div className="topbar-menu" role="menu">
-                    <div className="topbar-menu-head">
-                      <strong>{buyerName || "Your account"}</strong>
-                      <small>{me?.customer?.email || practiceName || "Buyer"}</small>
-                    </div>
-                    <button role="menuitem" type="button" onClick={() => { setUserMenuOpen(false); setView("settings"); }}>
-                      <Icon name="icon-settings" className="button-icon" />
-                      Settings
-                    </button>
-                    <button role="menuitem" type="button" onClick={() => { setUserMenuOpen(false); handleLogout(); }}>
-                      <Icon name="icon-logout" className="button-icon" />
-                      Sign out
-                    </button>
+                <div className="topbar-menu" role="menu">
+                  <div className="topbar-menu-head">
+                    <strong>{buyerName || "Your account"}</strong>
+                    <small>{me?.customer?.email || practiceName || "Buyer"}</small>
                   </div>
-                </>
+                  <button role="menuitem" type="button" onClick={() => { setUserMenuOpen(false); setView("settings"); }}>
+                    <Icon name="icon-settings" className="button-icon" />
+                    Settings
+                  </button>
+                  <button role="menuitem" type="button" onClick={() => { setUserMenuOpen(false); handleLogout(); }}>
+                    <Icon name="icon-logout" className="button-icon" />
+                    Sign out
+                  </button>
+                </div>
               )}
             </div>
           </div>
