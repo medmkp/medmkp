@@ -705,8 +705,14 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
           <a href="/about" onClick={(event) => { event.preventDefault(); onNavigate("/about"); }}>About</a>
         </nav>
         <div className="landing-nav-actions">
-          <button className="secondary-action compact" type="button" onClick={() => onNavigate(authed ? "/app" : "/login")}>Log in</button>
-          <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
+          {authed ? (
+            <button className="primary-action compact" type="button" onClick={() => onNavigate("/app")}>Go to my list</button>
+          ) : (
+            <>
+              <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
+              <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
+            </>
+          )}
         </div>
       </header>
 
@@ -828,7 +834,7 @@ function LoggedOutLanding({ onNavigate, authed = false }) {
 // would mutate a real workspace (upload, scan, archive, clear) nudge the visitor
 // to sign up; browsing the list and opening a row work so it feels live. /app
 // itself stays auth-guarded — this is the only public window onto the list.
-function SampleReorderList({ onNavigate }) {
+function SampleReorderList({ onNavigate, authed = false }) {
   const sampleFormRef = useRef(null);
   const [prefs, setPrefs] = useState(DEFAULT_BUYING_PREFS);
   const [toast, setToast] = useState("");
@@ -846,8 +852,14 @@ function SampleReorderList({ onNavigate }) {
         </button>
         <span className="sample-tag">Sample reorder list — explore freely</span>
         <div className="topbar-right">
-          <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
-          <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up free</button>
+          {authed ? (
+            <button className="primary-action compact" type="button" onClick={() => onNavigate("/app")}>Go to my list</button>
+          ) : (
+            <>
+              <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
+              <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up free</button>
+            </>
+          )}
         </div>
       </header>
       <div className="app-body">
@@ -903,7 +915,7 @@ function SampleReorderList({ onNavigate }) {
 // looks exactly like the in-app one; the parent meters the free-scan budget and
 // passes it in. When the budget is gone the signup wall slides over the card —
 // the final result stays visible for a beat first so the visitor sees the payoff.
-function PublicScanView({ onScan, scanResult, onClearScanResult, freeScansUsed, limit, onSignup, onLogin, onHome }) {
+function PublicScanView({ onScan, scanResult, onClearScanResult, freeScansUsed, limit, onSignup, onLogin, onHome, onApp, authed = false }) {
   const [manualCode, setManualCode] = useState("");
   const [captured, setCaptured] = useState(false);
   const flashTimer = useRef();
@@ -946,8 +958,14 @@ function PublicScanView({ onScan, scanResult, onClearScanResult, freeScansUsed, 
           <BrandMark />
         </button>
         <div className="pscan-header-actions">
-          <button className="secondary-action compact" type="button" onClick={onLogin}>Log in</button>
-          <button className="primary-action compact" type="button" onClick={onSignup}>Sign up</button>
+          {authed ? (
+            <button className="primary-action compact" type="button" onClick={onApp}>Go to my list</button>
+          ) : (
+            <>
+              <button className="secondary-action compact" type="button" onClick={onLogin}>Log in</button>
+              <button className="primary-action compact" type="button" onClick={onSignup}>Sign up</button>
+            </>
+          )}
         </div>
       </header>
 
@@ -1038,7 +1056,7 @@ function PublicScanView({ onScan, scanResult, onClearScanResult, freeScansUsed, 
   );
 }
 
-function PublicNav({ onNavigate, active }) {
+function PublicNav({ onNavigate, active, authed = false }) {
   return (
     <header className="landing-nav">
       <a className="landing-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="MedMKP home">
@@ -1050,14 +1068,20 @@ function PublicNav({ onNavigate, active }) {
         <a href="/about" className={active === "about" ? "active" : ""} onClick={(event) => { event.preventDefault(); onNavigate("/about"); }}>About</a>
       </nav>
       <div className="landing-nav-actions">
-        <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
-        <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
+        {authed ? (
+          <button className="primary-action compact" type="button" onClick={() => onNavigate("/app")}>Go to my list</button>
+        ) : (
+          <>
+            <button className="secondary-action compact" type="button" onClick={() => onNavigate("/login")}>Log in</button>
+            <button className="primary-action compact" type="button" onClick={() => onNavigate("/signup")}>Sign up</button>
+          </>
+        )}
       </div>
     </header>
   );
 }
 
-function PricingPage({ onNavigate }) {
+function PricingPage({ onNavigate, authed = false }) {
   const tiers = [
     { name: "Starter", price: "Free", per: "", blurb: "For trying it out", cta: "Start free", to: "/signup", featured: false, features: ["Scan & search products", "1 reorder list", "Benchmark price ranges"] },
     { name: "Practice", price: "$199", per: "/mo", blurb: "For a single office", cta: "Start free trial", to: "/signup", featured: true, features: ["Unlimited reorder lists", "Invoice upload & matching", "Supplier handoffs", "Price alerts"] },
@@ -1065,7 +1089,7 @@ function PricingPage({ onNavigate }) {
   ];
   return (
     <main className="public-page">
-      <PublicNav onNavigate={onNavigate} active="pricing" />
+      <PublicNav onNavigate={onNavigate} active="pricing" authed={authed} />
       <div className="public-body">
         <section className="public-hero">
           <h1>Simple pricing for dental offices</h1>
@@ -1090,10 +1114,10 @@ function PricingPage({ onNavigate }) {
   );
 }
 
-function AboutPage({ onNavigate }) {
+function AboutPage({ onNavigate, authed = false }) {
   return (
     <main className="public-page">
-      <PublicNav onNavigate={onNavigate} active="about" />
+      <PublicNav onNavigate={onNavigate} active="about" authed={authed} />
       <div className="public-body">
         <section className="public-hero">
           <h1>We help dental offices buy supplies smarter</h1>
@@ -2152,13 +2176,13 @@ export default function Home() {
   if (!isLoggedIn) {
     return (
       <>
-        {view === "pricing" ? <PricingPage onNavigate={navigate} />
-          : view === "about" ? <AboutPage onNavigate={navigate} />
+        {view === "pricing" ? <PricingPage onNavigate={navigate} authed={authed === true} />
+          : view === "about" ? <AboutPage onNavigate={navigate} authed={authed === true} />
           : view === "login" ? <LoginPage onNavigate={navigate} onAuthed={handleAuthed} />
           : view === "signup" ? <SignupPage onNavigate={navigate} onAuthed={handleAuthed} />
           : view === "forgotPassword" ? <ForgotPasswordPage onNavigate={navigate} />
           : view === "resetPassword" ? <ResetPasswordPage onNavigate={navigate} />
-          : view === "sample" ? <SampleReorderList onNavigate={navigate} />
+          : view === "sample" ? <SampleReorderList onNavigate={navigate} authed={authed === true} />
           : view === "publicScan" ? (
             <PublicScanView
               onScan={handlePublicScan}
@@ -2169,6 +2193,8 @@ export default function Home() {
               onSignup={() => navigate("/signup")}
               onLogin={() => navigate("/login")}
               onHome={() => navigate("/")}
+              onApp={() => navigate("/app")}
+              authed={authed === true}
             />
           )
           : <LoggedOutLanding onNavigate={navigate} authed={authed === true} />}
