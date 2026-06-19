@@ -8511,7 +8511,13 @@ th {
 }
 .crl-ghost-btn .button-icon { width: 15px; height: 15px; color: var(--muted); }
 
-.crl-table { width: 100%; }
+.crl-table {
+  width: 100%;
+  max-height: clamp(320px, calc(100vh - 220px), 720px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
 .crl-row {
   display: grid;
   grid-template-columns: 30px minmax(0, 2.3fr) 44px 132px 58px minmax(0, 1.7fr) 104px 112px;
@@ -8525,7 +8531,7 @@ th {
 .crl-row-click { cursor: pointer; }
 .crl-row-click:hover { background: var(--surface-2); }
 .crl-row.active:hover { background: var(--blue-2); }
-.crl-row-head { color: var(--muted); font-size: 12px; font-weight: 600; padding-top: 12px; padding-bottom: 12px; }
+.crl-row-head { position: sticky; top: 0; z-index: 3; color: var(--muted); font-size: 12px; font-weight: 600; padding-top: 12px; padding-bottom: 12px; background: var(--surface); box-shadow: 0 1px 0 var(--line); }
 .crl-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--blue); }
 .crl-price-h { display: inline-flex; align-items: center; gap: 5px; }
 .crl-price-h .button-icon { width: 14px; height: 14px; }
@@ -8717,7 +8723,7 @@ th {
    mode (.detail-wide) keeps filling. */
 .crl-layout.has-detail:not(.detail-wide) { max-width: 1829px; }
 
-.crl-detail { position: sticky; top: 26px; display: flex; flex-direction: column; max-height: calc(100vh - 52px); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+.crl-detail { position: static; display: flex; flex-direction: column; max-height: clamp(370px, calc(100vh - 170px), 770px); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
 
 .crl-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 16px; border-bottom: 1px solid var(--line); }
 .crl-drawer-title { display: flex; align-items: flex-start; gap: 10px; }

@@ -4669,10 +4669,6 @@ function ListStatusPill({ status }) {
 const CRL_SAMPLE_SOURCES = { 1: "pdf", 2: "csv", 3: "scan", 4: "pdf", 5: "csv", 6: "scan", 7: "pdf" };
 const CRL_SOURCE_ICON = { pdf: "icon-file-text", csv: "icon-table", scan: "icon-scan" };
 
-// Rows rendered before "Load more" reveals the rest. Sized to roughly a screenful
-// so the footer only appears when the list actually runs past the initial view.
-const CRL_PAGE_SIZE = 10;
-
 // The Home surface: the active reorder list. Add Items (upload / scan / search)
 // feeds the Item List below; the right rail summarizes status and next steps.
 // Reuses the match-review data layer; before any real items are added it falls
@@ -5525,9 +5521,6 @@ function CurrentReorderList({
   const [detailWide, setDetailWide] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  // Client-side pagination: show a screenful, reveal the rest on "Load more".
-  const [visibleCount, setVisibleCount] = useState(CRL_PAGE_SIZE);
-
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const update = () => setIsMobile(mq.matches);
@@ -5535,9 +5528,6 @@ function CurrentReorderList({
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
-
-  // Switching tabs starts the new (filtered) list back at the first page.
-  useEffect(() => { setVisibleCount(CRL_PAGE_SIZE); }, [tab]);
 
   // Suppliers that actually appear in this list's offers — the real choices for
   // the preferred-supplier filter (toggling them re-ranks the best offer).
@@ -5578,8 +5568,6 @@ function CurrentReorderList({
     nomatch: (row) => row.status === "Not found",
   };
   const filtered = rows.filter(tabFilter[tab] || tabFilter.all);
-  const visible = filtered.slice(0, visibleCount);
-  const hasMore = filtered.length > visible.length;
   const openRow = (row) => setDetail({ row, mode: rowMode(row) });
 
   // Bulk selection — keyed by stable item id so it survives tab/sort changes.
@@ -5817,7 +5805,7 @@ function CurrentReorderList({
                   <p>Upload an invoice (PDF or CSV) or scan a barcode to start matching items to the best supplier.</p>
                 </div>
               )}
-              {visible.map((row) => {
+              {filtered.map((row) => {
                 const status = row.verified ? CRL_STATUS.Verified : CRL_STATUS[row.status];
                 const notFound = row.status === "Not found";
                 const mode = notFound ? "resolve" : row.status === "Review" ? "review" : "view";
@@ -5892,16 +5880,6 @@ function CurrentReorderList({
               })}
             </div>
 
-            {filtered.length > CRL_PAGE_SIZE && (
-              <div className="crl-foot">
-                <span className="crl-foot-count">Showing 1 to {visible.length} of {filtered.length} items</span>
-                {hasMore && (
-                  <button className="crl-ghost-btn" type="button" onClick={() => setVisibleCount((count) => count + CRL_PAGE_SIZE)}>
-                    Load more <Icon name="icon-chevron-down" className="button-icon" />
-                  </button>
-                )}
-              </div>
-            )}
           </section>
         </div>
 
