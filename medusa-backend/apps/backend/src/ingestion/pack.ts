@@ -93,6 +93,27 @@ function extract(text: string, allowDims: boolean): Extracted | null {
   return null
 }
 
+// Nested packaging: an inner pack multiplied by an outer case/box, written out
+// as "A/inner x B/outer" — e.g. "60/Can x 12/Case" = 720, "50/Pk x 4/Cs" = 200.
+// A plain pack_size like "12/Case" only carries the OUTER count, so without this
+// the resolved quantity collapses to 12 and the per-unit price is inflated ~60x.
+// The outer token must be a bulk word (case/box) so we don't multiply two peers
+// or a product dimension; the inner word can be anything.
+function extractNested(text?: string | null): number | null {
+  const t = text?.trim().toLowerCase()
+  if (!t) return null
+  const m = t.match(
+    /(\d{1,5})\s*\/\s*[a-z]{1,10}\s*[x×]\s*(\d{1,5})\s*\/\s*(?:case|cases|cs|carton|ctn|box|boxes|bx)\b/
+  )
+  if (m) {
+    const quantity = Number(m[1]) * Number(m[2])
+    if (quantity > 0 && quantity <= 1_000_000) {
+      return quantity
+    }
+  }
+  return null
+}
+
 function confidenceFor(source: "pack_size" | "name", kind: string): number {
   if (source === "pack_size") {
     if (kind === "slash" || kind === "wordof" || kind === "nxm") return 0.92
@@ -110,6 +131,20 @@ export function parsePack(
   _category?: string | null
 ): PackParseResult {
   const ps = packSize?.trim()
+  const nm = name?.trim()
+
+  // Highest priority: explicit nested packaging ("A/inner x B/Case"). It usually
+  // lives in the name (the richest field) even when pack_size holds only the
+  // outer count, so check both and multiply rather than trusting the outer token.
+  const nestedFromPack = extractNested(ps)
+  if (nestedFromPack !== null) {
+    return { pack_quantity: nestedFromPack, base_unit: "each", basis: "case", confidence: 0.92, source: "pack_size" }
+  }
+  const nestedFromName = extractNested(nm)
+  if (nestedFromName !== null) {
+    return { pack_quantity: nestedFromName, base_unit: "each", basis: "case", confidence: 0.8, source: "name" }
+  }
+
   if (ps) {
     const extracted = extract(ps, true)
     if (extracted && extracted.quantity > 0) {
@@ -123,7 +158,6 @@ export function parsePack(
     }
   }
 
-  const nm = name?.trim()
   if (nm) {
     const extracted = extract(nm, false)
     if (extracted && extracted.quantity > 0) {

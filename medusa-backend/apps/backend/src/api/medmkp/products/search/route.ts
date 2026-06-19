@@ -5,6 +5,7 @@ import { tokenizeName } from "../../../../matching/normalize"
 import { nameSimilarity, trigrams } from "../../../../matching/search"
 import { gtinVariants } from "../../../../matching/gtin"
 import { parseHibc } from "../../../../matching/hibc"
+import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
 
 // Live product lookup for the search box (fuzzy text) and the scanner
 // (exact SKU). Reuses the offline matching engine's tokenizer so ranking stays
@@ -61,7 +62,7 @@ async function enrichWithOffers(medmkp: MedMKPModuleService, canonicals: Canonic
   const supplierProductById = new Map(supplierProducts.map((product) => [product.id, product]))
 
   return canonicals.map((product) => {
-    const offers = matches
+    const rawOffers = matches
       .filter((match) => match.canonical_product_id === product.id && match.match_status !== "unmatched")
       .map((match) => {
         const supplierProduct = supplierProductById.get(match.supplier_product_id)
@@ -86,12 +87,16 @@ async function enrichWithOffers(medmkp: MedMKPModuleService, canonicals: Canonic
         }
       })
       .filter((offer): offer is NonNullable<typeof offer> => Boolean(offer))
-      // Rank by comparable per-unit price; offers with an unknown pack fall last.
-      .sort((a, b) => {
-        const au = a.unit_price_cents ?? Number.MAX_SAFE_INTEGER
-        const bu = b.unit_price_cents ?? Number.MAX_SAFE_INTEGER
-        return au !== bu ? au - bu : a.price_cents - b.price_cents
-      })
+
+    // Rank by comparable per-unit price (F1), but only across offers in the same
+    // base unit (F2); offers with an unknown pack fall last.
+    const ranking = analyzeOffers(rawOffers)
+    const offers = rawOffers
+      .map((offer) => ({
+        ...offer,
+        unit_comparable: isUnitComparable(offer, ranking.comparisonBasis),
+      }))
+      .sort((a, b) => compareOffers(a, b, ranking.comparisonBasis))
 
     const bestOffer = offers[0] ?? null
     const prices = offers.map((offer) => offer.price_cents).sort((a, b) => a - b)
@@ -112,6 +117,8 @@ async function enrichWithOffers(medmkp: MedMKPModuleService, canonicals: Canonic
       price_range_cents: range,
       unit_price_range_cents: unitRange,
       base_unit: bestOffer?.base_unit ?? null,
+      unit_comparable: ranking.comparableCount >= 2,
+      unit_comparison_basis: ranking.comparisonBasis,
     }
   })
 }

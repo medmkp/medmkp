@@ -3172,7 +3172,19 @@ function ProductDetail({ handle, onNavigate, onToast }) {
   // The API returns one offer per supplier variant; collapse to the lowest-priced
   // offer per supplier so the comparison reads as a supplier comparison (one row
   // each) and the "N suppliers" counts stay consistent with the hero badge.
-  const sortedOffers = [...(product.offers || [])].sort((a, b) => a.price_cents - b.price_cents);
+  // Rank suppliers by comparable per-unit price (F1). Offers whose pack is
+  // unknown — or whose unit isn't comparable to the rest of the group (F2) —
+  // have no trustworthy per-unit price and fall last, ordered by sticker price.
+  const offerUnitCost = (offer) =>
+    offer.unit_comparable && offer.unit_price_cents != null
+      ? offer.unit_price_cents
+      : Number.MAX_SAFE_INTEGER;
+  const sortedOffers = [...(product.offers || [])].sort((a, b) => {
+    const ua = offerUnitCost(a);
+    const ub = offerUnitCost(b);
+    if (ua !== ub) return ua - ub;
+    return (a.price_cents ?? 0) - (b.price_cents ?? 0);
+  });
   const seenSuppliers = new Set();
   const offers = sortedOffers.filter((offer) => {
     const key = offer.supplier_id || offer.supplier_name;
@@ -3186,6 +3198,13 @@ function ProductDetail({ handle, onNavigate, onToast }) {
   const brand = best?.brand || attrs.brands?.[0] || "";
   const packSize = attrs.pack_sizes?.[0] || best?.name?.match(/(\d+\s*\/\s*[A-Za-z.]+)/)?.[1] || "—";
   const uomLabel = (uom || "unit").toLowerCase();
+  // Whether the group's per-unit prices are comparable (same base unit), and the
+  // unit they compare in — drives the "/ ea" labels and the mixed-units note.
+  const unitComparable = !!product.unit_comparable;
+  const unitBasis = product.unit_comparison_basis || best?.base_unit || "ea";
+  const bestPerUnit = best && best.unit_comparable && best.unit_price_cents != null
+    ? best.unit_price_cents / 100
+    : null;
   const bestUnit = best ? best.price_cents / 100 : null;
   const prices = offers.map((offer) => offer.price_cents);
   const range = prices.length ? { lowest: Math.min(...prices), highest: Math.max(...prices) } : null;
@@ -3294,6 +3313,12 @@ function ProductDetail({ handle, onNavigate, onToast }) {
               <div className="pdp-compare-title">
                 <h2>Supplier pricing comparison</h2>
                 <span className="pdp-count-badge">{offers.length} supplier{offers.length === 1 ? "" : "s"}</span>
+                {offers.length > 1 && !unitComparable && (
+                  <span className="pdp-compare-note" title="These offers use different pack units, so per-unit prices can't be compared directly. Ranked by pack price instead.">
+                    <Icon name="icon-alert-triangle" className="button-icon" />
+                    Mixed pack units — ranked by pack price
+                  </span>
+                )}
               </div>
               <div className="pdp-qty-inline">
                 <span>Quantity</span>
@@ -3313,7 +3338,15 @@ function ProductDetail({ handle, onNavigate, onToast }) {
                   <span>Actions</span>
                 </div>
                 {offers.map((offer, index) => {
-                  const unit = offer.price_cents / 100;
+                  const packPrice = offer.price_cents / 100;
+                  // The comparable figure is the per-unit price; show it as the
+                  // headline and the pack price/size as context. When the offer
+                  // has no comparable unit price, fall back to the pack price.
+                  const perUnit = offer.unit_comparable && offer.unit_price_cents != null
+                    ? offer.unit_price_cents / 100
+                    : null;
+                  const packLabel = offer.pack_size
+                    || (offer.pack_quantity ? `${offer.pack_quantity}/pack` : "");
                   const meta = supplierMeta(offer.supplier_id || offer.supplier_name || index);
                   const avail = availabilityInfo(offer.availability);
                   return (
@@ -3327,10 +3360,20 @@ function ProductDetail({ handle, onNavigate, onToast }) {
                       </div>
                       <div className="pdp-row-sku">{offer.sku || "—"}</div>
                       <div className="pdp-row-unit">
-                        <strong>{money.format(unit)}</strong> <span>/ {uomLabel}</span>
-                        {index === 0 && <span className="pdp-tag-best">Best price</span>}
+                        {perUnit != null ? (
+                          <>
+                            <strong>{money.format(perUnit)}</strong> <span>/ {unitBasis}</span>
+                            <small className="pdp-unit-sub">{money.format(packPrice)}{packLabel ? ` · ${packLabel}` : ""}</small>
+                          </>
+                        ) : (
+                          <>
+                            <strong>{money.format(packPrice)}</strong> <span>/ {packLabel ? "pack" : uomLabel}</span>
+                            <small className="pdp-unit-sub muted">{packLabel || "pack size unknown"}</small>
+                          </>
+                        )}
+                        {index === 0 && <span className="pdp-tag-best">{unitComparable ? "Best per-unit" : "Lowest price"}</span>}
                       </div>
-                      <div className="pdp-row-ext">{money.format(unit * qty)}</div>
+                      <div className="pdp-row-ext">{money.format(packPrice * qty)}</div>
                       <div className={`pdp-row-avail ${avail.tone}`}>
                         <span><span className="pdp-dot" aria-hidden="true" />{avail.label}</span>
                         <small>{avail.sub}</small>
@@ -3446,7 +3489,7 @@ function ProductDetail({ handle, onNavigate, onToast }) {
               <div className="pdp-best-box">
                 <div className="pdp-best-main">
                   <span>Best price ({best.supplier_name})</span>
-                  <strong>{money.format(bestUnit)} <em>/ {uomLabel}</em></strong>
+                  <strong>{money.format(bestPerUnit ?? bestUnit)} <em>/ {bestPerUnit != null ? unitBasis : uomLabel}</em></strong>
                 </div>
                 <div className="pdp-best-side">
                   <span>Est. total</span>

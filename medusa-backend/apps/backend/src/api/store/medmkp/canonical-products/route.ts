@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { getPostgresPool } from "../../../../utils/postgres"
+import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
 
 function latestSnapshotsByProduct(snapshots: Awaited<ReturnType<MedMKPModuleService["listSupplierPriceSnapshots"]>>) {
   return snapshots.reduce((acc, snapshot) => {
@@ -354,7 +355,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   }
 
   const enriched = filteredCanonicalProducts.map((product) => {
-    const offers = (matchesByCanonical.get(product.id) ?? [])
+    const rawOffers = (matchesByCanonical.get(product.id) ?? [])
       .map((match) => {
         const supplierProduct = supplierProductById.get(match.supplier_product_id)
         const latestPrice = latestPrices.get(match.supplier_product_id)
@@ -375,12 +376,27 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
           image_url: supplierProduct.image_url || "",
           product_url: supplierProduct.product_url || "",
           price_cents: latestPrice.price_cents,
+          // Comparable per-unit price (price ÷ pack_quantity) + the pack context
+          // the UI needs to make the comparison legible.
+          unit_price_cents: latestPrice.unit_price_cents ?? null,
+          pack_quantity: supplierProduct.pack_quantity ?? null,
+          base_unit: supplierProduct.base_unit ?? null,
+          pack_size: supplierProduct.pack_size || "",
           availability: latestPrice.availability,
           match_status: match.match_status,
         }
       })
       .filter((offer): offer is NonNullable<typeof offer> => Boolean(offer))
-      .sort((a, b) => a.price_cents - b.price_cents)
+
+    // Rank by comparable per-unit price (F1), guarding against comparing across
+    // mixed base units (F2). best_offer is the cheapest comparable per-unit offer.
+    const ranking = analyzeOffers(rawOffers)
+    const offers = rawOffers
+      .map((offer) => ({
+        ...offer,
+        unit_comparable: isUnitComparable(offer, ranking.comparisonBasis),
+      }))
+      .sort((a, b) => compareOffers(a, b, ranking.comparisonBasis))
 
     const bestOffer = offers[0] ?? null
     const range = offerPriceRange(offers)
@@ -393,6 +409,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       offers,
       image_url: imageUrl,
       price_range_cents: range,
+      // True when ≥2 offers can be compared per-unit; basis names the unit.
+      unit_comparable: ranking.comparableCount >= 2,
+      unit_comparison_basis: ranking.comparisonBasis,
     }
   })
 

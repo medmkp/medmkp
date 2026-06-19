@@ -19,6 +19,34 @@ describe("parsePack", () => {
     expect(parsePack("10 x 100", "")).toMatchObject({ pack_quantity: 1000, basis: "case" })
   })
 
+  it("resolves nested 'A/inner x B/Case' packaging by multiplying both factors", () => {
+    // The outer count alone ("12/Case") collapses to 12 and inflates the per-unit
+    // price ~60x; the real base count is inner x outer.
+    expect(parsePack("", "DisCide Ultra Wipes XL 60/Can x 12/Case")).toMatchObject({
+      pack_quantity: 720,
+      basis: "case",
+      base_unit: "each",
+      source: "name",
+    })
+    expect(parsePack("", "Optim 1 Wipes10x10 60/Cn x 12/Cs")).toMatchObject({ pack_quantity: 720 })
+    expect(parsePack("", "SurFlash IV Catheter 24G x 3/4\" 50/Pk x 4/Cs")).toMatchObject({ pack_quantity: 200 })
+  })
+
+  it("prefers the name's nesting over a pack_size that holds only the outer count", () => {
+    // pack_size="12/Case" sees only 12; the name carries the full nesting.
+    expect(parsePack("12/Case", "DisCide Ultra Wipes XL 60/Can x 12/Case")).toMatchObject({
+      pack_quantity: 720,
+    })
+  })
+
+  it("does not falsely nest dimensions, peers, or non-bulk outer words", () => {
+    // "2x2 ... 200/Bag": no inner/outer slash pair joined by x, and "bag" is not
+    // a bulk outer word — stays the real 200.
+    expect(parsePack("", "Gauze Sponges 2x2 8-ply 200/Bag")).toMatchObject({ pack_quantity: 200 })
+    // "100/Pk X-Large": the X is a size, not a multiplier.
+    expect(parsePack("", "Night Angel Nitrile Gloves 100/Pk X-Large")).toMatchObject({ pack_quantity: 100 })
+  })
+
   it("recovers pack quantity from the name when pack_size is empty", () => {
     expect(parsePack("", "Night Angel Black Nitrile Gloves 100/Pk X-Large")).toMatchObject({
       pack_quantity: 100,
