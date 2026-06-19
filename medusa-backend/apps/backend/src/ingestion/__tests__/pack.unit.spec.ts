@@ -15,6 +15,24 @@ describe("parsePack", () => {
     expect(parsePack("Case of 10", "")).toMatchObject({ pack_quantity: 10, basis: "case" })
   })
 
+  it("parses the 'Pkg. N' name format (no 'of')", () => {
+    // American Dental Accessories leaves pack_size empty and puts the pack in the
+    // name as "(Pkg. N)".
+    expect(parsePack("", "Half Chair Barrier Covers (Pkg. 200)")).toMatchObject({
+      pack_quantity: 200,
+      basis: "pack",
+      source: "name",
+    })
+    expect(parsePack("", "Hygovac Aspirator Tubes (Pkg. 100) - Lime Green")).toMatchObject({ pack_quantity: 100 })
+    expect(parsePack("", "Professional Varnish - Vanilla (Pkg. 10)")).toMatchObject({ pack_quantity: 10 })
+    expect(parsePack("", "S.S.White Carbide Bur No. 699 L Pkg. 100")).toMatchObject({ pack_quantity: 100 })
+    // A "Box 3" model designation is not a 3-pack.
+    expect(parsePack("", "Set-up Tray Box 3 System").pack_quantity).toBeNull()
+    // The full word "Package" is a kit descriptor + spec, not a pack count:
+    // "Standard Package 2.6kg" must NOT become a 2-pack (it's a 2.6 kg package).
+    expect(parsePack("", "Zetalabor Standard Package 2.6kg C400790")).not.toMatchObject({ pack_quantity: 2 })
+  })
+
   it("multiplies explicit nesting from pack_size (N x M)", () => {
     expect(parsePack("10 x 100", "")).toMatchObject({ pack_quantity: 1000, basis: "case" })
   })

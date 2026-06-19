@@ -77,6 +77,16 @@ function extract(text: string, allowDims: boolean): Extracted | null {
     return { quantity: Number(wordOf[2]), basis: basisFromWord(wordOf[1]), base_unit: "each", kind: "wordof" }
   }
 
+  // "Pkg. 200", "Pkg 10", "(Pkg. 100)" — the "Pkg" abbreviation directly followed
+  // by the count, no "of" between (American Dental Accessories' / Pearson's house
+  // format, which leaves pack_size empty and puts the pack in the name). Only the
+  // abbreviation: the full word in "Standard Package 2.6kg" or "Complete Package
+  // 1 Powder" is a kit descriptor followed by a spec, not a pack count.
+  const pkgN = t.match(/\bpkgs?\.?\s*(\d{1,5})\b/)
+  if (pkgN) {
+    return { quantity: Number(pkgN[1]), basis: "pack", base_unit: "each", kind: "wordof" }
+  }
+
   // "100 ct", "200 count", "50 pk", "100ct"
   const nUnit = t.match(/\b(\d{1,5})\s*(ct|count|pk|pack|bx|box)\b/)
   if (nUnit) {
