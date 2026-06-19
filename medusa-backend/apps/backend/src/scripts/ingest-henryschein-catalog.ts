@@ -88,19 +88,21 @@ function parseArgs() {
   const args = process.argv.slice(2)
   const queries: string[] = []
   let commit = false
+  let allowShrink = false
   let maxProducts = Infinity
   let maxPages = 6000
   let concurrency = 4
 
   for (const arg of args) {
     if (arg === "--commit") commit = true
+    else if (arg === "--allow-shrink") allowShrink = true
     else if (arg.startsWith("--query=")) queries.push(arg.slice("--query=".length))
     else if (arg.startsWith("--max-products=")) maxProducts = Number(arg.slice("--max-products=".length))
     else if (arg.startsWith("--max-pages=")) maxPages = Number(arg.slice("--max-pages=".length))
     else if (arg.startsWith("--concurrency=")) concurrency = Number(arg.slice("--concurrency=".length))
   }
 
-  return { commit, maxProducts, maxPages, concurrency, queries }
+  return { commit, allowShrink, maxProducts, maxPages, concurrency, queries }
 }
 
 // Top-level dental categories to seed the crawl: read live from the browse root,
@@ -144,7 +146,7 @@ export default async function ingestHenryScheinCatalog({
   container: MedusaContainer
 }) {
   const medmkp = container.resolve<MedMKPModuleService>(MEDMKP_MODULE)
-  const { commit, maxProducts, maxPages, concurrency, queries } = parseArgs()
+  const { commit, allowShrink, maxProducts, maxPages, concurrency, queries } = parseArgs()
   const mode = queries.length ? `keyword sweep (${queries.length})` : "full category crawl"
 
   console.log(
@@ -256,6 +258,19 @@ export default async function ingestHenryScheinCatalog({
     supplier_id: SUPPLIER_ID,
     source_catalog: SOURCE_CATALOG,
   })
+  // Shrink guard: this is delete-and-replace, so a partial-fed crawl could wipe a
+  // healthy catalog (cf. the DC Dental incident). Refuse a >50% drop unless forced.
+  if (
+    existingProducts.length > 50 &&
+    rows.length < existingProducts.length * 0.5 &&
+    !allowShrink
+  ) {
+    console.error(
+      `[henryschein] ABORT: crawl found ${rows.length} products but ${existingProducts.length} exist ` +
+        `(>50% shrink). Likely a partial crawl — not replacing. Re-run, or pass --allow-shrink to override.`
+    )
+    return
+  }
   if (existingProducts.length) {
     const ids = existingProducts.map((p) => p.id)
     const existingMatches = await medmkp.listCanonicalProductMatches({ supplier_product_id: ids })
