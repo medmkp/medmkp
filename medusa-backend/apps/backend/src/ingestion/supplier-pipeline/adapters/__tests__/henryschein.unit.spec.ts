@@ -1,4 +1,8 @@
-import { extractHenryScheinProducts, henryScheinAdapter } from "../henryschein"
+import {
+  extractHenryScheinCategoryLinks,
+  extractHenryScheinProducts,
+  henryScheinAdapter,
+} from "../henryschein"
 
 // Faithful to the real henryschein.com listing markup: one application/ld+json
 // Product block per item, brand as an Organization object, sku = HS item number
@@ -64,6 +68,21 @@ describe("extractHenryScheinProducts", () => {
 
   it("dedupes repeated skus within a page", () => {
     expect(rows.filter((r) => r.sku === "1014583")).toHaveLength(1)
+  })
+
+  it("extracts dental category links (absolute, deduped, browse root excluded)", () => {
+    const html = `
+      <a href="https://www.henryschein.com/us-en/dental/c/gloves">Gloves</a>
+      <a href="/us-en/dental/c/gloves/nitrile">Nitrile</a>
+      <a href="/us-en/dental/c/gloves/nitrile/">Nitrile dup</a>
+      <a href="/us-en/dental/c/browsesupplies?id=2">Browse root (skip)</a>
+      <a href="/us-en/medical/c/other">Medical (skip)</a>`
+    const links = extractHenryScheinCategoryLinks(html)
+    expect(links).toContain("https://www.henryschein.com/us-en/dental/c/gloves")
+    expect(links).toContain("https://www.henryschein.com/us-en/dental/c/gloves/nitrile")
+    expect(links.filter((l) => l.endsWith("/gloves/nitrile"))).toHaveLength(1) // deduped
+    expect(links.some((l) => l.includes("browsesupplies"))).toBe(false)
+    expect(links.some((l) => l.includes("/medical/"))).toBe(false)
   })
 
   it("adapter matches henryschein.com candidates", () => {

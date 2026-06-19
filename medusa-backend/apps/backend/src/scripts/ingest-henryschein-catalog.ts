@@ -1,7 +1,15 @@
 import type { MedusaContainer } from "@medusajs/framework"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
-import { extractHenryScheinProducts } from "../ingestion/supplier-pipeline/adapters/henryschein"
+import {
+  extractHenryScheinCategoryLinks,
+  extractHenryScheinProducts,
+} from "../ingestion/supplier-pipeline/adapters/henryschein"
+import {
+  crawlHenryScheinCatalog,
+  HS_DENTAL_BROWSE_ROOT,
+  HS_TOP_CATEGORY_FALLBACK,
+} from "../ingestion/supplier-pipeline/henryschein-catalog-crawl"
 import {
   buildSupplierCatalogIngestion,
   type SupplierCatalogRow,
@@ -11,19 +19,20 @@ import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 /**
  * Henry Schein catalog ingestion — identity layer only (no prices).
  *
- * HS gates pricing behind login, but its public search/category listings embed
+ * HS gates pricing behind login, but its public dental category listings embed
  * a JSON-LD Product block per item (name, brand, mpn, sku). We ingest those so a
  * scanned HS item (HIBC code → REF → sku) resolves to a real product, and the
  * search route can offer priced substitutes from other suppliers.
  *
- * Default run is a DRY RUN (no writes): it fetches the seed queries, extracts
- * rows, matches them against the canonical catalog, and reports coverage. Pass
- * --commit to write (subject to the destructive-DB guard, since writing to a
- * remote/prod DB needs MEDMKP_ALLOW_DESTRUCTIVE_DB=1).
+ * Default crawl walks the full category tree (top categories → hubs → leaf
+ * listings, paginated). Pass --query=… to instead sweep specific keyword
+ * searches (faster, partial coverage). Default run is a DRY RUN (no writes);
+ * --commit writes (subject to the destructive-DB guard, so a remote/prod DB
+ * needs ALLOW_REMOTE_DB_DESTRUCTIVE=true).
  *
- *   yarn henryschein:ingest                 # dry run
- *   yarn henryschein:ingest -- --commit     # write supplier rows + matches
- *   yarn henryschein:ingest -- --query="cotton roll" --query="prophy paste"
+ *   yarn henryschein:ingest                       # dry run, full category crawl
+ *   yarn henryschein:ingest -- --commit           # write supplier rows + matches
+ *   yarn henryschein:ingest -- --query="cotton roll"   # targeted keyword mode
  */
 
 const SUPPLIER_ID = "msup_henryschein_com"
@@ -32,49 +41,16 @@ const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
-// Broad dental-supply terms that fan out across the catalog. Not exhaustive —
-// full coverage would walk the category tree with pagination (a follow-up); this
-// set is enough to ingest the common consumables practices actually scan.
-const DEFAULT_QUERIES = [
-  "nitrile exam glove",
-  "gauze sponge",
-  "cotton roll",
-  "saliva ejector",
-  "prophy paste",
-  "prophy angle",
-  "fluoride varnish",
-  "impression material",
-  "composite refill",
-  "etch gel",
-  "bonding agent",
-  "temporary cement",
-  "anesthetic",
-  "endodontic file",
-  "carbide bur",
-  "diamond bur",
-  "surface disinfectant",
-  "barrier film",
-  "face mask",
-  "suction tip",
-]
-
-function searchUrl(query: string) {
-  const params = new URLSearchParams({
-    did: "dental",
-    searchkeyword: query,
-    rfm: "Catalog:DENTAL",
-  })
-  return `https://www.henryschein.com/us-en/Search.aspx?${params.toString()}`
-}
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function fetchListing(query: string): Promise<string> {
-  const url = searchUrl(query)
+// Browser-UA fetch with one retry; returns "" on failure so the crawl skips a
+// bad node instead of aborting. Akamai stalls the default bot UA but serves a
+// real Chrome UA.
+async function fetchHtml(url: string): Promise<string> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 30000)
+      const timer = setTimeout(() => controller.abort(), 45000)
       const response = await fetch(url, {
         headers: {
           "User-Agent": BROWSER_UA,
@@ -89,13 +65,23 @@ async function fetchListing(query: string): Promise<string> {
       return await response.text()
     } catch (error) {
       if (attempt === 2) {
-        console.warn(`[henryschein] fetch failed for "${query}": ${(error as Error).message}`)
+        console.warn(`[henryschein] fetch failed ${url}: ${(error as Error).message}`)
         return ""
       }
-      await sleep(2000)
+      await sleep(1500)
     }
   }
   return ""
+}
+
+function searchUrl(query: string, page: number) {
+  const params = new URLSearchParams({
+    did: "dental",
+    searchkeyword: query,
+    rfm: "Catalog:DENTAL",
+    pageNumber: String(page),
+  })
+  return `https://www.henryschein.com/us-en/Search.aspx?${params.toString()}`
 }
 
 function parseArgs() {
@@ -103,14 +89,53 @@ function parseArgs() {
   const queries: string[] = []
   let commit = false
   let maxProducts = Infinity
+  let maxPages = 6000
+  let concurrency = 4
 
   for (const arg of args) {
     if (arg === "--commit") commit = true
     else if (arg.startsWith("--query=")) queries.push(arg.slice("--query=".length))
     else if (arg.startsWith("--max-products=")) maxProducts = Number(arg.slice("--max-products=".length))
+    else if (arg.startsWith("--max-pages=")) maxPages = Number(arg.slice("--max-pages=".length))
+    else if (arg.startsWith("--concurrency=")) concurrency = Number(arg.slice("--concurrency=".length))
   }
 
-  return { commit, maxProducts, queries: queries.length ? queries : DEFAULT_QUERIES }
+  return { commit, maxProducts, maxPages, concurrency, queries }
+}
+
+// Top-level dental categories to seed the crawl: read live from the browse root,
+// falling back to the known list if that fetch fails.
+async function discoverSeedCategories(): Promise<string[]> {
+  const html = await fetchHtml(HS_DENTAL_BROWSE_ROOT)
+  const top = html ? extractHenryScheinCategoryLinks(html) : []
+  return top.length ? top : HS_TOP_CATEGORY_FALLBACK
+}
+
+// Keyword-search sweep (optional --query mode): paginate each query until a page
+// adds no new SKUs.
+async function crawlByQueries(
+  queries: string[],
+  maxProducts: number
+): Promise<SupplierCatalogRow[]> {
+  const bySku = new Map<string, SupplierCatalogRow>()
+  for (const query of queries) {
+    for (let page = 1; page <= 60; page++) {
+      const html = await fetchHtml(searchUrl(query, page))
+      const rows = html ? extractHenryScheinProducts(html) : []
+      let added = 0
+      for (const row of rows) {
+        if (!row.sku || bySku.has(row.sku)) continue
+        bySku.set(row.sku, row)
+        added++
+        if (bySku.size >= maxProducts) break
+      }
+      console.log(`[henryschein]   "${query}" p${page}: ${rows.length} products, +${added} (total ${bySku.size})`)
+      if (added === 0 || bySku.size >= maxProducts) break
+      await sleep(800)
+    }
+    if (bySku.size >= maxProducts) break
+  }
+  return [...bySku.values()]
 }
 
 export default async function ingestHenryScheinCatalog({
@@ -119,30 +144,29 @@ export default async function ingestHenryScheinCatalog({
   container: MedusaContainer
 }) {
   const medmkp = container.resolve<MedMKPModuleService>(MEDMKP_MODULE)
-  const { commit, maxProducts, queries } = parseArgs()
+  const { commit, maxProducts, maxPages, concurrency, queries } = parseArgs()
+  const mode = queries.length ? `keyword sweep (${queries.length})` : "full category crawl"
 
   console.log(
-    `[henryschein] ${commit ? "COMMIT" : "DRY RUN"} — fetching ${queries.length} queries (identity only, no prices)`
+    `[henryschein] ${commit ? "COMMIT" : "DRY RUN"} — ${mode} (identity only, no prices)`
   )
 
-  // Crawl: one fetch per query, dedupe products by HS sku across all pages.
-  const bySku = new Map<string, SupplierCatalogRow>()
-  for (const query of queries) {
-    const html = await fetchListing(query)
-    const rows = html ? extractHenryScheinProducts(html) : []
-    let added = 0
-    for (const row of rows) {
-      if (!row.sku || bySku.has(row.sku)) continue
-      bySku.set(row.sku, row)
-      added++
-      if (bySku.size >= maxProducts) break
-    }
-    console.log(`[henryschein]   "${query}": ${rows.length} products, +${added} new (total ${bySku.size})`)
-    if (bySku.size >= maxProducts) break
-    await sleep(1500) // polite crawl rate
+  let rows: SupplierCatalogRow[]
+  if (queries.length) {
+    rows = await crawlByQueries(queries, maxProducts)
+  } else {
+    const seedUrls = await discoverSeedCategories()
+    console.log(`[henryschein] seeded ${seedUrls.length} top categories; crawling…`)
+    rows = await crawlHenryScheinCatalog({
+      fetchHtml,
+      seedUrls,
+      maxProducts,
+      maxPages,
+      concurrency,
+      log: (msg) => console.log(msg),
+    })
   }
 
-  const rows = [...bySku.values()]
   if (!rows.length) {
     console.error("[henryschein] No products extracted — aborting (check fetch/UA).")
     return

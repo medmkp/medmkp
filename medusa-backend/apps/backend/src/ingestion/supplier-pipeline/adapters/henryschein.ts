@@ -130,6 +130,20 @@ export function extractHenryScheinProducts(html: string): ExtractedProductRow[] 
   return rows
 }
 
+// Every dental category/subcategory URL linked on a page, absolute and
+// de-duplicated. Used by the catalog crawl to walk the tree (top category →
+// hub → leaf listing). The browse root is excluded so the crawl doesn't loop
+// back to the start.
+export function extractHenryScheinCategoryLinks(html: string): string[] {
+  const set = new Set<string>()
+  for (const m of html.matchAll(/\/us-en\/dental\/c\/([a-z0-9][a-z0-9/_-]*)/gi)) {
+    const path = m[1].split("?")[0].replace(/\/+$/, "").toLowerCase()
+    if (!path || path.startsWith("browsesupplies")) continue
+    set.add(`https://www.henryschein.com/us-en/dental/c/${path}`)
+  }
+  return [...set]
+}
+
 function extractProducts(
   _candidate: ProductPageCandidate,
   html: string
