@@ -8588,6 +8588,11 @@ th {
 .crl-plan strong { color: var(--ink); font-weight: 700; font-size: 14px; }
 .crl-plan strong.green { color: var(--green); }
 .crl-ship-nudge { margin: -4px 0 12px; padding: 8px 10px; border-radius: 8px; background: rgba(10, 152, 97, 0.09); color: var(--ink); font-size: 12px; line-height: 1.4; }
+.crl-optimize { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -4px 0 12px; padding: 10px; border-radius: 9px; border: 1px solid rgba(10, 152, 97, 0.3); background: rgba(10, 152, 97, 0.06); }
+.crl-optimize-text { font-size: 12px; line-height: 1.4; color: var(--ink); }
+.crl-optimize-text strong { color: var(--green); }
+.crl-optimize-btn { flex: none; padding: 7px 14px; border: none; border-radius: 8px; background: var(--green); color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; }
+.crl-optimize-btn:hover { filter: brightness(0.95); }
 .crl-plan-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--blue); font-weight: 700; font-size: 13px; }
 .crl-plan-btn .button-icon { width: 16px; height: 16px; }
 

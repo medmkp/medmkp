@@ -1920,6 +1920,19 @@ export default function Home() {
     }));
   }
 
+  // Apply the landed-cost-optimized plan: set each line's selected offer to the
+  // optimizer's choice. Reuses the per-line override mechanism, so the buyer can
+  // still re-pick any line afterward.
+  function applyOptimizedPlan(assignmentByItemId) {
+    if (!assignmentByItemId || !Object.keys(assignmentByItemId).length) return;
+    setListTouched(true);
+    setDraftItems((items) => items.map((item) => {
+      const key = assignmentByItemId[item.id];
+      return key ? { ...item, selectedOfferKey: key } : item;
+    }));
+    showToast("Plan optimized for lowest landed cost");
+  }
+
   // Bulk-confirm a set of items, accepting whatever offer is currently best.
   function verifyItems(itemIds) {
     const ids = new Set(itemIds);
@@ -2193,6 +2206,7 @@ export default function Home() {
                 buyingPrefs={buyingPrefs}
                 supplierShipping={supplierShipping}
                 onBuyingPrefs={setBuyingPrefs}
+                onApplyOptimized={applyOptimizedPlan}
                 onArchiveList={archiveCurrentList}
                 onClearList={clearCurrentList}
                 onConfirmMatch={applyMatchDecision}
@@ -3882,6 +3896,108 @@ function computePlanTotals(rows, shippingByName) {
   };
 }
 
+// Candidate offers for a line under the buyer's preferences — mirrors
+// pickBestOffer's preferred-supplier filter so optimization never proposes a
+// supplier the buyer excluded.
+function candidatePool(offers, prefs) {
+  const preferred = prefs?.preferredSuppliers || [];
+  if (!preferred.length) return offers;
+  const inPref = offers.filter((offer) =>
+    preferred.some((name) => (offer.supplier || "").toLowerCase().includes(name.toLowerCase())));
+  return inPref.length ? inPref : offers;
+}
+
+// Landed cost of an assignment (chosen offer + qty per line): item cost plus
+// per-supplier shipping evaluated on each supplier's assigned basket.
+function assignmentLanded(assignment, shippingByName) {
+  const groups = new Map();
+  for (const { offer, qty } of assignment) {
+    const key = normSupplierName(offer.supplier);
+    const group = groups.get(key) || { subtotal: 0 };
+    group.subtotal += (offer.price || 0) * qty;
+    groups.set(key, group);
+  }
+  let total = 0;
+  for (const [key, group] of groups) {
+    total += group.subtotal + (computeSupplierShipping(shippingByName?.[key] || null, group.subtotal) || 0);
+  }
+  return total;
+}
+
+// Re-assign lines across suppliers to minimize total LANDED cost (item price +
+// per-supplier shipping) — this naturally favors consolidating onto a supplier
+// whose free-shipping threshold the combined basket can clear. Callers gate this
+// on complete shipping data so an unknown policy can't masquerade as free.
+//
+// Multi-start local search: from each seed (the buyer's current plan, plus one
+// "everything to supplier S" per supplier), repeatedly move each line to the
+// offer that lowers the landed total until stable, then keep the cheapest result
+// across all seeds. The per-supplier seeds keep single-line search from getting
+// stuck consolidating onto the wrong supplier. Returns null when nothing beats
+// the current plan.
+function optimizeLandedAssignment(rows, shippingByName, prefs) {
+  const lines = (rows || [])
+    .filter((row) => row.status !== "Not found" && (row.offers || []).length && row.itemId)
+    .map((row) => {
+      const pool = candidatePool(row.offers, prefs);
+      const current = pool.find((offer) => offer.key === row.selectedOfferKey) || pool[0];
+      return { itemId: row.itemId, qty: row.qty || 1, pool, current };
+    })
+    .filter((line) => line.pool.length);
+  if (lines.length < 2) return null;
+
+  const landedOf = (assign) =>
+    assignmentLanded(assign.map((offer, i) => ({ offer, qty: lines[i].qty })), shippingByName);
+
+  const localSearch = (seed) => {
+    const assign = seed.slice();
+    let improved = true;
+    let passes = 0;
+    while (improved && passes < 20) {
+      improved = false;
+      passes += 1;
+      for (let i = 0; i < lines.length; i++) {
+        let bestOffer = assign[i];
+        let bestCost = landedOf(assign);
+        for (const cand of lines[i].pool) {
+          if (cand.key === assign[i].key) continue;
+          assign[i] = cand;
+          const cost = landedOf(assign);
+          if (cost < bestCost - 1e-6) { bestCost = cost; bestOffer = cand; improved = true; }
+        }
+        assign[i] = bestOffer;
+      }
+    }
+    return assign;
+  };
+
+  const baseline = lines.map((line) => line.current);
+  const baseLanded = landedOf(baseline);
+  const cheapest = (pool) => [...pool].sort((a, b) => (a.price || 0) - (b.price || 0))[0];
+  const suppliers = new Set();
+  for (const line of lines) for (const offer of line.pool) suppliers.add(normSupplierName(offer.supplier));
+
+  const seeds = [baseline];
+  for (const sup of suppliers) {
+    seeds.push(lines.map((line) => line.pool.find((offer) => normSupplierName(offer.supplier) === sup) || cheapest(line.pool)));
+  }
+
+  let best = baseline;
+  let bestLanded = baseLanded;
+  for (const seed of seeds) {
+    const result = localSearch(seed);
+    const landed = landedOf(result);
+    if (landed < bestLanded - 1e-6) { bestLanded = landed; best = result; }
+  }
+
+  const savings = baseLanded - bestLanded;
+  if (savings <= 0.5) return null;
+
+  const assignmentByItemId = {};
+  for (let i = 0; i < lines.length; i++) assignmentByItemId[lines[i].itemId] = best[i].key;
+  return { assignmentByItemId, savings, optimizedLanded: bestLanded, suppliers: new Set(best.map((offer) => normSupplierName(offer.supplier))).size };
+}
+
 function deriveMatchRows(items, prefs) {
   return (items || []).map((item, index) => {
     const conf = Math.round((item.confidence ?? item.recommendation?.confidence ?? 0) * 100);
@@ -4891,6 +5007,7 @@ function CurrentReorderList({
   buyingPrefs,
   supplierShipping = {},
   onBuyingPrefs,
+  onApplyOptimized,
   onArchiveList,
   onClearList,
   onConfirmMatch,
@@ -4952,6 +5069,15 @@ function CurrentReorderList({
     const missingPrice = rows.filter((row) => row.status !== "Not found" && !row.hasPaidPrice).length;
     return { ...totals, coverage, savings, currentSpend, missingPrice };
   }, [rows, stats, supplierShipping]);
+
+  // Lowest-landed-cost re-assignment, surfaced as an opt-in suggestion. Only run
+  // it when shipping is fully known for the plan (so an unknown policy can't look
+  // free) and the buyer isn't in brand-match mode (which prioritizes brand over
+  // cost). Non-destructive: it sets per-line selections only when Applied.
+  const optimizedPlan = useMemo(() => {
+    if (!planSummary.shippingComplete || buyingPrefs?.strategy === "brand-match") return null;
+    return optimizeLandedAssignment(rows, supplierShipping, buyingPrefs);
+  }, [rows, supplierShipping, buyingPrefs, planSummary.shippingComplete]);
 
   const tabFilter = {
     all: () => true,
@@ -5338,6 +5464,19 @@ function CurrentReorderList({
                     Add {money.format(planSummary.nudge.remaining)} from {planSummary.nudge.supplier} to unlock free shipping
                     {planSummary.nudge.saves ? ` (saves ${money.format(planSummary.nudge.saves)})` : ""}.
                   </p>
+                )}
+                {optimizedPlan && (
+                  <div className="crl-optimize">
+                    <div className="crl-optimize-text">
+                      Save <strong>{money.format(optimizedPlan.savings)}</strong>{" "}
+                      {optimizedPlan.suppliers < planSummary.suppliers
+                        ? `by consolidating to ${optimizedPlan.suppliers} supplier${optimizedPlan.suppliers === 1 ? "" : "s"}`
+                        : "by optimizing suppliers for shipping"}.
+                    </div>
+                    <button className="crl-optimize-btn" type="button" onClick={() => onApplyOptimized?.(optimizedPlan.assignmentByItemId)}>
+                      Apply
+                    </button>
+                  </div>
                 )}
                 {planSummary.missingPrice > 0 && (
                   <p className="crl-plan-note">
