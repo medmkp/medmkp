@@ -1520,17 +1520,24 @@ export default function Home() {
       try {
         const response = await fetch("/api/reorder-list", { cache: "no-store" });
         const data = await response.json().catch(() => ({}));
-        if (data && data.state) {
+        const local = JSON.parse(window.localStorage.getItem(APP_STATE_KEY) || "null");
+        const localItems = local && (local.draftItems || []).length ? local.draftItems.length : 0;
+        const serverItems = data && data.state ? (data.state.draftItems || []).length : 0;
+        // The server list is normally the cross-device source of truth. But a
+        // refresh within the 800ms save debounce can lose an in-flight save, so
+        // the server may be stale/empty while localStorage still holds the just-
+        // edited list. In that case keep local and push it back up, rather than
+        // clobbering the working list with empty server state.
+        if (data && data.state && serverItems >= localItems) {
           hydrateFromState(data.state);
-        } else {
-          const local = JSON.parse(window.localStorage.getItem(APP_STATE_KEY) || "null");
-          if (local && (local.draftItems || []).length) {
-            await fetch("/api/reorder-list", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(local),
-            });
-          }
+        } else if (localItems) {
+          await fetch("/api/reorder-list", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(local),
+          });
+        } else if (data && data.state) {
+          hydrateFromState(data.state);
         }
       } catch {
         // offline / server down — keep whatever localStorage hydrated.
@@ -1565,6 +1572,36 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listStage, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
+
+  // Flush a pending (debounced) save when the tab is hidden or unloaded, so a
+  // refresh/close within the 800ms save window can't drop the latest edits.
+  // `keepalive` lets the PUT outlive the page; pagehide covers the bfcache and
+  // mobile-Safari cases beforeunload misses.
+  useEffect(() => {
+    if (authed !== true) return;
+    const flush = () => {
+      if (!pendingSaveRef.current || !latestBlobRef.current) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      try {
+        fetch("/api/reorder-list", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(latestBlobRef.current),
+          keepalive: true,
+        });
+        pendingSaveRef.current = false;
+      } catch {
+        // best-effort; localStorage still holds the blob for next load
+      }
+    };
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [authed]);
 
   // Supplier names for the preferred-supplier picker, plus each supplier's
   // shipping policy for landed-cost estimates on the reorder list.
