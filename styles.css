@@ -8498,6 +8498,11 @@ th {
 }
 .crl-plan-header-btn:hover { background: var(--blue-dark, #1a56db); border-color: var(--blue-dark, #1a56db); }
 .crl-plan-header-btn .button-icon { width: 17px; height: 17px; }
+.crl-plan-header-btn:disabled {
+  background: var(--surface); color: var(--muted); border-color: var(--line);
+  box-shadow: none; cursor: not-allowed;
+}
+.crl-plan-header-btn:disabled:hover { background: var(--surface); border-color: var(--line); }
 /* The gate button: a fully-reviewed list is ready to advance — emphasize it. */
 .crl-plan-header-btn--primary { box-shadow: 0 0 0 3px var(--blue-2, rgba(37,99,235,.18)); }
 

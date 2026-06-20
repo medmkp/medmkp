@@ -556,7 +556,7 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
       {stats.matched + stats.review > 0 && (
         <div className="m-plan-cta">
           <button type="button" className="primary-action" onClick={() => onNavigate?.("/app/review")}>
-            <Icon name="icon-clipboard-check" className="button-icon" />Review &amp; optimize
+            <Icon name="icon-clipboard-check" className="button-icon" />Review
           </button>
         </div>
       )}
@@ -916,6 +916,7 @@ export function CurrentReorderList({
   const [detailWide, setDetailWide] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [reviewConfirm, setReviewConfirm] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const listNameRef = useRef(null);
 
   // Advance to Review & optimize. If anything is unresolved, confirm first so the
@@ -1139,23 +1140,44 @@ export function CurrentReorderList({
             <Icon name="icon-cloud-upload" className="button-icon" />
             Upload Invoice
           </button>
-          {totalItems > 0 && (
+          <button
+            type="button"
+            className="crl-plan-header-btn crl-plan-header-btn--primary"
+            onClick={goToReview}
+            disabled={totalItems === 0}
+            title={totalItems === 0 ? "Add items to your list before you can review" : "Optimize supplier consolidation, shipping, and delivery for this list"}
+          >
+            <Icon name="icon-clipboard-check" className="button-icon" />
+            {listStage === "review" ? "Continue in plan" : "Review"}
+          </button>
+          <div className="crl-add-menu-wrap">
             <button
+              className="crl-more crl-more-icon"
               type="button"
-              className="crl-plan-header-btn crl-plan-header-btn--primary"
-              onClick={goToReview}
-              title="Optimize supplier consolidation, shipping, and delivery for this list"
+              aria-label="List actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              title="List actions"
+              onClick={() => setMenuOpen((open) => !open)}
             >
-              <Icon name="icon-clipboard-check" className="button-icon" />
-              {listStage === "review" ? "Continue in plan" : "Review & optimize"}
+              <svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
             </button>
-          )}
-          <button className="crl-more crl-more-icon" type="button" aria-label="Archive this list" title="Archive this list" onClick={() => onArchiveList()}>
-            <Icon name="icon-archive-down" className="button-icon" />
-          </button>
-          <button className="crl-more crl-more-icon" type="button" aria-label="Clear this list" title="Clear this list" onClick={() => onClearList()}>
-            <Icon name="icon-trash-ios" className="button-icon" />
-          </button>
+            {menuOpen && (
+              <>
+                <div className="crl-add-menu-backdrop" onClick={() => setMenuOpen(false)} />
+                <div className="crl-add-menu m-actions-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onArchiveList?.(); }}>
+                    <Icon name="icon-archive-down" className="button-icon" />
+                    <span><strong>Archive list</strong><small>Move to list history</small></span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onClearList?.(); }}>
+                    <Icon name="icon-trash-ios" className="button-icon crl-menu-danger" />
+                    <span><strong>Clear list</strong><small>Remove all items</small></span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -1338,7 +1360,6 @@ export function CurrentReorderList({
                 <div><span>Potential savings</span><strong className="green">$842.15</strong></div>
               </div>
             )}
-            <button className="crl-plan-btn" type="button" onClick={() => onNavigate?.("/app/review")}>Open Review &amp; optimize <Icon name="icon-arrow-right" className="button-icon" /></button>
           </section>
         </aside>
         )}
