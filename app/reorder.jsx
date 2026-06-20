@@ -753,6 +753,94 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
 }
 
 
+// The reorder-list table header. Shared by the flat Current Reorder List and the
+// supplier-grouped Review view so both render identical columns.
+export function ReorderTableHead() {
+  return (
+    <div className="crl-row crl-row-head">
+      <span className="crl-h-center">Source</span>
+      <span>Item</span>
+      <span className="crl-h-center">Qty</span>
+      <span className="crl-h-center">Status</span>
+      <span>Matched product</span>
+      <span className="crl-price-h">Price <Icon name="icon-info" className="button-icon" /></span>
+      <span aria-hidden="true" />
+    </div>
+  );
+}
+
+// One reorder-list table row. `onOpen(row, mode)` opens the product-match drawer.
+// Extracted so the Review view can render the same rows grouped by supplier.
+export function ReorderRow({ row, active, onOpen, onConfirmMatch, onRemoveItem, onToast }) {
+  const status = CRL_STATUS[row.status];
+  const notFound = row.status === "Not found";
+  const mode = notFound ? "resolve" : row.status === "Review" ? "review" : "view";
+  return (
+    <div className={`crl-row crl-row-click ${active ? "active" : ""}`} onClick={() => onOpen(row, mode)}>
+      <span className="crl-source" title={`Imported from ${row.source.toUpperCase()}`}><Icon name={CRL_SOURCE_ICON[row.source] || "icon-file-text"} className="button-icon" /></span>
+      <span className="crl-item">
+        <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
+        <span className="crl-item-id">
+          <strong>{row.canonicalName || row.importedName}</strong>
+          <small>{row.canonicalName ? `From source: ${row.importedName}` : `SKU on source: ${(row.importedSub || "").replace(/^SKU:\s*/, "") || "—"}`}</small>
+        </span>
+      </span>
+      <span className="crl-qty">
+        {row.itemId ? (
+          <span className="crl-qty-inline" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="crl-qty-step-btn" aria-label="Decrease quantity" disabled={(row.qty || 1) <= 1} onClick={() => onConfirmMatch?.(row.itemId, { qty: Math.max(1, (row.qty || 1) - 1) })}>&minus;</button>
+            <strong>{row.qty}</strong>
+            <button type="button" className="crl-qty-step-btn" aria-label="Increase quantity" onClick={() => onConfirmMatch?.(row.itemId, { qty: (row.qty || 1) + 1 })}>+</button>
+          </span>
+        ) : (
+          <strong>{row.qty}</strong>
+        )}
+        {(() => {
+          const label = row.packLabel || row.uom;
+          return label && label !== "ea" ? <small>{label}</small> : null;
+        })()}
+      </span>
+      <span className="crl-status-cell">
+        <span className={`crl-status ${status.cls}`} title={status.label}><Icon name={status.icon} className="button-icon" /><span className="crl-status-label">{status.label}</span></span>
+        {row.confidence != null && <small className={`crl-conf ${mrConfTone(row.confidence)}`}>{row.confidence}% confidence</small>}
+      </span>
+      <span className="crl-match">
+        {notFound ? (
+          <>
+            <strong>No match found</strong>
+            <small>We couldn&rsquo;t find a match in our catalog.</small>
+          </>
+        ) : (
+          <>
+            <strong>{row.matchName}</strong>
+            {row.matchSub && <small>{row.matchSub}</small>}
+            <MatchSupplier name={row.supplier !== "—" ? row.supplier : row.matchBrand} />
+          </>
+        )}
+      </span>
+      <span className="crl-price">
+        {notFound ? <span className="crl-dash">—</span> : row.priceMissing ? (
+          <span className="crl-noprice">Price not listed<small>Login required</small></span>
+        ) : (
+          <>
+            <strong>{mrMoney(row.price)}</strong>
+            {showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
+            {row.lineSavings > 0 && <small className="crl-save">Save {mrMoney(row.lineSavings)}</small>}
+          </>
+        )}
+      </span>
+      <span className="crl-actions">
+        {row.itemId && (
+          <button className="crl-row-delete" type="button" aria-label="Remove from list" title="Remove from list" onClick={(event) => { event.stopPropagation(); onRemoveItem?.(row.itemId); onToast?.("Item removed from list"); }}>
+            <Icon name="icon-trash-ios" className="button-icon" />
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+
 export function CurrentReorderList({
   items,
   listName = "June Restock",
@@ -1132,15 +1220,7 @@ export function CurrentReorderList({
             </div>
 
             <div className="crl-table">
-              <div className="crl-row crl-row-head">
-                <span className="crl-h-center">Source</span>
-                <span>Item</span>
-                <span className="crl-h-center">Qty</span>
-                <span className="crl-h-center">Status</span>
-                <span>Matched product</span>
-                <span className="crl-price-h">Price <Icon name="icon-info" className="button-icon" /></span>
-                <span aria-hidden="true" />
-              </div>
+              <ReorderTableHead />
               {isEmpty && (
                 <div className="crl-empty">
                   <Icon name="icon-cloud-upload" className="button-icon" />
@@ -1148,74 +1228,17 @@ export function CurrentReorderList({
                   <p>Upload an invoice (PDF or CSV) or scan a barcode to start matching items to the best supplier.</p>
                 </div>
               )}
-              {filtered.map((row) => {
-                const status = CRL_STATUS[row.status];
-                const notFound = row.status === "Not found";
-                const mode = notFound ? "resolve" : row.status === "Review" ? "review" : "view";
-                return (
-                  <div className={`crl-row crl-row-click ${detail?.row.id === row.id ? "active" : ""}`} key={row.id} onClick={() => setDetail({ row, mode })}>
-                    <span className="crl-source" title={`Imported from ${row.source.toUpperCase()}`}><Icon name={CRL_SOURCE_ICON[row.source] || "icon-file-text"} className="button-icon" /></span>
-                    <span className="crl-item">
-                      <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
-                      <span className="crl-item-id">
-                        <strong>{row.canonicalName || row.importedName}</strong>
-                        <small>{row.canonicalName ? `From source: ${row.importedName}` : `SKU on source: ${(row.importedSub || "").replace(/^SKU:\s*/, "") || "—"}`}</small>
-                      </span>
-                    </span>
-                    <span className="crl-qty">
-                      {row.itemId ? (
-                        <span className="crl-qty-inline" onClick={(event) => event.stopPropagation()}>
-                          <button type="button" className="crl-qty-step-btn" aria-label="Decrease quantity" disabled={(row.qty || 1) <= 1} onClick={() => onConfirmMatch?.(row.itemId, { qty: Math.max(1, (row.qty || 1) - 1) })}>&minus;</button>
-                          <strong>{row.qty}</strong>
-                          <button type="button" className="crl-qty-step-btn" aria-label="Increase quantity" onClick={() => onConfirmMatch?.(row.itemId, { qty: (row.qty || 1) + 1 })}>+</button>
-                        </span>
-                      ) : (
-                        <strong>{row.qty}</strong>
-                      )}
-                      {(() => {
-                        const label = row.packLabel || row.uom;
-                        return label && label !== "ea" ? <small>{label}</small> : null;
-                      })()}
-                    </span>
-                    <span className="crl-status-cell">
-                      <span className={`crl-status ${status.cls}`} title={status.label}><Icon name={status.icon} className="button-icon" /><span className="crl-status-label">{status.label}</span></span>
-                      {row.confidence != null && <small className={`crl-conf ${mrConfTone(row.confidence)}`}>{row.confidence}% confidence</small>}
-                    </span>
-                    <span className="crl-match">
-                      {notFound ? (
-                        <>
-                          <strong>No match found</strong>
-                          <small>We couldn&rsquo;t find a match in our catalog.</small>
-                        </>
-                      ) : (
-                        <>
-                          <strong>{row.matchName}</strong>
-                          {row.matchSub && <small>{row.matchSub}</small>}
-                          <MatchSupplier name={row.supplier !== "—" ? row.supplier : row.matchBrand} />
-                        </>
-                      )}
-                    </span>
-                    <span className="crl-price">
-                      {notFound ? <span className="crl-dash">—</span> : row.priceMissing ? (
-                        <span className="crl-noprice">Price not listed<small>Login required</small></span>
-                      ) : (
-                        <>
-                          <strong>{mrMoney(row.price)}</strong>
-                          {showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
-                          {row.lineSavings > 0 && <small className="crl-save">Save {mrMoney(row.lineSavings)}</small>}
-                        </>
-                      )}
-                    </span>
-                    <span className="crl-actions">
-                      {row.itemId && (
-                        <button className="crl-row-delete" type="button" aria-label="Remove from list" title="Remove from list" onClick={(event) => { event.stopPropagation(); onRemoveItem?.(row.itemId); onToast("Item removed from list"); }}>
-                          <Icon name="icon-trash-ios" className="button-icon" />
-                        </button>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
+              {filtered.map((row) => (
+                <ReorderRow
+                  key={row.id}
+                  row={row}
+                  active={detail?.row.id === row.id}
+                  onOpen={(r, mode) => setDetail({ row: r, mode })}
+                  onConfirmMatch={onConfirmMatch}
+                  onRemoveItem={onRemoveItem}
+                  onToast={onToast}
+                />
+              ))}
               {!isEmpty && rows.some((r) => r.lineTotal != null) && (
                 <div className="crl-foot">
                   <span className="crl-foot-label">List subtotal</span>

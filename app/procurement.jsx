@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Icon } from "./icons";
 import { AGENT_SUPPLIERS, ARCHIVED_LISTS, CRL_STATUS, STRATEGY_LABELS, availabilityBadge, buildHandoffCsv, buildSupplierOrderText, deriveMatchRows, downloadTextFile, groupRowsBySupplier, isAgentSupplier, isOrderable, isPlanIncluded, isStrandedOutOfStock, money, mrEa, mrMoney, pickBestOffer, planSlug, shopifyStockKey, showPerEa, supplierSiteUrl } from "./lib";
 import { BuyingPreferencesCard, ListStatusPill, MatchSupplier, ProductThumb } from "./ui";
+import { MatchPanel, ReorderRow, ReorderTableHead } from "./reorder";
 
 export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, onSwitchOffer, onToast }) {
   const [state, setState] = useState({ status: "loading", result: null });
@@ -390,7 +391,11 @@ export function SupplierGroupCard({ group, onNavigate, onBuildCart, onSwitchOffe
 }
 
 
-export function ProcurementPlanView({ items, listName, listStatus = "draft", onBackToDraft, buyingPrefs, onBuyingPrefs, onPrepareHandoff, onBuildCart, onSwitchOffer, onNavigate, onToast }) {
+export function ProcurementPlanView({ items, listName, listStatus = "draft", onBackToDraft, buyingPrefs, onBuyingPrefs, onPrepareHandoff, onBuildCart, onSwitchOffer, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate, onToast }) {
+  // Product-match drawer state — mirrors the reorder list so a row click opens
+  // the same MatchPanel, and the drawer replaces the right rail while open.
+  const [detail, setDetail] = useState(null);
+  const [detailWide, setDetailWide] = useState(false);
   const rows = deriveMatchRows(items || [], buyingPrefs);
   const included = rows.filter(isPlanIncluded);
   // No-match lines plus "out of stock everywhere" lines both land here so the
@@ -414,11 +419,10 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
   }, [items]);
 
   return (
-    <div className="crl pp">
+    <div className={`crl pp ${detail ? "detail-open" : ""}`}>
       <header className="crl-header pp-header">
         <div className="crl-title crl-title-main">
-          <button className="history-back" type="button" onClick={() => onNavigate("/app")}><Icon name="icon-chevron-left" className="button-icon" />Current Reorder List</button>
-          <h2>Review &amp; optimize</h2>
+          <h2>Review</h2>
           <p className="crl-subtitle">
             <span className="crl-listname">{listName}</span>
             <span className="crl-dot" aria-hidden="true">·</span>
@@ -429,19 +433,18 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
         </div>
         <div className="crl-header-actions">
           {listStatus === "review" && onBackToDraft && (
-            <button className="text-action compact" type="button" onClick={onBackToDraft} title="Return to Draft to keep editing this list">
+            <button className="secondary-action compact" type="button" onClick={onBackToDraft} title="Return to Draft to keep editing this list">
               <Icon name="icon-chevron-left" className="button-icon" />Back to draft
             </button>
           )}
-          <button className="secondary-action compact pp-hide-mobile" type="button" onClick={() => onNavigate("/app")}>Back to list</button>
           <button className="primary-action compact pp-header-handoff" type="button" disabled={!included.length} onClick={onPrepareHandoff}>
             <Icon name="icon-handshake" className="button-icon" />Prepare Supplier Handoff
           </button>
         </div>
       </header>
 
-      <div className="pp-layout">
-        <div className="pp-main">
+      <div className={`crl-layout ${detail ? "has-detail" : ""} ${detail && detailWide ? "detail-wide" : ""}`}>
+        <div className="crl-main">
           {groups.length === 0 ? (
             <div className="crl-card pp-empty">
               <Icon name="icon-package" className="button-icon" />
@@ -451,10 +454,6 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
             </div>
           ) : (
             <>
-              <div className="pp-section-head">
-                <h3>Included items</h3>
-                <small>Grouped by supplier · best offer per line</small>
-              </div>
               {oosReassignable.length > 0 && (
                 <div className="pp-oos-banner">
                   <span className="pp-oos-banner-msg">
@@ -474,9 +473,39 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
                   </button>
                 </div>
               )}
-              {groups.map((group) => (
-                <SupplierGroupCard key={group.supplier} group={group} onNavigate={onNavigate} onBuildCart={onBuildCart} onSwitchOffer={onSwitchOffer} onToast={onToast} />
-              ))}
+              {/* Same reorder-list table + match drawer, split into one section per
+                  supplier. Each section shares the crl-row columns and opens the
+                  MatchPanel on row click — it feels like the reorder list, grouped. */}
+              {groups.map((group) => {
+                const buildable = group.rows.some((row) => row.productUrl);
+                return (
+                  <section className="crl-card pp-group" key={group.supplier}>
+                    <div className="pp-group-head">
+                      <MatchSupplier name={group.supplier} />
+                      <span className="pp-group-meta">{group.count} item{group.count === 1 ? "" : "s"} · <strong>{money.format(group.subtotal)}</strong></span>
+                      {onBuildCart && (
+                        <button className="crl-ghost-btn pp-buildcart-btn" type="button" disabled={!buildable} onClick={() => onBuildCart(group)} title={buildable ? "" : "No supplier product links for these items"}>
+                          <Icon name="icon-cart" className="button-icon" />Build cart
+                        </button>
+                      )}
+                    </div>
+                    <div className="pp-group-table">
+                      <ReorderTableHead />
+                      {group.rows.map((row) => (
+                        <ReorderRow
+                          key={row.id}
+                          row={row}
+                          active={detail?.row.id === row.id}
+                          onOpen={(r, mode) => setDetail({ row: r, mode })}
+                          onConfirmMatch={onConfirmMatch}
+                          onRemoveItem={onRemoveItem}
+                          onToast={onToast}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </>
           )}
 
@@ -506,26 +535,42 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
           )}
         </div>
 
-        <aside className="pp-rail">
-          <BuyingPreferencesCard
-            prefs={buyingPrefs}
-            supplierOptions={supplierOptions}
-            onSave={onBuyingPrefs}
+        {detail ? (
+          <MatchPanel
+            key={detail.row.itemId || detail.row.id}
+            row={detail.row}
+            mode={detail.mode}
+            wide={detailWide}
+            onToggleWide={() => setDetailWide((value) => !value)}
+            onClose={() => { setDetail(null); setDetailWide(false); }}
             onToast={onToast}
+            onConfirmMatch={onConfirmMatch}
+            onLinkProduct={onLinkProduct}
+            onRemoveItem={onRemoveItem}
+            onNavigate={onNavigate}
           />
-          <section className="crl-card">
-            <h3>Plan Summary</h3>
-            <div className="crl-plan">
-              <div><span>Estimated total</span><strong>{money.format(total)}</strong></div>
-              <div><span>Suppliers</span><strong>{groups.length}</strong></div>
-              <div><span>Coverage</span><strong>{coverage}%</strong></div>
-              <div><span>Included items</span><strong>{included.length}</strong></div>
-            </div>
-            <button className="primary-action compact pp-handoff-btn" type="button" disabled={!included.length} onClick={onPrepareHandoff}>
-              <Icon name="icon-handshake" className="button-icon" />Prepare Supplier Handoff
-            </button>
-          </section>
-        </aside>
+        ) : (
+          <aside className="crl-rail">
+            <BuyingPreferencesCard
+              prefs={buyingPrefs}
+              supplierOptions={supplierOptions}
+              onSave={onBuyingPrefs}
+              onToast={onToast}
+            />
+            <section className="crl-card">
+              <h3>Plan Summary</h3>
+              <div className="crl-plan">
+                <div><span>Estimated total</span><strong>{money.format(total)}</strong></div>
+                <div><span>Suppliers</span><strong>{groups.length}</strong></div>
+                <div><span>Coverage</span><strong>{coverage}%</strong></div>
+                <div><span>Included items</span><strong>{included.length}</strong></div>
+              </div>
+              <button className="primary-action compact pp-handoff-btn" type="button" disabled={!included.length} onClick={onPrepareHandoff}>
+                <Icon name="icon-handshake" className="button-icon" />Prepare Supplier Handoff
+              </button>
+            </section>
+          </aside>
+        )}
       </div>
     </div>
   );
