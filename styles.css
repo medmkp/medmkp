@@ -8969,6 +8969,7 @@ th {
 
 /* Verify drawer: catalog search results render as clickable cards (no radio). */
 .crl-cand-result { grid-template-columns: 40px minmax(0, 1fr) auto; width: 100%; text-align: left; background: var(--surface); font: inherit; }
+.crl-cand-result .crl-thumb { width: 40px; height: 40px; }
 .crl-cand-result:hover { border-color: var(--blue); background: var(--blue-2); }
 
 /* "Selected" tag in the verify drawer — shown when the buyer picks an offer
