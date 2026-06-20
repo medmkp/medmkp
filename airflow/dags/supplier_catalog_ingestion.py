@@ -96,6 +96,21 @@ SUPPLIERS = [
         ],
     },
     {
+        "name": "darby_dental",
+        "supplier_id": "msup_darbydental_com",
+        "schedule": "0 9 * * 0",
+        "args": [
+            # Magento sitemap index with 4 child sitemaps (~35k products).
+            # supplier:ingest:db is delete-and-replace, so all child sitemaps
+            # must be fetched or the run hard-deletes whatever it didn't
+            # re-discover.
+            "--max-sitemaps-per-supplier=5000",
+            "--sitemap-concurrency=4",
+            "--product-concurrency=12",
+            "--timeout-ms=30000",
+        ],
+    },
+    {
         "name": "sky_dental",
         "supplier_id": "msup_skydentalsupply_com",
         "schedule": "0 6 * * 0",

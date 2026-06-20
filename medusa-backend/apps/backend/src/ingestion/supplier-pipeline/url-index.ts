@@ -25,6 +25,48 @@ const categoryPatterns = [
   /\/catalog/i,
 ]
 
+function classifyDarbyUrl(url: string) {
+  let parsed: URL
+
+  try {
+    parsed = new URL(url)
+  } catch {
+    return undefined
+  }
+
+  if (!/darbydental\.com$/i.test(parsed.hostname)) {
+    return undefined
+  }
+
+  const pathname = parsed.pathname.replace(/\/+$/, "")
+  const segments = pathname.split("/").filter(Boolean)
+
+  if (!segments.length) {
+    return undefined
+  }
+
+  // Darby category pages live under /categories/... (and /categories.html).
+  if (/^categories(?:\.html?)?$/i.test(segments[0])) {
+    return {
+      url_type: "category" as const,
+      confidence_score: 80,
+      reasons: ["Darby category URL"],
+    }
+  }
+
+  // Darby product pages are a single numeric item-number segment, optionally
+  // with a variant suffix, e.g. /9543404.html or /5259695-01.html.
+  if (segments.length === 1 && /^[0-9]+(?:-[0-9A-Za-z]+)?\.html?$/i.test(segments[0])) {
+    return {
+      url_type: "product" as const,
+      confidence_score: 90,
+      reasons: ["Darby numeric item-number product URL"],
+    }
+  }
+
+  return undefined
+}
+
 function classifyDcDentalUrl(url: string) {
   let parsed: URL
 
@@ -96,6 +138,12 @@ export function classifySupplierUrl(
       confidence_score: 70,
       reasons: ["Pearson product-family page, not SKU-level product URL"],
     }
+  }
+
+  const darbyClassification = classifyDarbyUrl(url)
+
+  if (darbyClassification) {
+    return darbyClassification
   }
 
   const dcDentalClassification = classifyDcDentalUrl(url)
