@@ -1131,7 +1131,11 @@ export default function Home() {
   // Unlock a submitted order so its items can be edited again — the only way out
   // of the locked state.
   function reopenSupplierOrder(supplier) {
-    setSubmittedSuppliers((list) => list.filter((name) => name !== supplier));
+    const remaining = submittedSuppliers.filter((name) => name !== supplier);
+    setSubmittedSuppliers(remaining);
+    // Undoing the last submitted order takes the whole list back to Draft so the
+    // buyer reworks it from scratch, rather than landing back in Review.
+    if (!remaining.length) setListStage("draft");
     showToast(`Reopened ${supplier} — order no longer marked submitted`);
   }
 
