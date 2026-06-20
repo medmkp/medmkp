@@ -8942,6 +8942,7 @@ th {
 .crl-cand-supplier-logo { height: 13px; width: auto; max-width: 46px; object-fit: contain; vertical-align: -2px; margin-right: 4px; border-radius: 2px; }
 .crl-cand-right { text-align: right; }
 .crl-cand-right strong { display: block; color: var(--ink); font-size: 13px; }
+.crl-cand-per { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
 .crl-cand-rec { display: inline-block; margin-top: 3px; padding: 2px 7px; border-radius: 6px; background: #e7f6ee; color: var(--green); font-size: 10px; font-weight: 700; }
 
 .crl-drawer-link { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--blue); font-weight: 600; font-size: 13px; }

@@ -2737,31 +2737,56 @@ function availabilityInfo(value) {
 // "200/Box"). The ingestion parser (ingestion/pack.ts) already resolved each to a
 // structured (quantity, basis, base_unit), so render one canonical label from
 // those fields and only fall back to the raw supplier string when unparsed.
-const PACK_BASIS_WORD = { box: "box", case: "case", pack: "pack" };
-// Canonical container word for the many abbreviations suppliers use, so a pack
-// label always reads the same way ("box", "pack", "bag"…) regardless of source.
-const PACK_WORD_CANON = {
-  box: "box", bx: "box", boxes: "box",
-  pack: "pack", pk: "pack", pkg: "pack", package: "pack", packs: "pack",
-  case: "case", cs: "case", cases: "case",
-  bag: "bag", bg: "bag", bags: "bag",
-  each: "ea", ea: "ea", unit: "ea", units: "ea", count: "ea", ct: "ea",
+// One canonical spelling per container word, so "Bx"/"box"/"BOXES" all render
+// the same. Keyed by the lowercased, de-punctuated supplier token.
+const PACK_UNIT_CANON = {
+  box: "Box", bx: "Box", bxs: "Box", boxes: "Box",
+  pack: "Pack", pk: "Pack", pkg: "Pack", pkt: "Pack", packs: "Pack", pks: "Pack",
+  case: "Case", cs: "Case", cases: "Case",
+  bag: "Bag", bg: "Bag", bags: "Bag",
+  each: "Each", ea: "Each",
+  count: "Count", ct: "Count", cnt: "Count",
+  carton: "Carton", ctn: "Carton",
+  bottle: "Bottle", btl: "Bottle",
+  tube: "Tube", tb: "Tube",
+  roll: "Roll", rl: "Roll",
+  vial: "Vial", jar: "Jar", kit: "Kit", can: "Can", set: "Set", tray: "Tray",
+  sleeve: "Sleeve", pair: "Pair", pr: "Pair", dozen: "Dozen", dz: "Dozen",
+  unit: "Unit", piece: "Piece", pc: "Piece", pcs: "Piece",
 };
-function canonPackWord(word) {
-  if (!word) return "";
-  return PACK_WORD_CANON[word.toLowerCase().replace(/\.$/, "")] || word.toLowerCase();
+function canonPackUnit(word) {
+  const key = String(word).toLowerCase().replace(/\.+$/, "");
+  return PACK_UNIT_CANON[key] || word;
 }
-// Fold a free-text pack string ("Pkg of 24", "20/Pack", "Box of 300") into the
-// consistent "<qty>/<word>" shape; returns "" when it can't be parsed.
-function normalizePackRaw(raw) {
-  if (!raw) return "";
-  const s = raw.trim();
-  let m = s.match(/^([A-Za-z.]+)\s+of\s+(\d+)$/i);        // "Pkg of 24"
-  if (m) return `${m[2]}/${canonPackWord(m[1])}`;
-  m = s.match(/^(\d+)\s*\/\s*([A-Za-z.]+)$/);             // "20/Pack"
-  if (m) return `${m[1]}/${canonPackWord(m[2])}`;
-  return s;
+// Normalize the pack token inside a free-form supplier string ("100/Bx" →
+// "100/Box") without touching the rest of the text.
+function normalizePackText(raw) {
+  if (!raw) return raw;
+  return String(raw).replace(/(\d+)\s*\/\s*([A-Za-z.]+)/g, (_, n, unit) => `${n}/${canonPackUnit(unit)}`);
 }
+// Unit-of-measure display: collapse the many ways a single unit gets written
+// ("each"/"Each"/"ea."/"EA" → "ea") so the Qty column reads consistently.
+const UOM_CANON = {
+  each: "ea", ea: "ea", unit: "ea", piece: "ea", pc: "ea", pcs: "ea",
+  box: "box", bx: "box", pack: "pack", pk: "pack", pkg: "pack",
+  bag: "bag", bg: "bag", case: "case", cs: "case", count: "count", ct: "count",
+  bottle: "bottle", btl: "bottle", tube: "tube", roll: "roll", vial: "vial",
+};
+function displayUom(uom) {
+  if (!uom) return "ea";
+  const key = String(uom).toLowerCase().replace(/\.+$/, "");
+  return UOM_CANON[key] || uom;
+}
+// A trustworthy per-unit price is never higher than the pack price it came from
+// (a pack holds ≥1 unit). When a bad pack parse inverts that — e.g. a measured
+// "0.2g" basis turning $143.99 into "$719.95/ea" — suppress the per-unit rather
+// than show a nonsense figure.
+function showPerEa(perEa, packPrice) {
+  if (perEa == null) return false;
+  if (packPrice != null && perEa > packPrice + 1e-6) return false;
+  return true;
+}
+const PACK_BASIS_WORD = { box: "Box", case: "Case", pack: "Pack" };
 function formatPackLabel(quantity, basis, baseUnit, raw) {
   // A measured base unit (ml, g, oz…) reads as an amount, not a container count.
   if (quantity != null && baseUnit && baseUnit !== "each") {
@@ -2771,7 +2796,7 @@ function formatPackLabel(quantity, basis, baseUnit, raw) {
   if (quantity != null && word) {
     return `${quantity}/${word}`;
   }
-  return normalizePackRaw(raw) || (quantity != null ? `${quantity}/pack` : "");
+  return normalizePackText(raw) || (quantity != null ? `${quantity}/Pack` : "");
 }
 
 // "Can the buyer order this offer right now?" — conservative: only an explicit
@@ -3755,7 +3780,7 @@ function ProductDetail({ handle, onNavigate, onToast, onAddToList, listName, lis
   const supplierCount = offers.length;
   const image = product.image_url || offers.find((offer) => offer.image_url)?.image_url || "";
   const brand = best?.brand || attrs.brands?.[0] || "";
-  const packSize = attrs.pack_sizes?.[0] || best?.name?.match(/(\d+\s*\/\s*[A-Za-z.]+)/)?.[1] || "—";
+  const packSize = normalizePackText(attrs.pack_sizes?.[0] || best?.name?.match(/(\d+\s*\/\s*[A-Za-z.]+)/)?.[1]) || "—";
   const uomLabel = (uom || "unit").toLowerCase();
   // Whether the group's per-unit prices are comparable (same base unit), and the
   // unit they compare in — drives the "/ ea" labels and the mixed-units note.
@@ -4577,12 +4602,12 @@ function deriveMatchRows(items, prefs) {
     const offers = (item.offers || []).map((offer) => ({
       ...offer,
       key: offerKey(offer),
-      sub: [offer.sku, offer.packSize].filter(Boolean).join(" · "),
+      sub: [offer.sku, normalizePackText(offer.packSize)].filter(Boolean).join(" · "),
     }));
     // "Recommended" is what our preferences pick — it never moves when the buyer
     // overrides their selection. "Selected" is the offer actually in the plan
     // (the buyer's choice, defaulting to our recommendation).
-    const fallback = item.bestOffer ? { ...item.bestOffer, key: offerKey(item.bestOffer), sub: [item.bestOffer.sku, item.bestOffer.packSize].filter(Boolean).join(" · ") } : null;
+    const fallback = item.bestOffer ? { ...item.bestOffer, key: offerKey(item.bestOffer), sub: [item.bestOffer.sku, normalizePackText(item.bestOffer.packSize)].filter(Boolean).join(" · ") } : null;
     const recommended = notFound ? null : (pickBestOffer(offers, prefs, item) || fallback);
     const chosen = item.selectedOfferKey ? offers.find((offer) => offer.key === item.selectedOfferKey) : null;
     const best = notFound ? null : (chosen || recommended);
@@ -4629,7 +4654,7 @@ function deriveMatchRows(items, prefs) {
       importedSub: item.sku ? `SKU: ${item.sku}` : (item.unit || ""),
       supplier,
       matchName: notFound ? null : (best?.name || item.canonicalName || item.product || null),
-      matchSub: notFound ? null : (best ? [best.sku, best.packSize].filter(Boolean).join(" · ") : ""),
+      matchSub: notFound ? null : (best ? [best.sku, normalizePackText(best.packSize)].filter(Boolean).join(" · ") : ""),
       productUrl: notFound ? "" : (best?.productUrl || ""),
       // Stock signal for the selected offer — drives the OOS badge + switch flow.
       availability: notFound ? "unknown" : (best?.availability ?? "unknown"),
@@ -4648,7 +4673,7 @@ function deriveMatchRows(items, prefs) {
       selectedOfferKey: best?.key || null,
       recommendedOfferKey: recommended?.key || null,
       qty,
-      uom: item.unit || "ea",
+      uom: displayUom(item.unit),
       packLabel: notFound ? "" : (best ? formatPackLabel(best.packQty, best.packBasis, best.baseUnit, best.packSize) : ""),
       lineTotal: notFound ? null : (best ? best.price * qty : price * qty),
       paidUnitPrice: hasPaidPrice ? paidUnitPrice : null,
@@ -4870,6 +4895,26 @@ function CandidateStock({ availability, liveAvailable }) {
 // supplier offers. "recommended" flags our preference-based pick (a fixed badge
 // that never moves); the radio/active state tracks what the buyer has selected.
 // Falls back to a single candidate when an item carries no offer list.
+// A canonical cluster can hold many near-identical offers from one supplier
+// (e.g. every shade of a composite as its own SKU). The PDP already collapses
+// these to one row per supplier; do the same for the match drawer so the buyer
+// compares suppliers, not SKUs. Per supplier we keep the offer they've already
+// selected, else our recommended pick, else the cheapest — and order the result
+// so that representative lands first (the mobile drawer headlines index 0).
+function collapseOffersBySupplier(candidates, selectedKey) {
+  const cost = (c) => c.perEa ?? c.price ?? Infinity;
+  const rank = (c) => (c.key && c.key === selectedKey ? 0 : c.recommended ? 1 : 2);
+  const better = (c, cur) => rank(c) < rank(cur) || (rank(c) === rank(cur) && cost(c) < cost(cur));
+  const bySupplier = new Map();
+  for (const c of candidates) {
+    const key = (c.supplier || "").toLowerCase().trim();
+    const cur = bySupplier.get(key);
+    if (!cur || better(c, cur)) bySupplier.set(key, c);
+  }
+  return [...bySupplier.values()].sort((a, b) =>
+    rank(a) !== rank(b) ? rank(a) - rank(b) : cost(a) - cost(b));
+}
+
 function offerCandidates(row) {
   const fromOffers = (row.offers || []).map((offer) => ({
     key: offer.key,
@@ -4955,7 +5000,7 @@ function ProductSearchResults({ query, results, loading, onPick, emptyHint }) {
 function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate }) {
   const isResolve = mode === "resolve";
   const isView = mode === "view";
-  const candidates = isResolve ? [] : offerCandidates(row);
+  const candidates = isResolve ? [] : collapseOffersBySupplier(offerCandidates(row), row.selectedOfferKey);
   // Start on the buyer's current selection (falls back to our recommendation).
   const selectedIndex = candidates.findIndex((candidate) => candidate.key === row.selectedOfferKey);
   const recommendedIndex = candidates.findIndex((candidate) => candidate.recommended);
@@ -5138,6 +5183,7 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
                   </span>
                   <span className="crl-cand-right">
                     <strong>{candidate.price != null ? mrMoney(candidate.price) : "—"}</strong>
+                    {showPerEa(candidate.perEa, candidate.price) && <span className="crl-cand-per">${mrEa(candidate.perEa)} / ea</span>}
                     <span className="crl-cand-tags">
                       {candidate.recommended && <span className="crl-cand-rec">Recommended</span>}
                       {selected === index && !candidate.recommended && <span className="crl-cand-sel">Selected</span>}
@@ -5285,7 +5331,7 @@ function MobileReorderCard({ row, onOpen, onRemove }) {
             ? <em className="m-conf nomatch">Not found</em>
             : <em className={`m-conf ${mrConfTone(row.confidence)}`}>{row.confidence}%</em>}
           {row.price != null && <strong>{mrMoney(row.price)}</strong>}
-          {row.perEa != null && <small>${mrEa(row.perEa)} / ea</small>}
+          {showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
           {row.lineSavings > 0 && <small className="m-card-save">Save {mrMoney(row.lineSavings)}</small>}
         </span>
         <Icon name="icon-chevron-right" className="button-icon m-card-chev" />
@@ -5458,7 +5504,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
   // Candidates come from the item's real offers; our recommended (preference-
   // based) pick is floated to the front so it shows in the "Recommended" slot.
   // The radio tracks the buyer's actual selection, which may differ.
-  const candidates = isResolve ? [] : (row.offers || []).map((offer) => ({
+  const candidates = isResolve ? [] : collapseOffersBySupplier((row.offers || []).map((offer) => ({
     key: offer.key,
     name: offer.name,
     supplier: offer.supplier,
@@ -5471,7 +5517,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
     availability: offer.availability,
     liveAvailable: offer.liveAvailable,
     productUrl: offer.productUrl || "",
-  }));
+  })), row.selectedOfferKey);
   if (!isResolve && !candidates.length && row.matchName) {
     candidates.push({ key: row.selectedOfferKey || null, name: row.matchName, supplier: row.supplier, sub: row.matchSub, price: row.price, perEa: row.perEa, image: row.image, recommended: true, confidence: row.confidence, availability: row.availability, liveAvailable: row.liveAvailable, productUrl: row.productUrl || "" });
   }
@@ -5575,7 +5621,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
                 <input type="radio" name="m-cand" checked={selected === 0} disabled={!isOrderable(candidates[0])} onChange={() => setSelected(0)} />
                 <ProductThumb image={candidates[0].image} alt={candidates[0].name} />
                 <span className="m-match-info"><CandidateName name={candidates[0].name} productUrl={candidates[0].productUrl} /><CandidateSub supplier={candidates[0].supplier} sub={candidates[0].sub} /><CandidateStock availability={candidates[0].availability} liveAvailable={candidates[0].liveAvailable} /></span>
-                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrMoney(candidates[0].price)}</strong>{candidates[0].perEa != null && <small>${mrEa(candidates[0].perEa)} / ea</small>}</span>
+                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrMoney(candidates[0].price)}</strong>{showPerEa(candidates[0].perEa, candidates[0].price) && <small>${mrEa(candidates[0].perEa)} / ea</small>}</span>
               </label>
             </section>
             {candidates.length > 1 && (
@@ -5587,7 +5633,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
                   <label className={`m-match ${selected === index + 1 ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos} key={candidate.key ?? index + 1}>
                     <input type="radio" name="m-cand" checked={selected === index + 1} disabled={oos} onChange={() => setSelected(index + 1)} />
                     <span className="m-match-info"><CandidateName name={candidate.name} productUrl={candidate.productUrl} /><CandidateSub supplier={candidate.supplier} sub={candidate.sub} /><CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} /></span>
-                    <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrMoney(candidate.price)}</strong>{candidate.perEa != null && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
+                    <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrMoney(candidate.price)}</strong>{showPerEa(candidate.perEa, candidate.price) && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
                   </label>
                   );
                 })}
@@ -6161,7 +6207,7 @@ function CurrentReorderList({
                         <strong>{row.qty}</strong>
                       )}
                       {(() => {
-                        const label = row.packLabel || canonPackWord(row.uom);
+                        const label = row.packLabel || row.uom;
                         return label && label !== "ea" ? <small>{label}</small> : null;
                       })()}
                     </span>
@@ -6187,7 +6233,7 @@ function CurrentReorderList({
                       {notFound ? <span className="crl-dash">—</span> : (
                         <>
                           <strong>{mrMoney(row.price)}</strong>
-                          {row.perEa != null && <small>${mrEa(row.perEa)} / ea</small>}
+                          {showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
                           {row.lineSavings > 0 && <small className="crl-save">Save {mrMoney(row.lineSavings)}</small>}
                         </>
                       )}
@@ -7074,7 +7120,7 @@ function SupplierGroupCard({ group, onNavigate, onBuildCart, onSwitchOffer, onTo
                   </span>
                 </span>
                 <span className="pp-line-qty"><strong>{row.qty}</strong><small>{row.uom}</small></span>
-                <span className="pp-line-ea">{row.perEa != null ? `$${mrEa(row.perEa)} / ea` : ""}</span>
+                <span className="pp-line-ea">{showPerEa(row.perEa, row.price) ? `$${mrEa(row.perEa)} / ea` : ""}</span>
                 <span className="pp-line-total">{mrMoney(row.lineTotal || 0)}</span>
               </div>
               {row.outOfStock && row.switchTarget && onSwitchOffer && (
@@ -7427,7 +7473,7 @@ function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename
                   {notFound ? <strong>No match found</strong> : (<><strong>{row.matchName}</strong><MatchSupplier name={row.supplier} /></>)}
                 </span>
                 <span className="crl-price">
-                  {notFound ? <span className="crl-dash">—</span> : (<><strong>{mrMoney(row.price)}</strong>{row.perEa != null && <small>${mrEa(row.perEa)} / ea</small>}</>)}
+                  {notFound ? <span className="crl-dash">—</span> : (<><strong>{mrMoney(row.price)}</strong>{showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}</>)}
                 </span>
               </div>
             );
