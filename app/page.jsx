@@ -1447,12 +1447,10 @@ export default function Home() {
   const [serverReady, setServerReady] = useState(false);
   const serverLoadStartedRef = useRef(false);
   const saveTimerRef = useRef(null);
-  // Holds the most recent state blob plus whether it's been flushed to the
-  // server. Lets refreshFromServer push pending (debounced) changes up before
-  // pulling, so a manual refresh right after an upload can't clobber unsaved
-  // local items with stale server state.
+  // Holds the most recent state blob (mirrors the debounced save). Lets
+  // refreshFromServer merge against the freshest local items, so a manual
+  // refresh can't drop items the debounced save hasn't persisted yet.
   const latestBlobRef = useRef(null);
-  const pendingSaveRef = useRef(false);
 
   // Apply a saved app-state blob (from localStorage or the per-practice server
   // store) to component state.
@@ -1554,14 +1552,13 @@ export default function Home() {
     // Mirror to the server (debounced, last-write-wins). Gated on serverReady so
     // a save can't race ahead of the initial load and clobber the stored list.
     if (authed === true && serverReady) {
-      pendingSaveRef.current = true;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         fetch("/api/reorder-list", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(blob),
-        }).then(() => { pendingSaveRef.current = false; }).catch(() => {
+        }).catch(() => {
           // offline — localStorage still holds it; next change retries.
         });
       }, 800);
@@ -2148,20 +2145,22 @@ export default function Home() {
   async function refreshFromServer() {
     if (authed !== true) return;
     try {
-      // Flush any debounced/in-flight local save first, so we never pull stale
-      // server state over unsaved local items (e.g. a refresh right after an
-      // invoice upload, before the 800ms save fired).
-      if (pendingSaveRef.current && latestBlobRef.current) {
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        await fetch("/api/reorder-list", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(latestBlobRef.current),
-        }).then(() => { pendingSaveRef.current = false; }).catch(() => {});
-      }
       const response = await fetch("/api/reorder-list", { cache: "no-store" });
       const data = await response.json().catch(() => ({}));
-      if (data && data.state) hydrateFromState(data.state);
+      if (!data || !data.state) return;
+
+      // Merge — never overwrite. The server list may be stale relative to the
+      // local working copy (the save is debounced 800ms and can silently fail),
+      // so blindly hydrating it would drop items just added here — e.g. a fresh
+      // invoice upload. Union the two by item key: keep every server item (this
+      // is how phone-scanned items get pulled in) and re-add any local item the
+      // server doesn't have yet. Other fields take the server's value.
+      const localItems = (latestBlobRef.current?.draftItems) || draftItems || [];
+      const serverItems = data.state.draftItems || [];
+      const keyOf = (item) => item.product || item.extractedFrom || item.sku || item.id || "";
+      const serverKeys = new Set(serverItems.map(keyOf));
+      const localOnly = localItems.filter((item) => !serverKeys.has(keyOf(item)));
+      hydrateFromState({ ...data.state, draftItems: [...serverItems, ...localOnly] });
     } catch {
       // offline / server down — keep current state
     }
