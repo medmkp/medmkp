@@ -8461,6 +8461,8 @@ th {
 
 .crl-more .button-icon { width: 16px; height: 16px; color: var(--muted); }
 .crl-more-kebab { width: 38px; height: 38px; padding: 0; justify-content: center; }
+.crl-more-icon { width: 38px; height: 38px; padding: 0; justify-content: center; }
+.crl-more-icon .button-icon { width: 22px; height: 22px; color: var(--muted); stroke-width: 1.4; }
 .crl-kebab-dots { width: 18px; height: 18px; color: var(--muted); }
 .crl-more-wrap { position: relative; }
 .crl-more-menu { left: auto; right: 0; }
@@ -8570,8 +8572,9 @@ th {
 .crl-refresh {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 7px;
   margin-bottom: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -8623,7 +8626,7 @@ th {
 }
 .crl-row {
   display: grid;
-  grid-template-columns: 30px minmax(0, 2.3fr) 44px 132px 58px minmax(0, 1.7fr) 104px 112px;
+  grid-template-columns: 44px minmax(0, 2.4fr) 64px 104px minmax(0, 2.8fr) 76px 32px;
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
@@ -8631,15 +8634,20 @@ th {
   font-size: 13px;
 }
 .crl-row:last-child { border-bottom: none; }
+.crl-foot { display: grid; grid-template-columns: 44px minmax(0, 2.4fr) 64px 104px minmax(0, 2.8fr) 76px 32px; align-items: baseline; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--surface); }
+.crl-foot-label { grid-column: 1 / 6; text-align: right; color: var(--muted); font-size: 12px; font-weight: 600; }
+.crl-foot-total { grid-column: 6; color: var(--ink); font-size: 16px; font-weight: 800; }
 .crl-row-click { cursor: pointer; }
 .crl-row-click:hover { background: var(--surface-2); }
 .crl-row.active:hover { background: var(--blue-2); }
 .crl-row-head { position: sticky; top: 0; z-index: 3; color: var(--muted); font-size: 12px; font-weight: 600; padding-top: 12px; padding-bottom: 12px; background: var(--surface); box-shadow: 0 1px 0 var(--line); }
 .crl-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--blue); }
+.crl-h-center { text-align: center; }
 .crl-price-h { display: inline-flex; align-items: center; gap: 5px; }
 .crl-price-h .button-icon { width: 14px; height: 14px; }
 
-.crl-item { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
+.crl-item { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
+.crl-item .crl-thumb { width: 64px; height: 64px; }
 .crl-thumb { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--muted); overflow: hidden; }
 .crl-thumb-empty { background: var(--surface-2); }
 .crl-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
@@ -8648,22 +8656,31 @@ th {
 .crl-item-id strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--ink); font-size: 13px; line-height: 1.3; }
 .crl-item-id small { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; color: var(--muted); font-size: 12px; }
 
-.crl-source { color: var(--muted); }
+.crl-source { color: var(--muted); display: flex; justify-content: center; }
 .crl-source .button-icon { width: 20px; height: 20px; }
 
 .crl-status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; width: fit-content; white-space: nowrap; }
 .crl-status .button-icon { width: 15px; height: 15px; }
 .crl-status.confirmed { background: #e7f6ee; color: var(--green); }
-.crl-status.verified { background: var(--blue-2); color: var(--blue); }
 .crl-status.possible { background: #fcf1dd; color: var(--gold); }
 .crl-status.nomatch { background: #fdeaea; color: var(--red); }
 
 .crl-status-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.crl-conf { font-size: 11px; font-weight: 700; }
+
+/* Only when the detail panel is EXPANDED (detail-wide) does the table get
+   narrow enough to need it: give the product title the room and collapse
+   Status to just its icon (full label still on hover). A normally-open detail
+   leaves the table at full width, so Status keeps its label there. */
+.crl-layout.has-detail.detail-wide .crl-row {
+  grid-template-columns: 44px minmax(0, 3fr) 68px 34px minmax(0, 1.6fr) 96px 44px;
+}
+.crl-layout.has-detail.detail-wide .crl-status { padding: 6px; gap: 0; }
+.crl-layout.has-detail.detail-wide .crl-status-label,
+.crl-layout.has-detail.detail-wide .crl-conf { display: none; }
+.crl-conf { font-size: 11px; font-weight: 700; white-space: nowrap; }
 .crl-conf.high { color: var(--green); }
 .crl-conf.med { color: var(--gold); }
 .crl-conf.low { color: var(--red); }
-.crl-conf.verified { color: var(--blue); }
 
 .crl-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 48px 24px; color: var(--muted); }
 .crl-empty .button-icon { width: 36px; height: 36px; color: var(--muted); }
@@ -8676,8 +8693,27 @@ th {
 .history-detail-table { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .history-detail-table .crl-row { grid-template-columns: minmax(0, 2.3fr) 132px 58px minmax(0, 1.7fr) 120px; }
 
+.crl-qty { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .crl-qty strong { display: block; color: var(--ink); }
-.crl-qty small { display: block; color: var(--muted); font-size: 12px; }
+.crl-qty small { display: block; color: var(--muted); font-size: 12px; text-align: center; }
+/* Inline qty editor: rounded pill with always-visible − / + steppers. */
+.crl-qty-inline {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px 4px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface);
+}
+.crl-qty-inline strong { display: inline-block; min-width: 18px; text-align: center; }
+.crl-qty-step-btn {
+  display: grid; place-items: center;
+  width: 18px; height: 18px; padding: 0;
+  border: 0; border-radius: 999px;
+  background: none; color: var(--muted);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.crl-qty-step-btn:hover { background: var(--surface-2); color: var(--ink); }
+.crl-qty-step-btn:disabled { opacity: .35; cursor: default; }
 
 .crl-match { min-width: 0; }
 .crl-match strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--ink); font-size: 13px; }
@@ -8688,6 +8724,9 @@ th {
 .crl-dash { color: var(--muted); }
 
 .crl-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.crl-row-delete { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.crl-row-delete:hover { color: var(--red); }
+.crl-row-delete .button-icon { width: 22px; height: 22px; stroke-width: 1.4; }
 .crl-action-btn { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-weight: 600; font-size: 12px; }
 .crl-action-btn.warn { border-color: var(--gold); color: var(--gold); }
 .crl-action-btn.danger { border-color: var(--red); color: var(--red); }
@@ -8852,6 +8891,19 @@ th {
 .crl-drawer-subhead { color: var(--ink); font-size: 14px; font-weight: 700; }
 .crl-drawer-hint { color: var(--muted); font-size: 12px; margin-top: -4px; }
 .crl-drawer-badge { padding: 3px 9px; border-radius: 999px; background: var(--blue-2); color: var(--blue); font-size: 11px; font-weight: 700; }
+
+/* "Buy bigger, save per unit" opt-in nudge above the offer list. */
+.crl-packdeal {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 12px; border: 1px solid #cdeede; border-radius: 10px;
+  background: #f1faf4; color: var(--ink); cursor: pointer;
+}
+.crl-packdeal:hover { border-color: var(--green); }
+.crl-packdeal .button-icon { width: 18px; height: 18px; color: var(--green); flex: 0 0 auto; }
+.crl-packdeal-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.crl-packdeal-text strong { font-size: 13px; color: var(--green); }
+.crl-packdeal-text small { font-size: 12px; color: var(--muted); }
+.crl-packdeal-switch { flex: 0 0 auto; padding: 5px 12px; border-radius: 7px; background: var(--green); color: #fff; font-size: 12px; font-weight: 700; }
 
 .crl-imported { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: start; }
 .crl-imported .crl-thumb { width: 64px; height: 64px; }
@@ -9018,7 +9070,6 @@ th {
 .m-detail-body { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
 .m-conf-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 10px; font-size: 14px; font-weight: 700; }
 .m-conf-banner.high { background: #e7f6ee; color: var(--green); }
-.m-conf-banner.verified { background: var(--blue-2); color: var(--blue); }
 .m-conf-banner.med { background: #fdf1dc; color: var(--gold); }
 .m-conf-banner.low, .m-conf-banner.nomatch { background: #fde9e7; color: var(--red); }
 .m-detail-sec { display: grid; gap: 8px; }
@@ -9123,7 +9174,6 @@ th {
 .list-pill-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .list-pill--draft { background: var(--surface-2); color: var(--muted); }
 .list-pill--review { background: var(--blue-2, #e7efff); color: var(--blue, #2563eb); }
-.list-pill--verified { background: #e7f6ee; color: var(--green); }
 .list-pill--handoff { background: var(--blue-2); color: var(--blue); }
 
 /* Inline rename field in the History detail header (mirrors .crl-listname-input). */

@@ -105,6 +105,11 @@ function IconSprite() {
         <path d="M9 3.5h6l1 2h2A1.5 1.5 0 0 1 19.5 7v13A1.5 1.5 0 0 1 18 21.5H6A1.5 1.5 0 0 1 4.5 20V7A1.5 1.5 0 0 1 6 5.5h2l1-2Z" />
         <path d="M8.5 11.5h7M8.5 15.5h7" />
       </symbol>
+      <symbol id="icon-clipboard-check" viewBox="0 0 24 24">
+        <path d="M8 5.5h8" />
+        <path d="M9 3.5h6l1 2h2A1.5 1.5 0 0 1 19.5 7v13A1.5 1.5 0 0 1 18 21.5H6A1.5 1.5 0 0 1 4.5 20V7A1.5 1.5 0 0 1 6 5.5h2l1-2Z" />
+        <path d="m8.5 13.5 2.2 2.2 4.8-4.8" />
+      </symbol>
       <symbol id="icon-package" viewBox="0 0 24 24">
         <path d="m12 3 8 4.3v9.4L12 21l-8-4.3V7.3L12 3Z" />
         <path d="m4.5 7.6 7.5 4 7.5-4M12 12v8" />
@@ -165,6 +170,11 @@ function IconSprite() {
         <path d="M9.5 4.5h5l1 1.5h-7l1-1.5Z" />
         <path d="M7.5 7.5 8.2 19a1.2 1.2 0 0 0 1.2 1.1h5.2a1.2 1.2 0 0 0 1.2-1.1l.7-11.5" />
         <path d="M10 10v5M14 10v5" />
+      </symbol>
+      <symbol id="icon-archive-down" viewBox="0 0 24 24">
+        <path d="M4.5 5.5h15a1 1 0 0 1 1 1V8a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1Z" />
+        <path d="M5.5 9v9.5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5V9" />
+        <path d="M12 11.5v5M9.5 14l2.5 2.5L14.5 14" />
       </symbol>
       <symbol id="icon-trash-ios" viewBox="0 0 24 24">
         <path d="M4 6.5h16" />
@@ -2146,7 +2156,6 @@ export default function Home() {
       if (patch.selectedOfferKey !== undefined) next.selectedOfferKey = patch.selectedOfferKey;
       if (patch.qty !== undefined) next.draftQty = patch.qty;
       if (patch.note !== undefined) next.note = patch.note;
-      if (patch.verified !== undefined) next.verified = patch.verified;
       if (patch.paidUnitPrice !== undefined) {
         const n = patch.paidUnitPrice === null || patch.paidUnitPrice === "" ? null : Number(patch.paidUnitPrice);
         next.paidUnitPrice = Number.isFinite(n) && n > 0 ? n : null;
@@ -2168,16 +2177,8 @@ export default function Home() {
     showToast("Plan optimized for lowest landed cost");
   }
 
-  // Bulk-confirm a set of items, accepting whatever offer is currently best.
-  function verifyItems(itemIds) {
-    const ids = new Set(itemIds);
-    if (!ids.size) return;
-    setListTouched(true);
-    setDraftItems((items) => items.map((item) => (ids.has(item.id) ? { ...item, verified: true } : item)));
-  }
-
   // Resolve a No-Match (or re-link any item) by attaching a catalog product and
-  // its supplier offers, then marking it verified.
+  // its supplier offers, marking it linked (a confident match).
   function linkProductToItem(itemId, product, options = {}) {
     if (!itemId || !product) return;
     setListTouched(true);
@@ -2197,7 +2198,6 @@ export default function Home() {
         selectedOfferKey: null,
         matchStatus: "exact",
         confidence: product.match?.score ?? 0.95,
-        verified: true,
         linked: true,
         draftQty: options.qty ?? item.draftQty ?? item.qty ?? 1,
         note: options.note ?? item.note ?? "",
@@ -2536,7 +2536,6 @@ export default function Home() {
                 onConfirmMatch={applyMatchDecision}
                 onLinkProduct={linkProductToItem}
                 onRemoveItem={removeDraftItem}
-                onVerifyItems={verifyItems}
                 onRefresh={refreshFromServer}
                 onNavigate={navigate}
               />
@@ -4265,6 +4264,8 @@ function mapSearchOffer(offer) {
     comparablePrice: (offer.price_cents ?? 0) / 100,
     perUnit: offer.unit_price_cents != null ? offer.unit_price_cents / 100 : null,
     packQty: offer.pack_quantity ?? null,
+    packBasis: offer.pack_basis ?? null,
+    baseUnit: offer.base_unit ?? null,
     packSize: offer.pack_size || "",
     imageUrl: offer.image_url || "",
     productUrl: offer.product_url || "",
@@ -4364,9 +4365,9 @@ function statusFromItem(item) {
   if (item.matchStatus) {
     // An unmatched line stays "Not found" until the buyer links a product to it.
     if (item.matchStatus === "unmatched" && !item.linked) return "Not found";
-    // A buyer-confirmed (or linked) item counts as verified regardless of the
-    // original auto confidence; otherwise needs_review is the work queue.
-    if (item.verified) return "Matched";
+    // A linked item is a confident match; otherwise needs_review is the soft
+    // low-confidence signal (informational — no user "verify" step).
+    if (item.linked) return "Matched";
     return item.matchStatus === "needs_review" ? "Review" : "Matched";
   }
   // Legacy/scan fallback by status string.
@@ -4666,7 +4667,6 @@ function deriveMatchRows(items, prefs) {
       price: notFound ? null : price,
       perEa: notFound ? null : perEa,
       status,
-      verified: Boolean(item.verified),
       linked: Boolean(item.linked),
       note: item.note || "",
       offers,
@@ -4674,6 +4674,7 @@ function deriveMatchRows(items, prefs) {
       recommendedOfferKey: recommended?.key || null,
       qty,
       uom: displayUom(item.unit),
+      packLabel: notFound ? "" : (best ? formatPackLabel(best.packQty, best.packBasis, best.baseUnit, best.packSize) : ""),
       lineTotal: notFound ? null : (best ? best.price * qty : price * qty),
       paidUnitPrice: hasPaidPrice ? paidUnitPrice : null,
       hasPaidPrice,
@@ -4791,22 +4792,18 @@ function DesktopBarcodeScan({ onScan }) {
 }
 
 
-// Status pills. "Matched" is our auto match (honest: we found it, the buyer
-// hasn't necessarily checked it); once the buyer confirms it reads "Verified"
-// (see the table cell, which swaps the label when row.verified).
+// Status pills. "Matched" is our auto match; "Needs review" flags a
+// low-confidence match (informational — there's no user "verify" step).
 const CRL_STATUS = {
   Matched: { cls: "confirmed", label: "Matched", icon: "icon-check-circle" },
   Review: { cls: "possible", label: "Needs review", icon: "icon-alert-triangle" },
   "Not found": { cls: "nomatch", label: "No match", icon: "icon-x-circle" },
-  Verified: { cls: "verified", label: "Verified", icon: "icon-shield-check" },
 };
 
 // List-level lifecycle pill, keyed by deriveListStatus() output.
 const LIST_STATUS = {
   draft: { label: "Draft", cls: "draft" },
   review: { label: "Review & optimize", cls: "review" },
-  // Retained for archives saved under the old auto-derived "Verified" state.
-  verified: { label: "Verified", cls: "verified" },
   handoff: { label: "Handed off", cls: "handoff" },
 };
 
@@ -4926,6 +4923,8 @@ function offerCandidates(row) {
     sub: offer.sub,
     price: offer.price,
     perEa: offer.perUnit ?? null,
+    packQty: offer.packQty ?? null,
+    packLabel: formatPackLabel(offer.packQty, offer.packBasis, offer.baseUnit, offer.packSize),
     image: offer.imageUrl || "",
     recommended: offer.key === row.recommendedOfferKey,
     availability: offer.availability,
@@ -4992,10 +4991,10 @@ function ProductSearchResults({ query, results, loading, onPick, emptyHint }) {
 }
 
 // Right-docked detail panel for a reorder-list row. Adapts by mode:
-//  - view: an already-matched item (Verified) — confirm or change the match
-//  - review: a low-confidence match (Verify Match) — pick the best match
+//  - view: an already-matched item — review or change the match
+//  - review: a low-confidence match — pick the best match
 //  - resolve: no catalog match — search to link a product
-// Confirming, picking a different offer, editing qty, adding a note, linking a
+// Picking a different offer, editing qty, adding a note, linking a
 // product, or removing the item all persist back to the draft list via the
 // callbacks (keyed by row.itemId). Sample rows (no itemId) stay demo-only.
 function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate }) {
@@ -5015,7 +5014,7 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
   // Resolve opens straight into search; review/view can toggle in to re-link.
   const [searching, setSearching] = useState(isResolve);
   const search = useProductSearch(searching);
-  const status = row.verified ? CRL_STATUS.Verified : CRL_STATUS[row.status];
+  const status = CRL_STATUS[row.status];
   const sourceLabel = row.source === "scan" ? "From Barcode Scan" : row.source === "csv" ? "From Reorder Sheet" : "From Invoice";
   const title = isResolve ? "Resolve item" : isView ? "Product match" : "Verify product match";
   const subtitle = isResolve
@@ -5023,6 +5022,25 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
     : isView
       ? "Confirm or change the product matched to this item."
       : "Please confirm the best match for this imported item.";
+
+  // "Buy bigger, pay less per unit": among this product's own offers (same
+  // canonical, different pack sizes), find a larger pack that beats the selected
+  // offer on price-per-each by a meaningful margin. Surfaced as an opt-in nudge —
+  // bigger packs tie up cash/shelf and can expire, so it's never auto-applied.
+  const sel = candidates[selected];
+  const biggerPackDeal = (() => {
+    if (!sel || sel.perEa == null || sel.packQty == null) return null;
+    let best = null;
+    candidates.forEach((candidate, index) => {
+      if (index === selected || !isOrderable(candidate)) return;
+      if (candidate.perEa == null || candidate.packQty == null) return;
+      if (candidate.packQty <= sel.packQty || candidate.perEa >= sel.perEa) return;
+      if (!best || candidate.perEa < best.perEa) best = { ...candidate, index };
+    });
+    if (!best) return null;
+    const pct = (sel.perEa - best.perEa) / sel.perEa;
+    return pct >= 0.1 ? { ...best, pct } : null;
+  })();
 
   // Live savings preview from the entered price vs. the selected offer.
   const selPrice = candidates[selected]?.price ?? row.price ?? null;
@@ -5042,10 +5060,10 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
 
   function confirm() {
     if (row.itemId) {
-      onConfirmMatch?.(row.itemId, { selectedOfferKey: candidates[selected]?.key ?? null, qty, note: notes, paidUnitPrice: paid, verified: true });
-      onToast("Match confirmed");
+      onConfirmMatch?.(row.itemId, { selectedOfferKey: candidates[selected]?.key ?? null, qty, note: notes, paidUnitPrice: paid });
+      onToast("Match updated");
     } else {
-      onToast("Match confirmed");
+      onToast("Match updated");
     }
     onClose();
   }
@@ -5141,6 +5159,16 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
           <section className="crl-drawer-section">
             <strong className="crl-drawer-subhead">Choose the match</strong>
             <p className="crl-drawer-hint">We recommend one offer from your buying preferences — pick a different one any time.</p>
+            {biggerPackDeal && (
+              <button type="button" className="crl-packdeal" onClick={() => setSelected(biggerPackDeal.index)}>
+                <Icon name="icon-tag" className="button-icon" />
+                <span className="crl-packdeal-text">
+                  <strong>Buy bigger, save {Math.round(biggerPackDeal.pct * 100)}% per unit</strong>
+                  <small>{biggerPackDeal.packLabel || "Larger pack"} at ${mrEa(biggerPackDeal.perEa)}/ea vs ${mrEa(sel.perEa)}/ea — if you use the volume.</small>
+                </span>
+                <span className="crl-packdeal-switch">Switch</span>
+              </button>
+            )}
             <div className="crl-cand-list">
               {candidates.map((candidate, index) => {
                 const oos = !isOrderable(candidate);
@@ -5421,7 +5449,7 @@ function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenR
       </header>
 
       <nav className="m-tabs" aria-label="Item list filters">
-        {[["all", `All ${totalItems}`], ["confirmed", `Verified ${stats.matched}`], ["possible", `Verify ${stats.review}`], ["nomatch", `No match ${stats.notFound}`]].map(([id, label]) => (
+        {[["all", `All ${totalItems}`], ["confirmed", `Matched ${stats.matched}`], ["possible", `Needs Review ${stats.review}`], ["nomatch", `No match ${stats.notFound}`]].map(([id, label]) => (
           <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => onTab(id)}>{label}</button>
         ))}
       </nav>
@@ -5458,7 +5486,7 @@ function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenR
       {stats.matched + stats.review > 0 && (
         <div className="m-plan-cta">
           <button type="button" className="primary-action" onClick={() => onNavigate?.("/app/review")}>
-            <Icon name="icon-handshake" className="button-icon" />Review &amp; optimize
+            <Icon name="icon-clipboard-check" className="button-icon" />Review &amp; optimize
           </button>
         </div>
       )}
@@ -5501,8 +5529,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
   const [paid, setPaid] = useState(row.paidUnitPrice != null ? String(row.paidUnitPrice) : "");
   const [searching, setSearching] = useState(isResolve);
   const search = useProductSearch(searching);
-  const confLabel = row.verified ? "Confirmed by you"
-    : row.confidence == null ? "No catalog match"
+  const confLabel = row.confidence == null ? "No catalog match"
     : row.confidence >= 80 ? "High match confidence"
     : row.confidence >= 50 ? "Medium match confidence"
     : "Low match confidence";
@@ -5523,9 +5550,9 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
 
   function confirm() {
     if (row.itemId) {
-      onConfirmMatch?.(row.itemId, { selectedOfferKey: candidates[selected]?.key ?? null, qty: row.qty, note: notes, paidUnitPrice: paid, verified: true });
+      onConfirmMatch?.(row.itemId, { selectedOfferKey: candidates[selected]?.key ?? null, qty: row.qty, note: notes, paidUnitPrice: paid });
     }
-    onToast("Match confirmed");
+    onToast("Match updated");
     onClose();
   }
 
@@ -5554,9 +5581,9 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
       </header>
 
       <div className="m-detail-body">
-        <div className={`m-conf-banner ${row.verified ? "verified" : row.confidence == null ? "nomatch" : mrConfTone(row.confidence)}`}>
+        <div className={`m-conf-banner ${row.confidence == null ? "nomatch" : mrConfTone(row.confidence)}`}>
           <span>{confLabel}</span>
-          {!row.verified && row.confidence != null && <strong>{row.confidence}%</strong>}
+          {row.confidence != null && <strong>{row.confidence}%</strong>}
         </div>
 
         <section className="m-detail-sec">
@@ -5809,7 +5836,6 @@ function CurrentReorderList({
   onConfirmMatch,
   onLinkProduct,
   onRemoveItem,
-  onVerifyItems,
   onRefresh,
 }) {
   const realRows = deriveMatchRows(items, buyingPrefs);
@@ -5829,12 +5855,11 @@ function CurrentReorderList({
   // everywhere) — surfaced in the warning modal before advancing to Review.
   const unresolvedRows = usingReal ? rows.filter((row) => !isPlanIncluded(row)) : [];
   const allReviewed = usingReal && totalItems > 0 && unresolvedRows.length === 0 && !rows.some(
-    (r) => r.status === "Review" && !r.verified
+    (r) => r.status === "Review"
   );
   const [tab, setTab] = useState("all");
   const [detail, setDetail] = useState(null);
   const [detailWide, setDetailWide] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [reviewConfirm, setReviewConfirm] = useState(false);
   const listNameRef = useRef(null);
@@ -5946,38 +5971,6 @@ function CurrentReorderList({
   const filtered = rows.filter(tabFilter[tab] || tabFilter.all);
   const openRow = (row) => setDetail({ row, mode: rowMode(row) });
 
-  // Bulk selection — keyed by stable item id so it survives tab/sort changes.
-  // Only real (persisted) rows are selectable; sample rows have no itemId.
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const selectableIds = filtered.filter((row) => row.itemId).map((row) => row.itemId);
-  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
-  const selectedCount = selectedIds.size;
-  const toggleSelect = (itemId) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
-    return next;
-  });
-  const toggleSelectAll = () => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    if (allSelected) selectableIds.forEach((id) => next.delete(id));
-    else selectableIds.forEach((id) => next.add(id));
-    return next;
-  });
-  const clearSelection = () => setSelectedIds(new Set());
-  const [rowMenu, setRowMenu] = useState(null);
-  function bulkVerify() {
-    // Only matched/review rows can be verified — skip selected No-Match items.
-    const ids = rows.filter((row) => row.itemId && selectedIds.has(row.itemId) && row.status !== "Not found").map((row) => row.itemId);
-    onVerifyItems?.(ids);
-    onToast(ids.length ? `${ids.length} match${ids.length === 1 ? "" : "es"} verified` : "Nothing to verify in your selection");
-    clearSelection();
-  }
-  function bulkRemove() {
-    const n = selectedCount;
-    selectedIds.forEach((id) => onRemoveItem?.(id));
-    onToast(`${n} item${n === 1 ? "" : "s"} removed`);
-    clearSelection();
-  }
 
   if (isMobile) {
     return (
@@ -6074,22 +6067,9 @@ function CurrentReorderList({
             </span>
             <span className="crl-dot" aria-hidden="true">·</span>
             <ListStatusPill status={listStatus} />
-            <span className="crl-dot" aria-hidden="true">·</span>
-            <span className="crl-autosave"><Icon name="icon-check-circle" className="button-icon" />Auto saved just now</span>
           </p>
         </div>
         <div className="crl-header-actions">
-          {totalItems > 0 && (
-            <button
-              type="button"
-              className="crl-plan-header-btn crl-plan-header-btn--primary"
-              onClick={goToReview}
-              title="Optimize supplier consolidation, shipping, and delivery for this list"
-            >
-              <Icon name="icon-handshake" className="button-icon" />
-              {listStage === "review" ? "Continue in plan" : "Review & optimize"}
-            </button>
-          )}
           <button
             type="button"
             className={`crl-add-scan ${addMode === "scan" ? "active" : ""}`}
@@ -6105,26 +6085,23 @@ function CurrentReorderList({
             <Icon name="icon-cloud-upload" className="button-icon" />
             Upload Invoice
           </button>
-          <div className="crl-more-wrap">
-            <button className="crl-more crl-more-kebab" type="button" aria-haspopup="menu" aria-expanded={moreOpen} aria-label="More actions" onClick={() => setMoreOpen((open) => !open)}>
-              <svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
+          {totalItems > 0 && (
+            <button
+              type="button"
+              className="crl-plan-header-btn crl-plan-header-btn--primary"
+              onClick={goToReview}
+              title="Optimize supplier consolidation, shipping, and delivery for this list"
+            >
+              <Icon name="icon-clipboard-check" className="button-icon" />
+              {listStage === "review" ? "Continue in plan" : "Review & optimize"}
             </button>
-            {moreOpen && (
-              <>
-                <div className="crl-add-menu-backdrop" onClick={() => setMoreOpen(false)} />
-                <div className="crl-add-menu crl-more-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); onArchiveList(); }}>
-                    <Icon name="icon-clipboard" className="button-icon" />
-                    <span><strong>Archive this list</strong><small>Move to list history</small></span>
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); onClearList(); }}>
-                    <Icon name="icon-trash" className="button-icon crl-menu-danger" />
-                    <span><strong>Clear this list</strong><small>Remove all items</small></span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          )}
+          <button className="crl-more crl-more-icon" type="button" aria-label="Archive this list" title="Archive this list" onClick={() => onArchiveList()}>
+            <Icon name="icon-archive-down" className="button-icon" />
+          </button>
+          <button className="crl-more crl-more-icon" type="button" aria-label="Clear this list" title="Clear this list" onClick={() => onClearList()}>
+            <Icon name="icon-trash-ios" className="button-icon" />
+          </button>
         </div>
       </header>
 
@@ -6180,36 +6157,23 @@ function CurrentReorderList({
                   className={`crl-refresh ${refreshing ? "spinning" : ""}`}
                   onClick={handleRefresh}
                   disabled={refreshing}
-                  title="Refresh — pull in items scanned on another device"
-                  aria-label="Refresh list"
+                  title="Refresh"
+                  aria-label="Refresh"
                 >
                   <Icon name="icon-refresh" className="button-icon" />
-                  <span>Refresh</span>
                 </button>
               )}
             </div>
 
-            {selectedCount > 0 && (
-              <div className="crl-bulk-bar" role="region" aria-label="Bulk actions">
-                <span className="crl-bulk-count">{selectedCount} selected</span>
-                <span className="crl-bulk-actions">
-                  <button type="button" className="crl-bulk-btn" onClick={bulkVerify}><Icon name="icon-check-circle" className="button-icon" />Verify</button>
-                  <button type="button" className="crl-bulk-btn danger" onClick={bulkRemove}><Icon name="icon-trash" className="button-icon" />Remove from list</button>
-                </span>
-                <button type="button" className="crl-bulk-dismiss" aria-label="Clear selection" onClick={clearSelection}><Icon name="icon-x" className="button-icon" /></button>
-              </div>
-            )}
-
             <div className="crl-table">
               <div className="crl-row crl-row-head">
-                <span><input type="checkbox" aria-label="Select all" checked={allSelected} onChange={toggleSelectAll} disabled={!selectableIds.length} /></span>
+                <span className="crl-h-center">Source</span>
                 <span>Item</span>
-                <span>Source</span>
-                <span>Status</span>
-                <span>Qty</span>
+                <span className="crl-h-center">Qty</span>
+                <span className="crl-h-center">Status</span>
                 <span>Matched product</span>
                 <span className="crl-price-h">Price <Icon name="icon-info" className="button-icon" /></span>
-                <span>Actions</span>
+                <span aria-hidden="true" />
               </div>
               {isEmpty && (
                 <div className="crl-empty">
@@ -6219,13 +6183,12 @@ function CurrentReorderList({
                 </div>
               )}
               {filtered.map((row) => {
-                const status = row.verified ? CRL_STATUS.Verified : CRL_STATUS[row.status];
+                const status = CRL_STATUS[row.status];
                 const notFound = row.status === "Not found";
                 const mode = notFound ? "resolve" : row.status === "Review" ? "review" : "view";
-                const actionLabel = notFound ? "Resolve" : row.status === "Review" ? "Verify" : "View";
                 return (
                   <div className={`crl-row crl-row-click ${detail?.row.id === row.id ? "active" : ""}`} key={row.id} onClick={() => setDetail({ row, mode })}>
-                    <span><input type="checkbox" aria-label={`Select ${row.importedName}`} checked={row.itemId ? selectedIds.has(row.itemId) : false} disabled={!row.itemId} onChange={() => row.itemId && toggleSelect(row.itemId)} onClick={(event) => event.stopPropagation()} /></span>
+                    <span className="crl-source" title={`Imported from ${row.source.toUpperCase()}`}><Icon name={CRL_SOURCE_ICON[row.source] || "icon-file-text"} className="button-icon" /></span>
                     <span className="crl-item">
                       <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
                       <span className="crl-item-id">
@@ -6233,14 +6196,25 @@ function CurrentReorderList({
                         <small>{row.canonicalName ? `From source: ${row.importedName}` : `SKU on source: ${(row.importedSub || "").replace(/^SKU:\s*/, "") || "—"}`}</small>
                       </span>
                     </span>
-                    <span className="crl-source" title={`Imported from ${row.source.toUpperCase()}`}><Icon name={CRL_SOURCE_ICON[row.source] || "icon-file-text"} className="button-icon" /></span>
-                    <span className="crl-status-cell">
-                      <span className={`crl-status ${status.cls}`}><Icon name={status.icon} className="button-icon" />{status.label}</span>
-                      {row.verified
-                        ? <small className="crl-conf verified">Confirmed by you</small>
-                        : row.confidence != null && <small className={`crl-conf ${mrConfTone(row.confidence)}`}>{row.confidence}% confidence</small>}
+                    <span className="crl-qty">
+                      {row.itemId ? (
+                        <span className="crl-qty-inline" onClick={(event) => event.stopPropagation()}>
+                          <button type="button" className="crl-qty-step-btn" aria-label="Decrease quantity" disabled={(row.qty || 1) <= 1} onClick={() => onConfirmMatch?.(row.itemId, { qty: Math.max(1, (row.qty || 1) - 1) })}>&minus;</button>
+                          <strong>{row.qty}</strong>
+                          <button type="button" className="crl-qty-step-btn" aria-label="Increase quantity" onClick={() => onConfirmMatch?.(row.itemId, { qty: (row.qty || 1) + 1 })}>+</button>
+                        </span>
+                      ) : (
+                        <strong>{row.qty}</strong>
+                      )}
+                      {(() => {
+                        const label = row.packLabel || row.uom;
+                        return label && label !== "ea" ? <small>{label}</small> : null;
+                      })()}
                     </span>
-                    <span className="crl-qty"><strong>{row.qty}</strong><small>{row.uom}</small></span>
+                    <span className="crl-status-cell">
+                      <span className={`crl-status ${status.cls}`} title={status.label}><Icon name={status.icon} className="button-icon" /><span className="crl-status-label">{status.label}</span></span>
+                      {row.confidence != null && <small className={`crl-conf ${mrConfTone(row.confidence)}`}>{row.confidence}% confidence</small>}
+                    </span>
                     <span className="crl-match">
                       {notFound ? (
                         <>
@@ -6265,34 +6239,21 @@ function CurrentReorderList({
                       )}
                     </span>
                     <span className="crl-actions">
-                      {mode !== "view" && (
-                        <button className={`crl-action-btn ${notFound ? "danger" : "warn"}`} type="button" onClick={() => setDetail({ row, mode })}>{actionLabel}</button>
+                      {row.itemId && (
+                        <button className="crl-row-delete" type="button" aria-label="Remove from list" title="Remove from list" onClick={(event) => { event.stopPropagation(); onRemoveItem?.(row.itemId); onToast("Item removed from list"); }}>
+                          <Icon name="icon-trash-ios" className="button-icon" />
+                        </button>
                       )}
-                      <span className="crl-rowmenu-wrap">
-                        <button className="crl-kebab" type="button" aria-label="Row actions" aria-haspopup="menu" aria-expanded={rowMenu === row.id} onClick={(event) => { event.stopPropagation(); setRowMenu(rowMenu === row.id ? null : row.id); }}><svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg></button>
-                        {rowMenu === row.id && row.itemId && (
-                          <>
-                            <div className="crl-add-menu-backdrop" onClick={(event) => { event.stopPropagation(); setRowMenu(null); }} />
-                            <div className="crl-add-menu crl-rowmenu" role="menu" onClick={(event) => event.stopPropagation()}>
-                              {notFound ? (
-                                <button type="button" role="menuitem" onClick={() => { setRowMenu(null); setDetail({ row, mode }); }}><Icon name="icon-search" className="button-icon" /><span>Resolve match</span></button>
-                              ) : (
-                                <>
-                                  {!row.verified && (
-                                    <button type="button" role="menuitem" onClick={() => { setRowMenu(null); onConfirmMatch?.(row.itemId, { verified: true }); onToast("Match verified"); }}><Icon name="icon-check-circle" className="button-icon" /><span>Verify match</span></button>
-                                  )}
-                                  <button type="button" role="menuitem" onClick={() => { setRowMenu(null); setDetail({ row, mode }); }}><Icon name="icon-edit" className="button-icon" /><span>Change match</span></button>
-                                </>
-                              )}
-                              <button type="button" role="menuitem" className="crl-rowmenu-danger" onClick={() => { setRowMenu(null); onRemoveItem?.(row.itemId); onToast("Item removed from list"); }}><Icon name="icon-trash" className="button-icon" /><span>Remove from list</span></button>
-                            </div>
-                          </>
-                        )}
-                      </span>
                     </span>
                   </div>
                 );
               })}
+              {!isEmpty && rows.some((r) => r.lineTotal != null) && (
+                <div className="crl-foot">
+                  <span className="crl-foot-label">List subtotal</span>
+                  <strong className="crl-foot-total">{mrMoney(rows.reduce((sum, r) => sum + (r.lineTotal || 0), 0))}</strong>
+                </div>
+              )}
             </div>
 
           </section>
@@ -6625,8 +6586,8 @@ function UploadModal({
         ) : (
           <div className="crl-modal-body">
             <div className="crl-modal-summary">
-              <span className="confirmed"><strong>{matched}</strong>Verified</span>
-              <span className="possible"><strong>{review}</strong>Verify</span>
+              <span className="confirmed"><strong>{matched}</strong>Matched</span>
+              <span className="possible"><strong>{review}</strong>Needs Review</span>
               <span className="nomatch"><strong>{noMatch}</strong>No match</span>
             </div>
             <div className="crl-modal-results">
