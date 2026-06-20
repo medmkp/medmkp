@@ -393,6 +393,7 @@ export const SUPPLIER_LOGOS = [
   { match: "carolina", src: "/suppliers/carolinadental.png" },
   { match: "dc dental", src: "/suppliers/dcdental.png" },
   { match: "dental city", src: "/suppliers/dentalcity.png" },
+  { match: "patterson", src: "/suppliers/pattersondental.png" },
   { match: "pearson", src: "/suppliers/pearsondental.png" },
   { match: "unimed", src: "/suppliers/unimedusa.png" },
   { match: "young", src: "/suppliers/youngspecialties.png" },
