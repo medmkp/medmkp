@@ -391,6 +391,7 @@ export const SUPPLIER_LOGOS = [
   { match: "amazon", src: "/suppliers/amazon.png" },
   { match: "american dental", src: "/suppliers/amerdental.png" },
   { match: "carolina", src: "/suppliers/carolinadental.png" },
+  { match: "darby", src: "/suppliers/darbydental.png" },
   { match: "dc dental", src: "/suppliers/dcdental.png" },
   { match: "dental city", src: "/suppliers/dentalcity.png" },
   { match: "pearson", src: "/suppliers/pearsondental.png" },
