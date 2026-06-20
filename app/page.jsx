@@ -1454,6 +1454,9 @@ export default function Home() {
   // refreshFromServer merge against the freshest local items, so a manual
   // refresh can't drop items the debounced save hasn't persisted yet.
   const latestBlobRef = useRef(null);
+  // True while a debounced save is queued but not yet sent. Lets the
+  // pagehide/visibilitychange flush know there are unsaved edits to push.
+  const pendingSaveRef = useRef(false);
 
   // Apply a saved app-state blob (from localStorage or the per-practice server
   // store) to component state.
@@ -1524,23 +1527,49 @@ export default function Home() {
         const response = await fetch("/api/reorder-list", { cache: "no-store" });
         const data = await response.json().catch(() => ({}));
         const local = JSON.parse(window.localStorage.getItem(APP_STATE_KEY) || "null");
-        const localItems = local && (local.draftItems || []).length ? local.draftItems.length : 0;
-        const serverItems = data && data.state ? (data.state.draftItems || []).length : 0;
-        // The server list is normally the cross-device source of truth. But a
-        // refresh within the 800ms save debounce can lose an in-flight save, so
-        // the server may be stale/empty while localStorage still holds the just-
-        // edited list. In that case keep local and push it back up, rather than
-        // clobbering the working list with empty server state.
-        if (data && data.state && serverItems >= localItems) {
-          hydrateFromState(data.state);
-        } else if (localItems) {
-          await fetch("/api/reorder-list", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(local),
-          });
-        } else if (data && data.state) {
-          hydrateFromState(data.state);
+
+        if (!data || !data.state) {
+          // No server list yet — migrate the local working list up once so it
+          // isn't lost on the first cross-device sync.
+          if (local && (local.draftItems || []).length) {
+            await fetch("/api/reorder-list", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(local),
+            });
+          }
+        } else {
+          // Merge — never overwrite. A refresh within the 800ms save debounce
+          // (or a keepalive PUT that didn't land / exceeded the 64KB limit) can
+          // leave the server stale while localStorage still holds the just-added
+          // items — e.g. a fresh invoice upload. Union by item key: keep every
+          // server item (cross-device work) and re-add any local item the server
+          // doesn't have yet, then push the merged list back up. A pure count
+          // comparison can't tell "server is ahead" from "local is ahead", so it
+          // would drop one side; the union keeps both.
+          const localItems = (local && local.draftItems) || [];
+          const serverItems = data.state.draftItems || [];
+          const keyOf = (item) => item.product || item.extractedFrom || item.sku || item.id || "";
+          const serverKeys = new Set(serverItems.map(keyOf));
+          const localOnly = localItems.filter((item) => !serverKeys.has(keyOf(item)));
+          // Union uploadedDocs too, else a kept local-only item whose source doc
+          // lives only in localStorage would be filtered out of the table
+          // (visibleDraftItems requires a matching doc in uploadedDocs).
+          const localDocs = (local && local.uploadedDocs) || [];
+          const serverDocs = data.state.uploadedDocs || [];
+          const serverDocIds = new Set(serverDocs.map((doc) => doc.id));
+          const mergedDocs = [...serverDocs, ...localDocs.filter((doc) => !serverDocIds.has(doc.id))];
+          const merged = { ...data.state, draftItems: [...serverItems, ...localOnly], uploadedDocs: mergedDocs };
+          hydrateFromState(merged);
+          // If local contributed items the server lacked, persist the union so
+          // the next device/load sees the complete list.
+          if (localOnly.length) {
+            await fetch("/api/reorder-list", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(merged),
+            });
+          }
         }
       } catch {
         // offline / server down — keep whatever localStorage hydrated.
@@ -1593,7 +1622,9 @@ export default function Home() {
     // a save can't race ahead of the initial load and clobber the stored list.
     if (authed === true && serverReady) {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      pendingSaveRef.current = true;
       saveTimerRef.current = setTimeout(() => {
+        pendingSaveRef.current = false;
         fetch("/api/reorder-list", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -2230,7 +2261,26 @@ export default function Home() {
       const keyOf = (item) => item.product || item.extractedFrom || item.sku || item.id || "";
       const serverKeys = new Set(serverItems.map(keyOf));
       const localOnly = localItems.filter((item) => !serverKeys.has(keyOf(item)));
-      hydrateFromState({ ...data.state, draftItems: [...serverItems, ...localOnly] });
+      // Union uploadedDocs too. A kept local-only item (e.g. a fresh invoice
+      // upload the debounced save hasn't pushed yet) references a doc that lives
+      // only in localStorage; if we kept the server's uploadedDocs, that item
+      // would be filtered out of the table (visibleDraftItems requires a
+      // matching doc), so it looks dropped even though it's still in the list.
+      const localDocs = (latestBlobRef.current?.uploadedDocs) || uploadedDocs || [];
+      const serverDocs = data.state.uploadedDocs || [];
+      const serverDocIds = new Set(serverDocs.map((doc) => doc.id));
+      const mergedDocs = [...serverDocs, ...localDocs.filter((doc) => !serverDocIds.has(doc.id))];
+      const merged = { ...data.state, draftItems: [...serverItems, ...localOnly], uploadedDocs: mergedDocs };
+      hydrateFromState(merged);
+      // Persist the union so the next load/device sees the complete list
+      // instead of re-dropping the local-only items on the next refresh.
+      if (localOnly.length) {
+        fetch("/api/reorder-list", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(merged),
+        }).catch(() => {});
+      }
     } catch {
       // offline / server down — keep current state
     }
