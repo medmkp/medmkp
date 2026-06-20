@@ -10037,12 +10037,44 @@ th {
   .pp-layout { grid-template-columns: minmax(0, 1fr); }
   .pp-rail { position: static; }
 }
+
+/* Review & optimize (/app/review) + Supplier Handoff — phone layout. The plan
+   header carries up to three actions and the rail sits below the main column,
+   so without this everything crams against the right edge. */
+@media (max-width: 767px) {
+  .pp-header, .ho-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .pp-header .crl-title-main, .ho-header .crl-title-main { width: 100%; }
+  .pp-header .crl-subtitle, .ho-header .crl-subtitle { flex-wrap: wrap; row-gap: 4px; }
+  .pp-header .crl-header-actions, .ho-header .crl-header-actions { width: 100%; flex-wrap: wrap; gap: 8px; }
+  .pp-header .crl-header-actions > button,
+  .pp-header .crl-header-actions > a,
+  .ho-header .crl-header-actions > button,
+  .ho-header .crl-header-actions > a { flex: 1 1 auto; justify-content: center; }
+  .pp-hide-mobile { display: none; }
+
+  .ho-group-actions { flex-wrap: wrap; }
+  .ho-group-actions > * { flex: 1 1 auto; justify-content: center; }
+}
+
 @media (max-width: 600px) {
-  .pp-line { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  /* One clean line: thumb · name · qty · total (drop the per-each column). */
+  .pp-line { display: flex; align-items: center; gap: 10px; }
+  .pp-line .crl-thumb { flex: none; }
+  .pp-line-name { flex: 1 1 auto; min-width: 0; }
+  .pp-line-qty { flex: none; }
+  .pp-line-total { flex: none; }
   .pp-line-ea { display: none; }
+  .pp-oos-banner-btn { flex: 1 1 auto; justify-content: center; }
+  .pp-line-switch { gap: 8px; }
+  .pp-switch-btn { flex: 1 1 auto; justify-content: center; }
+
   .ho-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ho-footer { flex-direction: column; align-items: stretch; }
   .ho-footer .primary-action { justify-content: center; }
+
+  /* Confirm/warning modals: full-width, stacked actions on phones. */
+  .crl-modal-foot { flex-direction: column-reverse; align-items: stretch; }
+  .crl-modal-foot > button { width: 100%; justify-content: center; }
 }
 
 /* Export PDF — print only the handoff content, drop the app chrome. */

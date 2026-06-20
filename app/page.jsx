@@ -7160,8 +7160,8 @@ function ProcurementPlanView({ items, listName, listStatus = "draft", onBackToDr
               <Icon name="icon-chevron-left" className="button-icon" />Back to draft
             </button>
           )}
-          <button className="secondary-action compact" type="button" onClick={() => onNavigate("/app")}>Back to list</button>
-          <button className="primary-action compact" type="button" disabled={!included.length} onClick={onPrepareHandoff}>
+          <button className="secondary-action compact pp-hide-mobile" type="button" onClick={() => onNavigate("/app")}>Back to list</button>
+          <button className="primary-action compact pp-header-handoff" type="button" disabled={!included.length} onClick={onPrepareHandoff}>
             <Icon name="icon-handshake" className="button-icon" />Prepare Supplier Handoff
           </button>
         </div>
