@@ -18,6 +18,11 @@ import {
   buildSupplierCatalogIngestion,
   type SupplierCatalogRow,
 } from "../ingestion/supplier-catalog"
+import {
+  reconcileSupplierCatalog,
+  type ReconcileInput,
+  type ReconcileService,
+} from "../ingestion/supplier-catalog-reconcile"
 import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 
 /**
@@ -42,26 +47,12 @@ import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 const SUPPLIER_ID = "msup_henryschein_com"
 const SOURCE_CATALOG = "henry-schein-website-public"
 const WEB_PRICE_BATCH_SIZE = 40
-const DB_CHUNK_SIZE = 500
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function forChunks<T>(
-  rows: T[],
-  work: (chunk: T[], index: number, total: number) => Promise<void>
-) {
-  const total = Math.ceil(rows.length / DB_CHUNK_SIZE)
-  for (let offset = 0; offset < rows.length; offset += DB_CHUNK_SIZE) {
-    await work(
-      rows.slice(offset, offset + DB_CHUNK_SIZE),
-      Math.floor(offset / DB_CHUNK_SIZE) + 1,
-      total
-    )
-  }
-}
 
 // Browser-UA fetch with one retry; returns "" on failure so the crawl skips a
 // bad node instead of aborting. Akamai stalls the default bot UA but serves a
@@ -381,72 +372,29 @@ export default async function ingestHenryScheinCatalog({
     console.log(`[henryschein] Created supplier ${SUPPLIER_ID}`)
   }
 
-  // Replace any prior HS rows for this source, then write the fresh identity rows.
-  const existingProducts = await medmkp.listSupplierProducts({
-    supplier_id: SUPPLIER_ID,
-    source_catalog: SOURCE_CATALOG,
-  })
-  // Shrink guard: this is delete-and-replace, so a partial-fed crawl could wipe a
-  // healthy catalog (cf. the DC Dental incident). Refuse a >50% drop unless forced.
-  if (
-    existingProducts.length > 50 &&
-    rows.length < existingProducts.length * 0.5 &&
-    !allowShrink
-  ) {
-    console.error(
-      `[henryschein] ABORT: crawl found ${rows.length} products but ${existingProducts.length} exist ` +
-        `(>50% shrink). Likely a partial crawl — not replacing. Re-run, or pass --allow-shrink to override.`
+  // Gap-free reconcile (upsert + soft-delete) so live reads never see the HS
+  // catalog disappear mid-refresh. The shrink guard lives inside the helper.
+  try {
+    const result = await reconcileSupplierCatalog(
+      medmkp as unknown as ReconcileService,
+      {
+        supplier_id: SUPPLIER_ID,
+        source_catalog: SOURCE_CATALOG,
+        source: ingestion.source,
+        supplierProducts: ingestion.supplierProducts as ReconcileInput["supplierProducts"],
+        canonicalProductMatches:
+          ingestion.canonicalProductMatches as ReconcileInput["canonicalProductMatches"],
+        priceSnapshots: ingestion.priceSnapshots as ReconcileInput["priceSnapshots"],
+      },
+      { allowCatalogShrink: allowShrink, log: console.log }
     )
+    console.log(
+      `[henryschein] COMMIT complete — products(+${result.supplier_products.created}/~${result.supplier_products.updated}/restore ${result.supplier_products.restored}/-${result.supplier_products.soft_deleted}) ` +
+        `matches(+${result.canonical_product_matches.created}/-${result.canonical_product_matches.soft_deleted}) ` +
+        `snapshots(+${result.price_snapshots.created}/~${result.price_snapshots.updated}).`
+    )
+  } catch (error) {
+    console.error(`[henryschein] ABORT: ${(error as Error).message}`)
     return
   }
-  if (existingProducts.length) {
-    const ids = existingProducts.map((p) => p.id)
-    await forChunks(ids, async (chunk) => {
-      const existingMatches = await medmkp.listCanonicalProductMatches({
-        supplier_product_id: chunk,
-      })
-      if (existingMatches.length) {
-        await forChunks(existingMatches.map((match) => match.id), async (matchChunk) => {
-          await medmkp.deleteCanonicalProductMatches(matchChunk)
-        })
-      }
-    })
-    await forChunks(ids, async (chunk) => {
-      await medmkp.deleteSupplierProducts(chunk)
-    })
-    console.log(`[henryschein] Deleted ${ids.length} prior HS products`)
-  }
-
-  const existingSources = await medmkp.listSupplierCatalogSources({
-    supplier_id: SUPPLIER_ID,
-    source_catalog: SOURCE_CATALOG,
-  })
-  if (existingSources.length) {
-    await medmkp.deleteSupplierCatalogSources(existingSources.map((source) => source.id))
-  }
-
-  await medmkp.createSupplierCatalogSources(ingestion.source)
-  await forChunks(ingestion.supplierProducts, async (chunk, index, total) => {
-    console.log(`[henryschein] Creating product chunk ${index}/${total} (${chunk.length})`)
-    await medmkp.createSupplierProducts(
-      chunk as Parameters<typeof medmkp.createSupplierProducts>[0]
-    )
-  })
-  await forChunks(ingestion.canonicalProductMatches, async (chunk, index, total) => {
-    console.log(`[henryschein] Creating match chunk ${index}/${total} (${chunk.length})`)
-    await medmkp.createCanonicalProductMatches(
-      chunk as Parameters<typeof medmkp.createCanonicalProductMatches>[0]
-    )
-  })
-  if (ingestion.priceSnapshots.length) {
-    await forChunks(ingestion.priceSnapshots, async (chunk) => {
-      await medmkp.createSupplierPriceSnapshots(
-        chunk as Parameters<typeof medmkp.createSupplierPriceSnapshots>[0]
-      )
-    })
-  }
-
-  console.log(
-    `[henryschein] COMMIT complete — wrote ${ingestion.supplierProducts.length} products + ${ingestion.canonicalProductMatches.length} matches + ${ingestion.priceSnapshots.length} price snapshots.`
-  )
 }

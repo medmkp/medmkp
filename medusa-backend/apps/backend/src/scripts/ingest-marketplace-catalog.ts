@@ -2,6 +2,11 @@ import { readFileSync } from "fs"
 import type { MedusaContainer } from "@medusajs/framework"
 import { createMarketplaceFetcher } from "../ingestion/marketplace/fetch"
 import { buildMarketplaceIngestion } from "../ingestion/marketplace/persist"
+import {
+  reconcileSupplierCatalog,
+  type ReconcileInput,
+  type ReconcileService,
+} from "../ingestion/supplier-catalog-reconcile"
 import { getMarketplaceProvider } from "../ingestion/marketplace/providers"
 import {
   fetchScraperApiCredits,
@@ -174,16 +179,6 @@ async function ensureSupplier(
   return supplierId
 }
 
-async function chunked<T>(
-  items: T[],
-  size: number,
-  iterator: (chunk: T[]) => Promise<unknown>
-) {
-  for (let index = 0; index < items.length; index += size) {
-    await iterator(items.slice(index, index + size))
-  }
-}
-
 async function commitMarketplaceCatalog(
   medmkp: MedMKPModuleService,
   supplierId: string,
@@ -198,60 +193,29 @@ async function commitMarketplaceCatalog(
     rows,
   })
 
-  const existingProducts = await medmkp.listSupplierProducts({
-    supplier_id: supplierId,
-    source_catalog: sourceCatalog,
-  })
-  const productIds = existingProducts.map((product) => product.id)
-  const existingMatches = productIds.length
-    ? await medmkp.listCanonicalProductMatches({ supplier_product_id: productIds })
-    : []
-  const existingSources = await medmkp.listSupplierCatalogSources({
-    supplier_id: supplierId,
-    source_catalog: sourceCatalog,
-  })
-
-  if (existingMatches.length) {
-    await chunked(existingMatches.map((m) => m.id), 500, (chunk) =>
-      medmkp.deleteCanonicalProductMatches(chunk)
-    )
-  }
-  if (productIds.length) {
-    await chunked(productIds, 500, (chunk) => medmkp.deleteSupplierProducts(chunk))
-  }
-  if (existingSources.length) {
-    await chunked(existingSources.map((s) => s.id), 500, (chunk) =>
-      medmkp.deleteSupplierCatalogSources(chunk)
-    )
-  }
-  // Price snapshot ids are deterministic per (supplier, source, sku, captured_at)
-  // and we replace by deleting any snapshot ids we're about to recreate.
-  const snapshotIds = ingestion.priceSnapshots.map((s) => (s as { id: string }).id)
-  if (snapshotIds.length) {
-    await chunked(snapshotIds, 500, (chunk) => medmkp.deleteSupplierPriceSnapshots(chunk))
-  }
-
-  await medmkp.createSupplierCatalogSources(ingestion.source)
-  await chunked(ingestion.supplierProducts, 500, (chunk) =>
-    medmkp.createSupplierProducts(
-      chunk as Parameters<typeof medmkp.createSupplierProducts>[0]
-    )
+  // Gap-free reconcile (upsert + soft-delete) instead of delete-all-then-create,
+  // so live reads never see this marketplace supplier's catalog disappear
+  // mid-refresh. Marketplace ingests are search-driven and intentionally narrow,
+  // so the shrink guard is relaxed here.
+  const result = await reconcileSupplierCatalog(
+    medmkp as unknown as ReconcileService,
+    {
+      supplier_id: supplierId,
+      source_catalog: sourceCatalog,
+      source: ingestion.source,
+      supplierProducts: ingestion.supplierProducts as ReconcileInput["supplierProducts"],
+      canonicalProductMatches:
+        ingestion.canonicalProductMatches as ReconcileInput["canonicalProductMatches"],
+      priceSnapshots: ingestion.priceSnapshots as ReconcileInput["priceSnapshots"],
+    },
+    { allowCatalogShrink: true, log: console.log }
   )
-  await chunked(ingestion.canonicalProductMatches, 500, (chunk) =>
-    medmkp.createCanonicalProductMatches(
-      chunk as Parameters<typeof medmkp.createCanonicalProductMatches>[0]
-    )
-  )
-  if (ingestion.priceSnapshots.length) {
-    await chunked(ingestion.priceSnapshots, 500, (chunk) =>
-      medmkp.createSupplierPriceSnapshots(
-        chunk as Parameters<typeof medmkp.createSupplierPriceSnapshots>[0]
-      )
-    )
-  }
 
   return {
-    supplier_products: ingestion.supplierProducts.length,
+    supplier_products:
+      result.supplier_products.created +
+      result.supplier_products.updated +
+      result.supplier_products.restored,
     canonical_product_matches: ingestion.canonicalProductMatches.length,
     price_snapshots: ingestion.priceSnapshots.length,
   }

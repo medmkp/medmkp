@@ -2,6 +2,11 @@ import { readFileSync } from "fs"
 import type { MedusaContainer } from "@medusajs/framework"
 import { parseCsv } from "../ingestion/csv"
 import {
+  reconcileSupplierCatalog,
+  type ReconcileInput,
+  type ReconcileService,
+} from "../ingestion/supplier-catalog-reconcile"
+import {
   buildSupplierCatalogIngestion,
   type SupplierCatalogIngestionInput,
   type SupplierCatalogRow,
@@ -135,60 +140,22 @@ export default async function importSupplierCatalogCsv({
     }))
   )
 
-  const [existingSources, existingProducts, existingMatches] =
-    await Promise.all([
-      medmkp.listSupplierCatalogSources(),
-      medmkp.listSupplierProducts(),
-      medmkp.listCanonicalProductMatches(),
-    ])
-
-  const productIdsToDelete = existingProducts
-    .filter(
-      (product) =>
-        product.supplier_id === options.supplier &&
-        product.source_catalog === options.sourceCatalog
-    )
-    .map((product) => product.id)
-  const matchIdsToDelete = existingMatches
-    .filter((match) => productIdsToDelete.includes(match.supplier_product_id))
-    .map((match) => match.id)
-  const sourceIdsToDelete = existingSources
-    .filter(
-      (source) =>
-        source.supplier_id === options.supplier &&
-        source.source_catalog === options.sourceCatalog
-    )
-    .map((source) => source.id)
-
-  if (matchIdsToDelete.length) {
-    await medmkp.deleteCanonicalProductMatches(matchIdsToDelete)
-  }
-  if (productIdsToDelete.length) {
-    await medmkp.deleteSupplierProducts(productIdsToDelete)
-  }
-  if (sourceIdsToDelete.length) {
-    await medmkp.deleteSupplierCatalogSources(sourceIdsToDelete)
-  }
-
-  await medmkp.createSupplierCatalogSources(ingestion.source)
-  await medmkp.createSupplierProducts(
-    ingestion.supplierProducts as Parameters<
-      typeof medmkp.createSupplierProducts
-    >[0]
+  // Gap-free reconcile (upsert + soft-delete) instead of delete-all-then-create,
+  // so live reads never see this supplier's catalog disappear mid-import. A CSV
+  // import is authoritative for its source, so allow it to shrink the catalog.
+  await reconcileSupplierCatalog(
+    medmkp as unknown as ReconcileService,
+    {
+      supplier_id: options.supplier,
+      source_catalog: options.sourceCatalog,
+      source: ingestion.source,
+      supplierProducts: ingestion.supplierProducts as ReconcileInput["supplierProducts"],
+      canonicalProductMatches:
+        ingestion.canonicalProductMatches as ReconcileInput["canonicalProductMatches"],
+      priceSnapshots: ingestion.priceSnapshots as ReconcileInput["priceSnapshots"],
+    },
+    { allowCatalogShrink: true, log: console.log }
   )
-  await medmkp.createCanonicalProductMatches(
-    ingestion.canonicalProductMatches as Parameters<
-      typeof medmkp.createCanonicalProductMatches
-    >[0]
-  )
-
-  if (ingestion.priceSnapshots.length) {
-    await medmkp.createSupplierPriceSnapshots(
-      ingestion.priceSnapshots as Parameters<
-        typeof medmkp.createSupplierPriceSnapshots
-      >[0]
-    )
-  }
 
   console.log(
     JSON.stringify(

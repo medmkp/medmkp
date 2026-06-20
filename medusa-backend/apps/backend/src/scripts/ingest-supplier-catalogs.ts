@@ -2,6 +2,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import type { MedusaContainer } from "@medusajs/framework"
 import { buildSupplierCatalogIngestion } from "../ingestion/supplier-catalog"
+import {
+  reconcileSupplierCatalog,
+  type ReconcileInput,
+  type ReconcileService,
+} from "../ingestion/supplier-catalog-reconcile"
 import type {
   SupplierCatalogIngestionInput,
   SupplierCatalogRow,
@@ -298,28 +303,6 @@ function defaultSourceUrlsForSupplier(supplier: {
   }))
 }
 
-function chunks<T>(items: T[], size: number) {
-  const result: T[][] = []
-
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size))
-  }
-
-  return result
-}
-
-async function promiseChunks<T>(
-  items: T[],
-  size: number,
-  iterator: (chunk: T[], index: number, total: number) => Promise<unknown>
-) {
-  const itemChunks = chunks(items, size)
-
-  for (let index = 0; index < itemChunks.length; index += 1) {
-    await iterator(itemChunks[index], index + 1, itemChunks.length)
-  }
-}
-
 function loadStageState<T>(stateDir: string, name: string): T {
   const path = join(stateDir, name)
 
@@ -366,37 +349,9 @@ function assertNonEmptyCandidateState(options: {
   }
 }
 
-// Supplier-agnostic backstop for the delete-and-replace commit: refuse to shrink
-// an established catalog to a small fraction of its current size. This is the
-// failure mode that wiped DC Dental from 39,559 rows to 1,002 — a partial
-// extraction was committed and hard-deleted the rest. Tiny catalogs are exempt so
-// a first-time/near-empty import isn't blocked; --allow-catalog-shrink (or
-// --allow-empty-commit) overrides when most rows are intentionally being removed.
-const CATALOG_SHRINK_FLOOR_RATIO = 0.5
-const CATALOG_SHRINK_GUARD_MIN_EXISTING = 50
-
-export function assertCatalogReplaceNotDestructive(input: {
-  supplierId: string
-  sourceCatalog: string
-  existingCount: number
-  newCount: number
-  allowCatalogShrink: boolean
-}) {
-  if (input.allowCatalogShrink) {
-    return
-  }
-  if (
-    input.existingCount >= CATALOG_SHRINK_GUARD_MIN_EXISTING &&
-    input.newCount < input.existingCount * CATALOG_SHRINK_FLOOR_RATIO
-  ) {
-    throw new Error(
-      `Refusing to replace supplier=${input.supplierId} source=${input.sourceCatalog}: ` +
-        `new catalog has ${input.newCount} rows vs ${input.existingCount} existing ` +
-        `(>${Math.round((1 - CATALOG_SHRINK_FLOOR_RATIO) * 100)}% shrink). ` +
-        `Fix the extraction and re-run, or pass --allow-catalog-shrink to override.`
-    )
-  }
-}
+// Re-exported for back-compat with existing imports/tests; the supplier-agnostic
+// shrink backstop now lives in the shared reconcile module.
+export { assertCatalogReplaceNotDestructive } from "../ingestion/supplier-catalog-reconcile"
 
 async function replaceSupplierCatalog(
   medmkp: MedMKPModuleService,
@@ -414,100 +369,21 @@ async function replaceSupplierCatalog(
     }))
   )
 
-  console.log(
-    `[supplier-ingestion] Commit loading existing catalog rows for supplier=${input.supplier_id} source=${input.source_catalog}`
+  // Gap-free reconcile (upsert + soft-delete) instead of delete-all-then-create,
+  // so live reads never see this supplier's catalog disappear mid-refresh.
+  return reconcileSupplierCatalog(
+    medmkp as unknown as ReconcileService,
+    {
+      supplier_id: input.supplier_id,
+      source_catalog: input.source_catalog,
+      source: ingestion.source,
+      supplierProducts: ingestion.supplierProducts as ReconcileInput["supplierProducts"],
+      canonicalProductMatches:
+        ingestion.canonicalProductMatches as ReconcileInput["canonicalProductMatches"],
+      priceSnapshots: ingestion.priceSnapshots as ReconcileInput["priceSnapshots"],
+    },
+    { allowCatalogShrink: options.allowCatalogShrink, log: console.log }
   )
-  const [existingSources, existingProducts] =
-    await Promise.all([
-      medmkp.listSupplierCatalogSources({
-        supplier_id: input.supplier_id,
-        source_catalog: input.source_catalog,
-      }),
-      medmkp.listSupplierProducts({
-        supplier_id: input.supplier_id,
-        source_catalog: input.source_catalog,
-      }),
-    ])
-  assertCatalogReplaceNotDestructive({
-    supplierId: input.supplier_id,
-    sourceCatalog: input.source_catalog,
-    existingCount: existingProducts.length,
-    newCount: ingestion.supplierProducts.length,
-    allowCatalogShrink: options.allowCatalogShrink,
-  })
-
-  const productIdsToDelete = existingProducts.map((product) => product.id)
-  const existingMatches = productIdsToDelete.length
-    ? await medmkp.listCanonicalProductMatches({
-        supplier_product_id: productIdsToDelete,
-      })
-    : []
-  const matchIdsToDelete = existingMatches.map((match) => match.id)
-  const sourceIdsToDelete = existingSources.map((source) => source.id)
-  const priceSnapshotIdsToReplace = ingestion.priceSnapshots.map((snapshot) =>
-    (snapshot as { id: string }).id
-  )
-
-  console.log(
-    `[supplier-ingestion] Commit deleting existing rows: sources=${sourceIdsToDelete.length} products=${productIdsToDelete.length} matches=${matchIdsToDelete.length} retry_price_snapshots=${priceSnapshotIdsToReplace.length}`
-  )
-
-  if (matchIdsToDelete.length) {
-    await promiseChunks(matchIdsToDelete, 500, async (chunk, index, total) => {
-      console.log(`[supplier-ingestion] Commit deleting match chunk ${index}/${total} (${chunk.length})`)
-      await medmkp.deleteCanonicalProductMatches(chunk)
-    })
-  }
-  if (productIdsToDelete.length) {
-    await promiseChunks(productIdsToDelete, 500, async (chunk, index, total) => {
-      console.log(`[supplier-ingestion] Commit deleting product chunk ${index}/${total} (${chunk.length})`)
-      await medmkp.deleteSupplierProducts(chunk)
-    })
-  }
-  if (sourceIdsToDelete.length) {
-    await promiseChunks(sourceIdsToDelete, 500, async (chunk, index, total) => {
-      console.log(`[supplier-ingestion] Commit deleting source chunk ${index}/${total} (${chunk.length})`)
-      await medmkp.deleteSupplierCatalogSources(chunk)
-    })
-  }
-  if (priceSnapshotIdsToReplace.length) {
-    await promiseChunks(priceSnapshotIdsToReplace, 500, async (chunk, index, total) => {
-      console.log(`[supplier-ingestion] Commit deleting retry price snapshot chunk ${index}/${total} (${chunk.length})`)
-      await medmkp.deleteSupplierPriceSnapshots(chunk)
-    })
-  }
-
-  console.log(
-    `[supplier-ingestion] Commit creating rows: products=${ingestion.supplierProducts.length} matches=${ingestion.canonicalProductMatches.length} price_snapshots=${ingestion.priceSnapshots.length}`
-  )
-  await medmkp.createSupplierCatalogSources(ingestion.source)
-  await promiseChunks(ingestion.supplierProducts, 500, async (chunk, index, total) => {
-    console.log(`[supplier-ingestion] Commit creating product chunk ${index}/${total} (${chunk.length})`)
-    await medmkp.createSupplierProducts(
-      chunk as Parameters<typeof medmkp.createSupplierProducts>[0]
-    )
-  })
-  await promiseChunks(ingestion.canonicalProductMatches, 500, async (chunk, index, total) => {
-    console.log(`[supplier-ingestion] Commit creating match chunk ${index}/${total} (${chunk.length})`)
-    await medmkp.createCanonicalProductMatches(
-      chunk as Parameters<typeof medmkp.createCanonicalProductMatches>[0]
-    )
-  })
-
-  if (ingestion.priceSnapshots.length) {
-    await promiseChunks(ingestion.priceSnapshots, 500, async (chunk, index, total) => {
-      console.log(`[supplier-ingestion] Commit creating price snapshot chunk ${index}/${total} (${chunk.length})`)
-      await medmkp.createSupplierPriceSnapshots(
-        chunk as Parameters<typeof medmkp.createSupplierPriceSnapshots>[0]
-      )
-    })
-  }
-
-  return {
-    supplier_products: ingestion.supplierProducts.length,
-    canonical_product_matches: ingestion.canonicalProductMatches.length,
-    price_snapshots: ingestion.priceSnapshots.length,
-  }
 }
 
 export default async function ingestSupplierCatalogs({
