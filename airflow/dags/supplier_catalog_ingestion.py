@@ -36,6 +36,7 @@ from datetime import datetime
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.bash import BashOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 BACKEND_DIR = Variable.get("medmkp_backend_dir", default_var="/opt/medmkp/medusa-backend/apps/backend")
 ENV_FILE = Variable.get("medmkp_env_file", default_var=".env")
@@ -347,6 +348,22 @@ def build_supplier_dag(supplier: dict[str, object]) -> DAG:
             bash_command=f'rm -rf "{STATE_DIR_TEMPLATE}"',
         )
         previous >> cleanup
+
+        # Scheduled suppliers are covered by the nightly match_products batch
+        # (Sunday 23:00), which runs after every scheduled ingest has landed.
+        # Manual/ad-hoc suppliers have no batch window, so chain a global
+        # re-match onto them directly to keep cross-supplier matches fresh.
+        if supplier["schedule"] is None:
+            rematch = TriggerDagRunOperator(
+                task_id="trigger_match_products",
+                trigger_dag_id="match_products",
+                # Fire-and-forget: don't block the supplier DAG (or hold a worker)
+                # on the rebuild. match_products is max_active_runs=1, so concurrent
+                # manual ingests queue their rebuilds serially rather than overlap.
+                wait_for_completion=False,
+                reset_dag_run=True,
+            )
+            cleanup >> rematch
     return dag
 
 
