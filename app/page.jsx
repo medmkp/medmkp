@@ -1444,6 +1444,12 @@ export default function Home() {
   const [serverReady, setServerReady] = useState(false);
   const serverLoadStartedRef = useRef(false);
   const saveTimerRef = useRef(null);
+  // Holds the most recent state blob plus whether it's been flushed to the
+  // server. Lets refreshFromServer push pending (debounced) changes up before
+  // pulling, so a manual refresh right after an upload can't clobber unsaved
+  // local items with stale server state.
+  const latestBlobRef = useRef(null);
+  const pendingSaveRef = useRef(false);
 
   // Apply a saved app-state blob (from localStorage or the per-practice server
   // store) to component state.
@@ -1536,6 +1542,7 @@ export default function Home() {
   useEffect(() => {
     if (!stateLoaded) return;
     const blob = { draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, listStage, listTouched, listName, buyingPrefs, defaultBuyingPrefs };
+    latestBlobRef.current = blob;
     try {
       window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(blob));
     } catch {
@@ -1544,13 +1551,14 @@ export default function Home() {
     // Mirror to the server (debounced, last-write-wins). Gated on serverReady so
     // a save can't race ahead of the initial load and clobber the stored list.
     if (authed === true && serverReady) {
+      pendingSaveRef.current = true;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         fetch("/api/reorder-list", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(blob),
-        }).catch(() => {
+        }).then(() => { pendingSaveRef.current = false; }).catch(() => {
           // offline — localStorage still holds it; next change retries.
         });
       }, 800);
@@ -2137,6 +2145,17 @@ export default function Home() {
   async function refreshFromServer() {
     if (authed !== true) return;
     try {
+      // Flush any debounced/in-flight local save first, so we never pull stale
+      // server state over unsaved local items (e.g. a refresh right after an
+      // invoice upload, before the 800ms save fired).
+      if (pendingSaveRef.current && latestBlobRef.current) {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        await fetch("/api/reorder-list", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(latestBlobRef.current),
+        }).then(() => { pendingSaveRef.current = false; }).catch(() => {});
+      }
       const response = await fetch("/api/reorder-list", { cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (data && data.state) hydrateFromState(data.state);
