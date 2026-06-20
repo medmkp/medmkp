@@ -9919,8 +9919,11 @@ th {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--bg);
 }
-.pp-group-meta { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.pp-group-meta { color: var(--muted); font-size: 13px; white-space: nowrap; margin-left: auto; }
 .pp-group-meta strong { color: var(--ink); font-weight: 700; }
+/* The Review view reuses the reorder-list rows (.crl-row), grouped per supplier.
+   The header row stays inside the card, no separate scroll container. */
+.pp-group-table .crl-row-head { box-shadow: inset 0 -1px 0 var(--line); }
 .pp-group-lines { display: grid; }
 .pp-line-wrap { border-top: 1px solid var(--line); }
 .pp-group-lines .pp-line-wrap:first-child { border-top: none; }

@@ -1353,6 +1353,9 @@ export default function Home() {
               onPrepareHandoff={prepareHandoff}
               onBuildCart={setCartGroup}
               onSwitchOffer={applyMatchDecision}
+              onConfirmMatch={applyMatchDecision}
+              onLinkProduct={linkProductToItem}
+              onRemoveItem={removeDraftItem}
               onNavigate={navigate}
               onToast={showToast}
             />

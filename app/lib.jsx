@@ -924,7 +924,7 @@ export const CRL_STATUS = {
 
 export const LIST_STATUS = {
   draft: { label: "Draft", cls: "draft" },
-  review: { label: "Review & optimize", cls: "review" },
+  review: { label: "Review", cls: "review" },
   handoff: { label: "Handed off", cls: "handoff" },
 };
 
