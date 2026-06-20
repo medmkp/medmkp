@@ -101,7 +101,7 @@ export function useBarcodeScanner({ active, onScan }) {
             const { BarcodeDetector } = await import("barcode-detector/ponyfill");
             if (!isMounted) return;
             detector = new BarcodeDetector({
-              formats: ["upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "data_matrix"],
+              formats: ["upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "data_matrix", "qr_code"],
             });
           } catch (error) {
             detector = null; // import failed → stay on manual entry

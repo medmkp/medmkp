@@ -45,8 +45,19 @@ function dedupeById<T extends { id: string }>(rows: T[]): T[] {
 // return the full payload, not just the GTIN, so peel out AI 01 before running
 // the exact barcode lookup. Readers may prefix a symbology identifier (]C1 for
 // GS1-128, ]d2 for GS1 Data Matrix); parenthesized manual input is accepted too.
+//
+// QR codes on packaging increasingly carry a GS1 Digital Link URL instead of a
+// raw element string — e.g. "https://id.gs1.org/01/00302730002188/10/LOT" — so
+// pull AI 01 out of the URL path too (the GTIN may be 8–14 digits there).
 function gs1Gtin(value: string): string | null {
-  const raw = value.trim().replace(/^\](?:C1|d2)/i, "")
+  const raw = value.trim().replace(/^\](?:C1|d2|Q\d?)/i, "")
+
+  const link = raw.match(/^https?:\/\/[^\s]*\/01\/(\d{8,14})(?:\/|\?|$)/i)
+  if (link) {
+    const gtin = link[1].padStart(14, "0")
+    return gtinVariants(gtin).length ? gtin : null
+  }
+
   const match = raw.match(/^01(\d{14})/) || raw.match(/^\(01\)(\d{14})/)
   if (!match) return null
   return gtinVariants(match[1]).length ? match[1] : null

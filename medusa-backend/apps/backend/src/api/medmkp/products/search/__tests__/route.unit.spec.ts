@@ -101,6 +101,27 @@ describe("GET /medmkp/products/search — HIBC scan path", () => {
     expect(body.products[0].name).toBe("Scanned GS1 product")
   })
 
+  it.each([
+    ["id.gs1.org canonical", "https://id.gs1.org/01/00302730002188/10/LOT42"],
+    ["brand domain + query", "https://example.com/01/00302730002188?17=261231"],
+    ["bare path", "https://dental.co/01/00302730002188"],
+  ])("extracts AI 01 from a GS1 Digital Link QR (%s)", async (_label, payload) => {
+    const gtin = "00302730002188"
+    const hit = { ...ER24_HIT, id: "sp_dl", barcode: gtin, name: "Digital Link product" }
+    const { service } = makeService({
+      listSupplierProducts: jest.fn(async (filter: any) =>
+        filter.barcode?.includes(gtin) ? [hit] : []
+      ),
+    })
+    const body = await run(service, `barcode=${encodeURIComponent(payload)}`)
+
+    expect(service.listSupplierProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ barcode: expect.arrayContaining([gtin]) })
+    )
+    expect(body.kind).toBe("barcode")
+    expect(body.products[0].name).toBe("Digital Link product")
+  })
+
   it("does not treat a needs-review canonical link as the scanned product", async () => {
     const wrongCanonical = { id: "canon_wrong", name: "Unrelated bur", category: "Burs" }
     const { service } = makeService({
