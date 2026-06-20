@@ -24,6 +24,84 @@ function normalize(value: string | null) {
   return value?.trim().toLowerCase() || ""
 }
 
+// Synthesize a single-product response for a supplier-product-backed identity
+// hit (id "msp_<supplier_product_id>"). The search route returns these for
+// products matched by barcode/SKU that have no persisted canonical row (e.g. a
+// login-gated Henry Schein item with no price). The product page links to that
+// synthetic id, so resolve it directly from the supplier product here instead
+// of 404ing. Returns null when the supplier product can't be found.
+async function resolveSupplierProductPage(
+  medmkp: MedMKPModuleService,
+  handle: string
+) {
+  // The handle is the supplier product's own id (the "msp_" prefix is part of
+  // the model id, not an added marker). Fall back to a stripped variant in case
+  // a caller prepended the prefix to a bare id.
+  const candidateIds = [handle, handle.slice("msp_".length)]
+  const [supplierProducts, snapshots, suppliers] = await Promise.all([
+    medmkp.listSupplierProducts({ id: candidateIds }),
+    medmkp.listSupplierPriceSnapshots({ supplier_product_id: candidateIds }),
+    medmkp.listSuppliers(),
+  ])
+  const supplierProduct = supplierProducts[0]
+  if (!supplierProduct) {
+    return null
+  }
+  const supplierProductId = supplierProduct.id
+  const supplier = suppliers.find((s) => s.id === supplierProduct.supplier_id)
+  const latest = latestSnapshotsByProduct(snapshots).get(supplierProductId)
+  const offer =
+    latest && latest.price_cents > 0
+      ? {
+          supplier_product_id: supplierProduct.id,
+          supplier_id: supplierProduct.supplier_id,
+          supplier_name: supplier?.name ?? "Unknown supplier",
+          sku: supplierProduct.sku,
+          name: supplierProduct.name,
+          brand: supplierProduct.brand,
+          image_url: supplierProduct.image_url || "",
+          product_url: supplierProduct.product_url || "",
+          price_cents: latest.price_cents,
+          unit_price_cents: latest.unit_price_cents ?? null,
+          pack_quantity: supplierProduct.pack_quantity ?? null,
+          base_unit: supplierProduct.base_unit ?? null,
+          pack_basis: supplierProduct.pack_basis ?? null,
+          pack_size: supplierProduct.pack_size || "",
+          availability: latest.availability,
+          match_status: "exact",
+          unit_comparable: false,
+        }
+      : null
+
+  return {
+    id: handle,
+    handle: "",
+    name: supplierProduct.name,
+    category: (supplierProduct as any).category ?? null,
+    description: "",
+    unit_of_measure: supplierProduct.base_unit ?? "",
+    attributes_text: JSON.stringify({
+      brands: supplierProduct.brand ? [supplierProduct.brand] : [],
+    }),
+    family_id: null,
+    family_handle: null,
+    family_name: null,
+    variant_label: null,
+    variant_rank: null,
+    offer_count: offer ? 1 : 0,
+    best_offer: offer,
+    offers: offer ? [offer] : [],
+    image_url: supplierProduct.image_url || "",
+    price_range_cents: offer
+      ? { lowest: offer.price_cents, highest: offer.price_cents }
+      : null,
+    unit_price_range_cents: null,
+    base_unit: supplierProduct.base_unit ?? null,
+    unit_comparable: false,
+    unit_comparison_basis: offer?.base_unit ?? null,
+  }
+}
+
 function offerPriceRange(offers: {
   price_cents: number
 }[]) {
@@ -312,6 +390,16 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   )
 
   if (!filteredCanonicalProducts.length) {
+    // A synthetic supplier-product-backed id (search identity hit with no
+    // persisted canonical row) won't match a canonical handle/id — resolve it
+    // straight from the supplier product so the product page can still render.
+    if (handle && handle.startsWith("msp_")) {
+      const page = await resolveSupplierProductPage(medmkp, handle)
+      if (page) {
+        res.json({ count: 1, canonical_products: [page], family: null })
+        return
+      }
+    }
     res.json({ count: 0, canonical_products: [] })
     return
   }

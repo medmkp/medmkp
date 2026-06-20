@@ -8770,6 +8770,12 @@ th {
 .crl-plan-note { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .crl-price small.crl-save { color: var(--green); font-weight: 700; }
 
+/* Matched but unpriced (login-gated supplier) — honest "not listed" state */
+.crl-noprice { display: grid; gap: 1px; justify-items: flex-end; text-align: right; color: var(--muted); font-weight: 600; font-size: 13px; }
+.crl-noprice small { color: var(--muted); font-weight: 500; font-size: 11px; }
+.m-card-noprice { color: var(--muted); font-weight: 600; }
+.src-noprice { color: var(--muted); font-weight: 600; }
+
 /* "What you pay now" entry (detail panels) */
 .crl-paid-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-top: 8px; }
 .crl-paid-field { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); font-weight: 600; }
@@ -9236,6 +9242,9 @@ th {
 .pdp-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .pdp-badge .button-icon { width: 15px; height: 15px; }
 .pdp-badge.ok { background: #e8f8f0; color: var(--green); }
+.pdp-badge.muted { background: var(--surface-2, #f1f3f6); color: var(--muted); }
+.pdp-row-empty { display: block; padding: 20px 14px; }
+.pdp-row-empty p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .pdp-brand-link { display: inline-flex; align-items: center; gap: 5px; color: var(--blue); font-weight: 600; font-size: 14px; width: fit-content; }
 .pdp-brand-link .button-icon { width: 14px; height: 14px; }
 

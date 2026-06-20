@@ -521,7 +521,9 @@ function ScanResultCard({ result, className = "", onClear, onEnterManually }) {
   const { item, status, isDuplicate, qty } = result;
   const notFound = status === "Not found";
   const offer = item.bestOffer;
-  const price = offer?.price ?? (item.oldUnitPrice || null);
+  const rawPrice = offer?.price ?? (item.oldUnitPrice || null);
+  const priceMissing = !notFound && (rawPrice == null || rawPrice <= 0);
+  const price = priceMissing ? null : rawPrice;
   const meta = CRL_STATUS[status] || CRL_STATUS.Review;
 
   return (
@@ -551,12 +553,13 @@ function ScanResultCard({ result, className = "", onClear, onEnterManually }) {
             ? (item.barcode ? `Code ${item.barcode} — key it in or search` : "No code read — enter it manually")
             : isDuplicate
               ? "Already on your list — adjust the quantity there"
-              : `${offer?.supplier || item.oldVendor || "Supplier pending"}${item.unit ? ` · ${item.unit}` : ""}`}
+              : `${offer?.supplier || item.oldVendor || item.matchBrand || "Supplier pending"}${item.unit ? ` · ${item.unit}` : ""}`}
         </small>
       </div>
       <div className="src-right">
+        {!notFound && !isDuplicate && priceMissing && <small className="src-noprice">Price not listed</small>}
         {!notFound && !isDuplicate && price != null && <strong>{mrMoney(price)}</strong>}
-        {!notFound && !isDuplicate && offer?.perUnit != null && <small>${mrEa(offer.perUnit)} / ea</small>}
+        {!notFound && !isDuplicate && !priceMissing && offer?.perUnit != null && <small>${mrEa(offer.perUnit)} / ea</small>}
         {isDuplicate
           ? <em className="src-pill duplicate">Already added</em>
           : <em className={`src-pill ${meta.cls}`}>{meta.label}</em>}
@@ -1546,6 +1549,36 @@ export default function Home() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed]);
+
+  // One-time backfill of the catalog brand for matched-but-offer-less items
+  // (e.g. Henry Schein, which has no purchasable offer). Lists saved before the
+  // brand was captured at scan time still need it so the row can show the
+  // supplier logo. Looks up each item's canonical product once and patches in
+  // its brand.
+  const brandBackfillRef = useRef(false);
+  useEffect(() => {
+    if (brandBackfillRef.current) return;
+    const needs = draftItems.filter((it) =>
+      it.canonicalHandle && !it.matchBrand && !it.bestOffer && !(it.offers && it.offers.length));
+    if (!needs.length) return;
+    brandBackfillRef.current = true;
+    (async () => {
+      const updates = {};
+      await Promise.all(needs.map(async (it) => {
+        try {
+          const r = await fetch(`/api/canonical-products?handle=${encodeURIComponent(it.canonicalHandle)}`);
+          const d = await r.json();
+          const brand = parseAttributes(d.canonical_products?.[0]?.attributes_text).brands?.[0];
+          if (brand) updates[it.id] = brand;
+        } catch {
+          // best-effort — a failed lookup just leaves the logo absent
+        }
+      }));
+      if (Object.keys(updates).length) {
+        setDraftItems((items) => items.map((it) => (updates[it.id] ? { ...it, matchBrand: updates[it.id] } : it)));
+      }
+    })();
+  }, [draftItems]);
 
   useEffect(() => {
     if (!stateLoaded) return;
@@ -3957,10 +3990,17 @@ function ProductDetail({ handle, onNavigate, onToast, onAddToList, listName, lis
             <div className="pdp-hero-body">
               <div className="pdp-hero-headline">
                 <h1>{family ? family.family_name : product.name}</h1>
-                <span className="pdp-badge ok">
-                  <Icon name="icon-check-circle" className="button-icon" />
-                  Matched across {supplierCount} supplier{supplierCount === 1 ? "" : "s"}
-                </span>
+                {supplierCount === 0 ? (
+                  <span className="pdp-badge muted">
+                    <Icon name="icon-info" className="button-icon" />
+                    Price not listed{brand ? ` · ${brand.toLowerCase().includes("schein") ? "Henry Schein" : brand}` : ""}
+                  </span>
+                ) : (
+                  <span className="pdp-badge ok">
+                    <Icon name="icon-check-circle" className="button-icon" />
+                    Matched across {supplierCount} supplier{supplierCount === 1 ? "" : "s"}
+                  </span>
+                )}
               </div>
               {brand && <span className="pdp-brand-link">{brand}<Icon name="icon-link" className="button-icon" /></span>}
               {variants.length > 1 && (
@@ -4029,6 +4069,11 @@ function ProductDetail({ handle, onNavigate, onToast, onAddToList, listName, lis
                   <span>Availability</span>
                   <span>Actions</span>
                 </div>
+                {offers.length === 0 && (
+                  <div className="pdp-row pdp-row-empty">
+                    <p>No pricing available — {brand && brand.toLowerCase().includes("schein") ? "Henry Schein" : (brand || "this supplier")} doesn&rsquo;t publish a price (login required). We&rsquo;ll show pricing as soon as a supplier offer becomes available.</p>
+                  </div>
+                )}
                 {offers.map((offer, index) => {
                   const packPrice = offer.price_cents / 100;
                   // The comparable figure is the per-unit price; show it as the
@@ -4282,6 +4327,9 @@ const MR_STATUS = {
 };
 
 function mrMoney(n) { return `$${Number(n).toFixed(2)}`; }
+// Price label that treats a null/0 offer price (login-gated suppliers like
+// Henry Schein) as "Not listed" instead of a misleading $0.00.
+function mrPriceLabel(n) { return n != null && Number(n) > 0 ? mrMoney(n) : "Not listed"; }
 function mrEa(n) { return Number(n) >= 1 ? Number(n).toFixed(2) : Number(n).toFixed(3); }
 function mrConfTone(n) { return n >= 80 ? "high" : n >= 50 ? "med" : "low"; }
 
@@ -4403,6 +4451,10 @@ function makeScanDraftItem(code, product) {
   if (product) {
     const offers = (product.offers || []).map(mapSearchOffer);
     const best = offers[0] || (product.best_offer ? mapSearchOffer(product.best_offer) : null);
+    // When a product matches but carries no purchasable offer (login-gated
+    // suppliers like Henry Schein ingest with no price), fall back to the
+    // catalog brand so the row can still show the supplier logo.
+    const matchBrand = best?.supplier || parseAttributes(product.attributes_text).brands?.[0] || "";
     return {
       ...base,
       product: product.name,
@@ -4413,6 +4465,7 @@ function makeScanDraftItem(code, product) {
       matchStatus: "exact",
       confidence: product.match?.score ?? 0.9,
       imageUrl: product.image_url || product.best_offer?.image_url || "",
+      matchBrand,
       oldVendor: best?.supplier || "",
       oldUnitPrice: best?.price ?? 0,
       bestOffer: best,
@@ -4491,7 +4544,13 @@ function pickBestOffer(offers, prefs, item) {
     const anyOrderable = offers.filter(isOrderable);
     if (anyOrderable.length) pool = anyOrderable;
   }
-  const cost = (offer) => offer.perUnit ?? offer.comparablePrice ?? offer.price ?? Infinity;
+  // Treat unpriced offers (e.g. Henry Schein, whose list price is gated behind a
+  // login and ingests as 0) as the most expensive, so a real priced offer always
+  // wins the "best price" ranking over a $0 placeholder.
+  const cost = (offer) => {
+    const c = offer.perUnit ?? offer.comparablePrice ?? offer.price;
+    return c != null && c > 0 ? c : Infinity;
+  };
   if (prefs?.strategy === "brand-match") {
     const want = (item?.oldVendor || "").toLowerCase();
     const branded = want
@@ -4709,6 +4768,11 @@ function deriveMatchRows(items, prefs) {
     const supplier = notFound ? "—" : (best?.supplier || item.oldVendor || "—");
     const price = best ? best.price : (item.oldUnitPrice ?? 0);
     const perEa = best ? (best.perUnit ?? null) : null;
+    // Matched to a real product but the offer carries no usable price (Henry
+    // Schein and other login-gated suppliers ingest at 0). Render it as an
+    // honest "Price not listed" state instead of a misleading $0.00, and keep it
+    // out of the plan totals (its lineTotal is nulled below).
+    const priceMissing = !notFound && (price == null || price <= 0);
     const qty = item.draftQty ?? item.qty ?? 1;
     // When the selected offer can't be ordered now, surface the best orderable
     // alternative (same strategy) as a one-click switch — buyer-driven, never
@@ -4759,8 +4823,12 @@ function deriveMatchRows(items, prefs) {
         ? { key: switchTarget.key, supplier: switchTarget.supplier, price: switchTarget.price, perEa: switchTarget.perUnit ?? null }
         : null,
       confidence: notFound ? null : conf,
-      price: notFound ? null : price,
+      price: notFound || priceMissing ? null : price,
       perEa: notFound ? null : perEa,
+      priceMissing,
+      // Brand for an offer-less match (e.g. Henry Schein), so the row can show
+      // the supplier logo even though there's no purchasable offer.
+      matchBrand: notFound ? null : (best?.supplier || item.matchBrand || null),
       status,
       linked: Boolean(item.linked),
       note: item.note || "",
@@ -4770,7 +4838,7 @@ function deriveMatchRows(items, prefs) {
       qty,
       uom: displayUom(item.unit),
       packLabel: notFound ? "" : (best ? formatPackLabel(best.packQty, best.packBasis, best.baseUnit, best.packSize) : ""),
-      lineTotal: notFound ? null : (best ? best.price * qty : price * qty),
+      lineTotal: notFound || priceMissing ? null : (best ? best.price * qty : price * qty),
       paidUnitPrice: hasPaidPrice ? paidUnitPrice : null,
       hasPaidPrice,
       currentLineTotal: hasPaidPrice ? paidUnitPrice * qty : null,
@@ -5079,7 +5147,7 @@ function ProductSearchResults({ query, results, loading, onPick, emptyHint }) {
               <CandidateSub supplier={offer?.supplier_name} sub={offer?.sku} />
             </span>
             <span className="crl-cand-right">
-              <strong>{price != null ? mrMoney(price) : "—"}</strong>
+              <strong>{mrPriceLabel(price)}</strong>
               {product.offer_count > 1 && <span className="crl-cand-rec">{product.offer_count} offers</span>}
             </span>
           </button>
@@ -5142,7 +5210,8 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
   })();
 
   // Live savings preview from the entered price vs. the selected offer.
-  const selPrice = candidates[selected]?.price ?? row.price ?? null;
+  const selPriceRaw = candidates[selected]?.price ?? row.price ?? null;
+  const selPrice = selPriceRaw != null && selPriceRaw > 0 ? selPriceRaw : null;
   const paidNum = paid === "" ? null : Number(paid);
   const drawerSavings = paidNum != null && Number.isFinite(paidNum) && paidNum > 0 && selPrice != null && paidNum > selPrice
     ? (paidNum - selPrice) * qty
@@ -5262,7 +5331,7 @@ function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirm
                     <CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} />
                   </span>
                   <span className="crl-cand-right">
-                    <strong>{candidate.price != null ? mrMoney(candidate.price) : "—"}</strong>
+                    <strong>{mrPriceLabel(candidate.price)}</strong>
                     {showPerEa(candidate.perEa, candidate.price) && <span className="crl-cand-per">${mrEa(candidate.perEa)} / ea</span>}
                     <span className="crl-cand-tags">
                       {candidate.recommended && <span className="crl-cand-rec">Recommended</span>}
@@ -5394,19 +5463,25 @@ function MobileReorderCard({ row, onOpen, onRemove }) {
         <span className="m-card-body">
           <strong>{row.matchName || row.importedName}</strong>
           <small>{row.importedSub}</small>
-          {row.supplier && row.supplier !== "—" && (
-            <small className="m-card-supplier">
-              {supplierLogoSrc(row.supplier) && <img className="m-card-supplier-logo" src={supplierLogoSrc(row.supplier)} alt="" />}
-              {row.supplier}
-            </small>
-          )}
+          {(() => {
+            const sup = row.supplier && row.supplier !== "—" ? row.supplier : row.matchBrand;
+            if (!sup) return null;
+            return (
+              <small className="m-card-supplier">
+                {supplierLogoSrc(sup) && <img className="m-card-supplier-logo" src={supplierLogoSrc(sup)} alt="" />}
+                {sup.toLowerCase().includes("schein") ? "Henry Schein" : sup}
+              </small>
+            );
+          })()}
         </span>
         <span className="m-card-right">
           {notFound
             ? <em className="m-conf nomatch">Not found</em>
             : <em className={`m-conf ${mrConfTone(row.confidence)}`}>{row.confidence}%</em>}
-          {row.price != null && <strong>{mrMoney(row.price)}</strong>}
-          {showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
+          {row.priceMissing
+            ? <small className="m-card-noprice">Price not listed</small>
+            : row.price != null && <strong>{mrMoney(row.price)}</strong>}
+          {!row.priceMissing && showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
           {row.lineSavings > 0 && <small className="m-card-save">Save {mrMoney(row.lineSavings)}</small>}
         </span>
         <Icon name="icon-chevron-right" className="button-icon m-card-chev" />
@@ -5610,7 +5685,8 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
     : "Low match confidence";
 
   // Live savings from the entered price vs. the selected offer.
-  const selPrice = candidates[selected]?.price ?? row.price ?? null;
+  const selPriceRaw = candidates[selected]?.price ?? row.price ?? null;
+  const selPrice = selPriceRaw != null && selPriceRaw > 0 ? selPriceRaw : null;
   const paidNum = paid === "" ? null : Number(paid);
   const drawerSavings = paidNum != null && Number.isFinite(paidNum) && paidNum > 0 && selPrice != null && paidNum > selPrice
     ? (paidNum - selPrice) * (row.qty || 1)
@@ -5696,7 +5772,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
                 <input type="radio" name="m-cand" checked={selected === 0} disabled={!isOrderable(candidates[0])} onChange={() => setSelected(0)} />
                 <ProductThumb image={candidates[0].image} alt={candidates[0].name} />
                 <span className="m-match-info"><CandidateName name={candidates[0].name} productUrl={candidates[0].productUrl} /><CandidateSub supplier={candidates[0].supplier} sub={candidates[0].sub} /><CandidateStock availability={candidates[0].availability} liveAvailable={candidates[0].liveAvailable} /></span>
-                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrMoney(candidates[0].price)}</strong>{showPerEa(candidates[0].perEa, candidates[0].price) && <small>${mrEa(candidates[0].perEa)} / ea</small>}</span>
+                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrPriceLabel(candidates[0].price)}</strong>{showPerEa(candidates[0].perEa, candidates[0].price) && <small>${mrEa(candidates[0].perEa)} / ea</small>}</span>
               </label>
             </section>
             {candidates.length > 1 && (
@@ -5708,7 +5784,7 @@ function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConf
                   <label className={`m-match ${selected === index + 1 ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos} key={candidate.key ?? index + 1}>
                     <input type="radio" name="m-cand" checked={selected === index + 1} disabled={oos} onChange={() => setSelected(index + 1)} />
                     <span className="m-match-info"><CandidateName name={candidate.name} productUrl={candidate.productUrl} /><CandidateSub supplier={candidate.supplier} sub={candidate.sub} /><CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} /></span>
-                    <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrMoney(candidate.price)}</strong>{showPerEa(candidate.perEa, candidate.price) && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
+                    <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrPriceLabel(candidate.price)}</strong>{showPerEa(candidate.perEa, candidate.price) && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
                   </label>
                   );
                 })}
@@ -6300,12 +6376,14 @@ function CurrentReorderList({
                         <>
                           <strong>{row.matchName}</strong>
                           {row.matchSub && <small>{row.matchSub}</small>}
-                          <MatchSupplier name={row.supplier} />
+                          <MatchSupplier name={row.supplier !== "—" ? row.supplier : row.matchBrand} />
                         </>
                       )}
                     </span>
                     <span className="crl-price">
-                      {notFound ? <span className="crl-dash">—</span> : (
+                      {notFound ? <span className="crl-dash">—</span> : row.priceMissing ? (
+                        <span className="crl-noprice">Price not listed<small>Login required</small></span>
+                      ) : (
                         <>
                           <strong>{mrMoney(row.price)}</strong>
                           {showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
@@ -7567,10 +7645,10 @@ function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename
                 <span className={`crl-status ${status.cls}`}><Icon name={status.icon} className="button-icon" />{status.label}</span>
                 <span className="crl-qty"><strong>{row.qty}</strong><small>{row.uom}</small></span>
                 <span className="crl-match">
-                  {notFound ? <strong>No match found</strong> : (<><strong>{row.matchName}</strong><MatchSupplier name={row.supplier} /></>)}
+                  {notFound ? <strong>No match found</strong> : (<><strong>{row.matchName}</strong><MatchSupplier name={row.supplier !== "—" ? row.supplier : row.matchBrand} /></>)}
                 </span>
                 <span className="crl-price">
-                  {notFound ? <span className="crl-dash">—</span> : (<><strong>{mrMoney(row.price)}</strong>{showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}</>)}
+                  {notFound ? <span className="crl-dash">—</span> : row.priceMissing ? (<span className="crl-noprice">Price not listed<small>Login required</small></span>) : (<><strong>{mrMoney(row.price)}</strong>{showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}</>)}
                 </span>
               </div>
             );
