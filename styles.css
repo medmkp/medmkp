@@ -8626,7 +8626,7 @@ th {
 }
 .crl-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 2.4fr) 64px 104px minmax(0, 2.8fr) 76px 32px;
+  grid-template-columns: 44px minmax(0, 2.4fr) 64px 124px minmax(0, 2.65fr) 76px 40px;
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
@@ -8634,7 +8634,7 @@ th {
   font-size: 13px;
 }
 .crl-row:last-child { border-bottom: none; }
-.crl-foot { display: grid; grid-template-columns: 44px minmax(0, 2.4fr) 64px 104px minmax(0, 2.8fr) 76px 32px; align-items: baseline; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--surface); }
+.crl-foot { display: grid; grid-template-columns: 44px minmax(0, 2.4fr) 64px 124px minmax(0, 2.65fr) 76px 40px; align-items: baseline; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--surface); }
 .crl-foot-label { grid-column: 1 / 6; text-align: right; color: var(--muted); font-size: 12px; font-weight: 600; }
 .crl-foot-total { grid-column: 6; color: var(--ink); font-size: 16px; font-weight: 800; }
 .crl-row-click { cursor: pointer; }
@@ -8723,10 +8723,10 @@ th {
 .crl-price small { display: block; color: var(--muted); font-size: 12px; }
 .crl-dash { color: var(--muted); }
 
-.crl-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.crl-row-delete { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.crl-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-right: 6px; }
+.crl-row-delete { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
 .crl-row-delete:hover { color: var(--red); }
-.crl-row-delete .button-icon { width: 22px; height: 22px; stroke-width: 1.4; }
+.crl-row-delete .button-icon { width: 19px; height: 19px; stroke-width: 1.4; }
 .crl-action-btn { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-weight: 600; font-size: 12px; }
 .crl-action-btn.warn { border-color: var(--gold); color: var(--gold); }
 .crl-action-btn.danger { border-color: var(--red); color: var(--red); }
