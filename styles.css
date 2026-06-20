@@ -8199,6 +8199,32 @@ th {
 .desktop-scan-meta dd { margin: 0; color: var(--ink); font-weight: 600; }
 .desktop-scan-result .primary-action, .desktop-scan-result .secondary-action { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .desktop-scan-nomatch { justify-self: center; }
+.desktop-scan-result img { display: block; }
+.desktop-scan-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+.desktop-scan-check.nomatch { background: #fdecec; color: var(--red); }
+.desktop-scan-result--idle { align-content: center; min-height: 220px; }
+.desktop-scan-idle { display: grid; gap: 8px; justify-items: center; text-align: center; color: var(--muted); padding: 12px; }
+.desktop-scan-idle .button-icon { width: 30px; height: 30px; color: var(--muted); }
+.desktop-scan-idle strong { font-size: 14px; color: var(--ink); }
+.desktop-scan-idle p { font-size: 12px; line-height: 1.5; }
+
+/* Scan workspace modal: camera + result tray side by side. Double-class to beat
+   the base .crl-modal width/max-height (equal specificity, later in the file). */
+.crl-modal.crl-modal--scan { width: min(1180px, 96vw); max-height: 94vh; }
+.crl-modal-body--scan { display: flex; padding: 20px; }
+.crl-modal-body--scan .desktop-scan { width: 100%; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
+.crl-modal-body--scan .desktop-scan-stage { min-height: 600px; }
+.crl-modal-body--scan .desktop-scan-frame { width: 70%; max-width: 560px; }
+/* The stage centers its single flow child (place-items: center). With a live
+   camera that's the viewfinder, so the scan line lands dead-center. When the
+   camera can't start, the permission banner renders before the frame — drop the
+   decorative frame so the message is the one centered child (no overlap). */
+.crl-modal-body--scan .desktop-scan-permission ~ .desktop-scan-frame { display: none; }
+.crl-scan-count { margin-right: auto; color: var(--muted); font-size: 13px; font-weight: 600; }
+@media (max-width: 860px) {
+  .crl-modal-body--scan .desktop-scan { grid-template-columns: 1fr; }
+  .crl-modal-body--scan .desktop-scan-stage { min-height: 440px; }
+}
 
 .upload-workspace.scan-mode { grid-template-columns: minmax(0, 1fr); }
 

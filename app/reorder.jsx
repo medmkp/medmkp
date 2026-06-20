@@ -6,7 +6,7 @@ import { BrandMark, Icon } from "./icons";
 import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, isOrderable, isPlanIncluded, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc } from "./lib";
 import { BuyingPreferencesCard, CandidateName, CandidateStock, CandidateSub, ListStatusPill, MatchSupplier, ProductSearchResults, ProductThumb, useBarcodeScanner, useProductSearch } from "./ui";
 
-export function DesktopBarcodeScan({ onScan }) {
+export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
   const [captured, setCaptured] = useState(false);
   const flashTimer = useRef();
   const { videoRef, cameraStatus, autoDetect, capture } = useBarcodeScanner({
@@ -59,28 +59,114 @@ export function DesktopBarcodeScan({ onScan }) {
           Scan barcode
         </button>
       </div>
-      <aside className="desktop-scan-result">
+      <DesktopScanTray result={scanResult} onNavigate={onNavigate} />
+    </div>
+  );
+}
+
+// The result tray beside the desktop camera: reflects the item the buyer just
+// scanned (added to the list automatically by addScannedItem). Empty until the
+// first scan, then shows the match — or a "no match"/"already added" state.
+function DesktopScanTray({ result, onNavigate }) {
+  if (!result) {
+    return (
+      <aside className="desktop-scan-result desktop-scan-result--idle">
+        <div className="desktop-scan-idle">
+          <Icon name="icon-scan" className="button-icon" />
+          <strong>No item scanned yet</strong>
+          <p>Point a barcode at the camera. Each match is added to your reorder list automatically.</p>
+        </div>
+      </aside>
+    );
+  }
+
+  const { item, status, isDuplicate } = result;
+  const notFound = status === "Not found";
+  const offer = item.bestOffer;
+  const rawPrice = offer?.price ?? (item.oldUnitPrice || null);
+  const priceMissing = rawPrice == null || rawPrice <= 0;
+  const supplier = offer?.supplier || item.oldVendor || item.matchBrand || "";
+  const supplierLogo = supplierLogoSrc(supplier);
+
+  if (notFound) {
+    return (
+      <aside className="desktop-scan-result desktop-scan-result--nomatch">
         <div className="desktop-scan-result-head">
-          <span className="desktop-scan-check"><Icon name="icon-check-circle" className="button-icon" /></span>
-          <div><strong>Item recognized</strong><small>We found a match in your catalog.</small></div>
+          <span className="desktop-scan-check nomatch"><Icon name="icon-x-circle" className="button-icon" /></span>
+          <div><strong>No catalog match</strong><small>We couldn&rsquo;t find this item in the catalog.</small></div>
         </div>
         <div className="desktop-scan-product">
-          <div className="desktop-scan-thumb"><Icon name="icon-image" className="button-icon" /></div>
+          <div className="desktop-scan-thumb"><Icon name="icon-x" className="button-icon" /></div>
           <div>
-            <strong>Microbrush Regular Superfine Blue</strong>
-            <span>100/Bag · MBRREG-BLU-100</span>
-            <span className="desktop-scan-supplier"><img src="/schein-logo.png" alt="" />Henry Schein</span>
+            <strong>{item.barcode ? `Code ${item.barcode}` : "No code read"}</strong>
+            <span>It&rsquo;s on your list as “Needs review” — search the catalog to link the right product.</span>
           </div>
         </div>
-        <dl className="desktop-scan-meta">
-          <div><dt>UOM</dt><dd>Bag</dd></div>
-          <div><dt>Unit price</dt><dd>$12.45</dd></div>
-          <div><dt>Per each</dt><dd>$0.1245 / ea</dd></div>
-        </dl>
-        <button className="primary-action" type="button"><Icon name="icon-plus" className="button-icon" />Add to reorder list</button>
-        <button className="secondary-action" type="button"><Icon name="icon-search" className="button-icon" />View item details</button>
-        <button className="text-action desktop-scan-nomatch" type="button">This isn&rsquo;t a match</button>
       </aside>
+    );
+  }
+
+  return (
+    <aside className={`desktop-scan-result ${isDuplicate ? "desktop-scan-result--duplicate" : ""}`}>
+      <div className="desktop-scan-result-head">
+        <span className="desktop-scan-check"><Icon name="icon-check-circle" className="button-icon" /></span>
+        <div>
+          <strong>{isDuplicate ? "Already on your list" : "Added to your list"}</strong>
+          <small>{isDuplicate ? "Adjust the quantity on your reorder list." : "Matched to your catalog and added."}</small>
+        </div>
+      </div>
+      <div className="desktop-scan-product">
+        <div className="desktop-scan-thumb">
+          {item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" /> : <Icon name="icon-image" className="button-icon" />}
+        </div>
+        <div>
+          <strong>{item.product}</strong>
+          {item.sku && <span>{[item.unit ? `${item.unit}` : "", item.sku].filter(Boolean).join(" · ")}</span>}
+          {supplier && (
+            <span className="desktop-scan-supplier">
+              {supplierLogo && <img src={supplierLogo} alt="" />}
+              {supplier.toLowerCase().includes("schein") ? "Henry Schein" : supplier}
+            </span>
+          )}
+        </div>
+      </div>
+      <dl className="desktop-scan-meta">
+        <div><dt>UOM</dt><dd>{item.unit || "ea"}</dd></div>
+        <div><dt>Unit price</dt><dd>{priceMissing ? "Not listed" : mrMoney(rawPrice)}</dd></div>
+        {!priceMissing && offer?.perUnit != null && (
+          <div><dt>Per each</dt><dd>${mrEa(offer.perUnit)} / ea</dd></div>
+        )}
+      </dl>
+      {item.canonicalHandle && onNavigate && (
+        <button className="secondary-action" type="button" onClick={() => onNavigate(`/app/catalog/${item.canonicalHandle}`)}>
+          <Icon name="icon-search" className="button-icon" />View item details
+        </button>
+      )}
+    </aside>
+  );
+}
+
+// Scan workspace as a modal: a live desktop camera on the left, and a tray on
+// the right that reflects the item just scanned (added to the list on the spot).
+export function ScanModal({ onScan, scanResult, scanCount = 0, onNavigate, onClose }) {
+  return (
+    <div className="crl-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="scanModalTitle" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="crl-modal crl-modal--scan">
+        <header className="crl-modal-head">
+          <div>
+            <h3 id="scanModalTitle">Scan barcode</h3>
+            <p>Point an item barcode at your camera. Each match is added to your reorder list automatically.</p>
+          </div>
+          <button className="crl-modal-close" type="button" aria-label="Close" onClick={onClose}><Icon name="icon-x" className="button-icon" /></button>
+        </header>
+        <div className="crl-modal-body crl-modal-body--scan">
+          <DesktopBarcodeScan onScan={onScan} scanResult={scanResult} onNavigate={onNavigate} />
+        </div>
+        <footer className="crl-modal-foot">
+          <span className="crl-scan-count">{scanCount > 0 ? `${scanCount} item${scanCount === 1 ? "" : "s"} scanned` : "No items scanned yet"}</span>
+          <button className="primary-action compact" type="button" onClick={onClose}>Done</button>
+        </footer>
+      </div>
     </div>
   );
 }
@@ -873,6 +959,9 @@ export function CurrentReorderList({
   selectedInvoiceName,
   hasUploadedInvoice,
   onScan,
+  scanResult,
+  onClearScanResult,
+  scanCount = 0,
   searchTerm,
   onSearchTerm,
   searchResults,
@@ -1181,12 +1270,8 @@ export function CurrentReorderList({
         </div>
       </header>
 
-      {(addMode === "scan" || addMode === "search") && (
+      {addMode === "search" && (
         <section className="crl-add">
-            {addMode === "scan" && (
-              <div className="crl-add-panel"><DesktopBarcodeScan onScan={onScan} /></div>
-            )}
-            {addMode === "search" && (
               <div className="crl-add-panel crl-search-panel">
                 <label className="crl-search">
                   <Icon name="icon-search" className="button-icon" />
@@ -1209,7 +1294,6 @@ export function CurrentReorderList({
                   <SearchResults results={searchResults} loading={searchLoading} query={searchTerm.trim()} onNavigate={onNavigate} />
                 )}
               </div>
-            )}
           </section>
       )}
 
@@ -1386,6 +1470,16 @@ export function CurrentReorderList({
           practiceName={practiceName}
           onClose={onCloseUpload}
           onUploadAnother={onUploadAnother}
+        />
+      )}
+
+      {addMode === "scan" && (
+        <ScanModal
+          onScan={onScan}
+          scanResult={scanResult}
+          scanCount={scanCount}
+          onNavigate={onNavigate}
+          onClose={() => { onAddMode(""); onClearScanResult?.(); }}
         />
       )}
 

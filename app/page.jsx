@@ -1320,6 +1320,9 @@ export default function Home() {
                 selectedInvoiceName={selectedInvoiceName}
                 hasUploadedInvoice={hasUploadedInvoice}
                 onScan={handleScanComplete}
+                scanResult={scanResult}
+                onClearScanResult={() => setScanResult(null)}
+                scanCount={scanCount}
                 searchTerm={searchTerm}
                 onSearchTerm={setSearchTerm}
                 searchResults={searchResults}
