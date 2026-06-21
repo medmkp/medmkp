@@ -947,6 +947,9 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const bestUnit = best ? best.price_cents / 100 : null;
   const prices = offers.map((offer) => offer.price_cents);
   const range = prices.length ? { lowest: Math.min(...prices), highest: Math.max(...prices) } : null;
+  // Amazon/Alibaba alternatives, kept out of the supplier price comparison above
+  // (wholesale/MOQ pricing isn't directly comparable). Shown in their own section.
+  const marketplaceListings = product.marketplace_listings || [];
 
   const chips = [
     attrs.size && ["Size", titleCase(attrs.size)],
@@ -1177,6 +1180,53 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
               </div>
             )}
           </section>
+
+          {marketplaceListings.length > 0 && (
+            <section className="crl-card pdp-marketplace">
+              <div className="pdp-card-head">
+                <h2>Also available on Amazon &amp; Alibaba</h2>
+                <span className="pdp-mkt-note">Marketplace alternatives — pricing isn&rsquo;t directly comparable (wholesale / pack sizes vary).</span>
+              </div>
+              <div className="pdp-mkt-grid">
+                {marketplaceListings.map((listing, index) => {
+                  const logo = supplierLogoSrc(listing.supplier_name);
+                  const priceLabel = listing.price_cents != null ? money.format(listing.price_cents / 100) : "See price";
+                  return (
+                    <div className="pdp-mkt-card" key={listing.sku || index}>
+                      <span className="pdp-mkt-thumb">
+                        {listing.image_url ? <img src={listing.image_url} alt={listing.name} loading="lazy" /> : <Icon name="icon-package" className="nav-icon" />}
+                      </span>
+                      <div className="pdp-mkt-body">
+                        <div className="pdp-mkt-supplier">
+                          <span className={`pdp-supplier-logo ${logo ? "has-img" : ""}`}>
+                            {logo ? <img src={logo} alt="" /> : initials(listing.supplier_name)}
+                          </span>
+                          <strong>{listing.supplier_name}</strong>
+                          {listing.match_status === "substitute" && <span className="pdp-mkt-grade">Similar item</span>}
+                        </div>
+                        <p className="pdp-mkt-name">{listing.name}</p>
+                        {listing.pack_size && <small className="pdp-mkt-pack">{listing.pack_size}</small>}
+                      </div>
+                      <div className="pdp-mkt-action">
+                        <span className="pdp-mkt-price">{priceLabel}</span>
+                        {listing.product_url ? (
+                          <a className="pdp-open" href={listing.product_url} target="_blank" rel="noreferrer">
+                            <Icon name="icon-link" className="button-icon" />
+                            View on {listing.supplier_name}
+                          </a>
+                        ) : (
+                          <button className="pdp-open" type="button" onClick={() => onToast(`Link unavailable for this ${listing.supplier_name} listing`)}>
+                            <Icon name="icon-link" className="button-icon" />
+                            View on {listing.supplier_name}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           <div className="pdp-bottom-grid">
             <section className="crl-card pdp-subs">

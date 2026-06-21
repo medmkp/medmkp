@@ -3,6 +3,7 @@ import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { getPostgresPool } from "../../../../utils/postgres"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
+import { MARKETPLACE_SUPPLIER_IDS } from "../../../../ingestion/marketplace/suppliers"
 
 function latestSnapshotsByProduct(snapshots: Awaited<ReturnType<MedMKPModuleService["listSupplierPriceSnapshots"]>>) {
   return snapshots.reduce((acc, snapshot) => {
@@ -450,7 +451,29 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     supplierProducts.map((supplierProduct) => [supplierProduct.id, supplierProduct])
   )
   const matchesByCanonical = new Map<string, typeof matches>()
+  const marketplaceByCanonical = new Map<string, typeof matches>()
   for (const match of matches) {
+    const supplierProduct = supplierProductById.get(match.supplier_product_id)
+
+    // Amazon/Alibaba listings go to a separate "Also available on" section, never
+    // into the price comparison. Keep matches + substitutes (≥30% title overlap);
+    // drop unmatched and sub-substitute (needs_review) noise.
+    if (supplierProduct && MARKETPLACE_SUPPLIER_IDS.has(supplierProduct.supplier_id)) {
+      if (
+        match.match_status === "exact" ||
+        match.match_status === "variant" ||
+        match.match_status === "substitute"
+      ) {
+        const list = marketplaceByCanonical.get(match.canonical_product_id)
+        if (list) {
+          list.push(match)
+        } else {
+          marketplaceByCanonical.set(match.canonical_product_id, [match])
+        }
+      }
+      continue
+    }
+
     // Same-product offers only; substitutes are surfaced separately, not mixed
     // into the supplier price comparison.
     if (match.match_status === "unmatched" || match.match_status === "substitute") {
@@ -513,11 +536,53 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     const range = offerPriceRange(offers)
     const imageUrl = bestOffer?.image_url || offers.find((offer) => offer.image_url)?.image_url || ""
 
+    // Marketplace alternatives (Amazon/Alibaba), surfaced separately. Listings may
+    // be price-less (e.g. Alibaba "contact supplier"), so a missing price is kept
+    // rather than dropped — the link-out is still useful.
+    const marketplaceListings = (marketplaceByCanonical.get(product.id) ?? [])
+      .map((match) => {
+        const supplierProduct = supplierProductById.get(match.supplier_product_id)
+        if (!supplierProduct) {
+          return null
+        }
+        const latestPrice = latestPrices.get(match.supplier_product_id)
+        const supplier = supplierById.get(supplierProduct.supplier_id)
+
+        return {
+          supplier_id: supplierProduct.supplier_id,
+          supplier_name: supplier?.name ?? "Marketplace",
+          supplier_slug: supplier?.slug ?? "",
+          sku: supplierProduct.sku,
+          name: supplierProduct.name,
+          brand: supplierProduct.brand,
+          image_url: supplierProduct.image_url || "",
+          product_url: supplierProduct.product_url || "",
+          price_cents: latestPrice?.price_cents ?? null,
+          unit_price_cents: latestPrice?.unit_price_cents ?? null,
+          pack_size: supplierProduct.pack_size || "",
+          availability: latestPrice?.availability ?? "unknown",
+          match_status: match.match_status,
+          match_confidence: match.confidence_score ?? null,
+        }
+      })
+      .filter((listing): listing is NonNullable<typeof listing> => Boolean(listing))
+      .sort((a, b) => {
+        // Closest matches first (exact → variant → substitute), then cheapest.
+        const grade = (status: string) =>
+          status === "exact" ? 0 : status === "variant" ? 1 : 2
+        const byGrade = grade(a.match_status) - grade(b.match_status)
+        if (byGrade !== 0) {
+          return byGrade
+        }
+        return (a.price_cents ?? Infinity) - (b.price_cents ?? Infinity)
+      })
+
     return {
       ...product,
       offer_count: offers.length,
       best_offer: bestOffer,
       offers,
+      marketplace_listings: marketplaceListings,
       image_url: imageUrl,
       price_range_cents: range,
       // True when ≥2 offers can be compared per-unit; basis names the unit.

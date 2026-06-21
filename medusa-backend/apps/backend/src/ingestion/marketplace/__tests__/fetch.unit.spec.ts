@@ -2,7 +2,31 @@ import {
   applyScraperTemplate,
   createMarketplaceFetcher,
   detectAntiBot,
+  resolveScraperTemplate,
 } from "../fetch"
+
+describe("resolveScraperTemplate", () => {
+  it("prefers the provider-specific template over the shared one", () => {
+    expect(
+      resolveScraperTemplate("alibaba", {
+        MARKETPLACE_SCRAPER_URL: "https://shared/?url={url}",
+        MARKETPLACE_SCRAPER_URL_ALIBABA: "https://stealth/?url={url}",
+      } as NodeJS.ProcessEnv)
+    ).toBe("https://stealth/?url={url}")
+  })
+
+  it("falls back to the shared template when no provider var is set", () => {
+    expect(
+      resolveScraperTemplate("amazon", {
+        MARKETPLACE_SCRAPER_URL: "https://shared/?url={url}",
+      } as NodeJS.ProcessEnv)
+    ).toBe("https://shared/?url={url}")
+  })
+
+  it("returns empty string when nothing is configured", () => {
+    expect(resolveScraperTemplate("amazon", {} as NodeJS.ProcessEnv)).toBe("")
+  })
+})
 
 describe("detectAntiBot", () => {
   it("flags a captcha interstitial", () => {

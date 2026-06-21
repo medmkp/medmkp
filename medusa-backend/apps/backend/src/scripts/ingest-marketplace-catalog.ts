@@ -1,6 +1,9 @@
 import { readFileSync } from "fs"
 import type { MedusaContainer } from "@medusajs/framework"
-import { createMarketplaceFetcher } from "../ingestion/marketplace/fetch"
+import {
+  createMarketplaceFetcher,
+  resolveScraperTemplate,
+} from "../ingestion/marketplace/fetch"
 import { buildMarketplaceIngestion } from "../ingestion/marketplace/persist"
 import {
   reconcileSupplierCatalog,
@@ -266,11 +269,16 @@ export default async function ingestMarketplaceCatalog({
     return
   }
 
-  if (!process.env.MARKETPLACE_SCRAPER_URL) {
+  // Amazon (static cards) and Alibaba (stealth/JS) need different proxy settings,
+  // so prefer a provider-specific MARKETPLACE_SCRAPER_URL_<PROVIDER> over the
+  // shared one. The DAG runs each provider as its own task off the same env file.
+  const scraperTemplate = resolveScraperTemplate(provider.id)
+  if (!scraperTemplate) {
     console.log(
-      "[marketplace-ingestion] NOTE: MARKETPLACE_SCRAPER_URL is unset — fetching the marketplace directly. " +
-        "Alibaba/Amazon answer bot traffic with a captcha page, so most rows will be blocked. " +
-        "Set MARKETPLACE_SCRAPER_URL to a scraping proxy/data-API template (containing {url}) for real results."
+      `[marketplace-ingestion] NOTE: no scraper template for ${provider.id} ` +
+        `(set MARKETPLACE_SCRAPER_URL_${provider.id.toUpperCase()} or MARKETPLACE_SCRAPER_URL) — ` +
+        "fetching the marketplace directly. Alibaba/Amazon answer bot traffic with a captcha page, " +
+        "so most rows will be blocked. Use a scraping proxy template (containing {url}) for real results."
     )
   }
 
@@ -286,7 +294,7 @@ export default async function ingestMarketplaceCatalog({
     )
   }
 
-  const fetcher = createMarketplaceFetcher()
+  const fetcher = createMarketplaceFetcher({ scraperUrlTemplate: scraperTemplate })
   const startedAt = Date.now()
   const progress = { done: 0, listings: 0, blocked: 0, errored: 0, withResults: 0 }
   const searches: SearchCanonicalResult[] = await mapWithConcurrency(

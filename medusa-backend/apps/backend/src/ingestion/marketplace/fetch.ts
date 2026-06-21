@@ -64,6 +64,22 @@ export function applyScraperTemplate(template: string, target: string): string {
   return `${template}${encoded}`
 }
 
+/**
+ * Pick the scraper template for a provider. Amazon search pages are static HTML
+ * (cheap, no JS render) while Alibaba needs a stealth/JS-rendering proxy to clear
+ * its captcha — and the DAG runs both off one env file. A provider-specific
+ * MARKETPLACE_SCRAPER_URL_<PROVIDER> (e.g. MARKETPLACE_SCRAPER_URL_ALIBABA) wins;
+ * otherwise we fall back to the shared MARKETPLACE_SCRAPER_URL.
+ */
+export function resolveScraperTemplate(
+  providerId: string,
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  const key = `MARKETPLACE_SCRAPER_URL_${providerId.toUpperCase()}`
+  const perProvider = env[key]?.trim()
+  return perProvider || env.MARKETPLACE_SCRAPER_URL?.trim() || ""
+}
+
 export type CreateFetcherOptions = {
   /**
    * Scraper/proxy URL template (see applyScraperTemplate). Defaults to the

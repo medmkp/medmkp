@@ -7,6 +7,7 @@ import { nameSimilarity, trigrams } from "../../../../matching/search"
 import { gtinVariants } from "../../../../matching/gtin"
 import { parseHibc } from "../../../../matching/hibc"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
+import { isMarketplaceSupplierId } from "../../../../ingestion/marketplace/suppliers"
 
 // Live product lookup for the search box (fuzzy text) and the scanner
 // (exact SKU). Reuses the offline matching engine's tokenizer so ranking stays
@@ -151,11 +152,16 @@ async function enrichWithOffers(medmkp: MedMKPModuleService, canonicals: Canonic
     const rawOffers = matches
       // Same-product offers only. Substitutes are surfaced separately, and
       // needs-review links are explicitly unproven, so neither belongs in the
-      // supplier price comparison or an exact scan result.
+      // supplier price comparison or an exact scan result. Amazon/Alibaba
+      // marketplace listings are also kept out — they get their own section on
+      // the product page rather than competing in the per-unit comparison.
       .filter(
         (match) =>
           match.canonical_product_id === product.id &&
-          (match.match_status === "exact" || match.match_status === "variant")
+          (match.match_status === "exact" || match.match_status === "variant") &&
+          !isMarketplaceSupplierId(
+            supplierProductById.get(match.supplier_product_id)?.supplier_id
+          )
       )
       .map((match) => {
         const supplierProduct = supplierProductById.get(match.supplier_product_id)

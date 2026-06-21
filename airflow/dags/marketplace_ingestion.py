@@ -3,26 +3,32 @@
 Search the top dental reorder products on a marketplace and save the matching
 listings (image + price snapshot + canonical match) against the existing
 canonical products. Unlike supplier catalog ingestion, this fetches through a
-paid, metered scraping API (ScraperAPI), so the DAGs default to manual trigger
-(schedule=None) to avoid silently burning credits. Set a cron via the
+paid, metered scraping API (any provider whose URL takes a `{url}` template —
+ScrapingBee, ScraperAPI, Bright Data, ...), so the DAGs default to manual
+trigger (schedule=None) to avoid silently burning credits. Set a cron via the
 per-marketplace schedule Variable to run it periodically for price refresh;
 re-running is also always available from the Airflow UI ("Trigger DAG").
 
-Each run is a two-task chain: `ingest` (which logs ScraperAPI credits remaining
-before and after the run for audit, plus a JSON summary) followed by `status`
-(which logs the resulting persisted catalog counts).
+Each run is a two-task chain: `ingest` (which logs a JSON summary, plus
+ScraperAPI credits before/after when the provider is ScraperAPI) followed by
+`status` (which logs the resulting persisted catalog counts).
 
-Required on the host: MARKETPLACE_SCRAPER_URL must be defined in the env file
-(medmkp_env_file), e.g.
-  https://api.scraperapi.com/?api_key=KEY&render=true&url={url}
-Keep the API key in that env file, not in this DAG. Amazon works on a basic
-ScraperAPI plan; Alibaba needs premium/residential proxies.
+Required on the host: a scraper template must be defined in the env file
+(medmkp_env_file). Use a per-provider override so each site gets the right
+(and right-priced) settings, falling back to the shared MARKETPLACE_SCRAPER_URL:
+  MARKETPLACE_SCRAPER_URL_AMAZON=https://app.scrapingbee.com/api/v1/?api_key=KEY&render_js=true&url={url}
+  MARKETPLACE_SCRAPER_URL_ALIBABA=https://app.scrapingbee.com/api/v1/?api_key=KEY&stealth_proxy=true&render_js=true&country_code=us&url={url}
+Keep the API key in that env file, not in this DAG. Amazon needs JS rendering
+for prices (~5 credits); Alibaba needs a stealth/residential proxy to clear its
+captcha (~75 credits) — keep its product set small.
 
 Expected Airflow Variables:
 - medmkp_backend_dir: absolute path to medusa-backend/apps/backend
 - medmkp_env_file: env file to source before npm (default .env; use
-  .env.production on hosts targeting the remote DB). Must define
-  MARKETPLACE_SCRAPER_URL (and optionally SCRAPERAPI_API_KEY for credit audit).
+  .env.production on hosts targeting the remote DB). Must define a scraper
+  template — MARKETPLACE_SCRAPER_URL_<PROVIDER> (e.g. _AMAZON, _ALIBABA) or the
+  shared MARKETPLACE_SCRAPER_URL (and optionally SCRAPERAPI_API_KEY for the
+  credit audit, which only applies when the provider is ScraperAPI).
 - medmkp_marketplace_pool: optional Airflow pool, defaults to default_pool
 - medmkp_marketplace_commit: "false" for dry-run, defaults to true
 - medmkp_marketplace_concurrency: fetch concurrency, defaults to 5
