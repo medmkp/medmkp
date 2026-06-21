@@ -399,3 +399,275 @@ function asArray<T>(value: T | T[]): T[] {
   }
   return Array.isArray(value) ? value : [value]
 }
+
+// ---------------------------------------------------------------------------
+// Streaming reconcile (for large catalogs)
+// ---------------------------------------------------------------------------
+
+/**
+ * `reconcileSupplierCatalog` above takes the WHOLE desired catalog at once. For
+ * a small/medium supplier that is fine, but a 60k–120k product catalog (e.g.
+ * Patterson) blows the heap: the caller has to hold every parsed row plus the
+ * full supplierProducts/matches artifact arrays in memory before a single write
+ * (this OOM-killed the first Patterson prod run on the 7 GB NUC).
+ *
+ * The streaming session keeps the SAME gap-free guarantees (additive upserts
+ * first, stale soft-delete last) but lets the caller feed the catalog in
+ * batches, so peak memory is one batch + the set of seen ids (cheap strings):
+ *
+ *   const session = await beginSupplierCatalogReconcile(medmkp, { ... })
+ *   for await (const batch of batches) await session.upsertBatch(batch)
+ *   const result = await session.finalize()
+ *
+ * Stale soft-delete is deferred to finalize() because only then is the full set
+ * of surviving ids known. The shrink guard runs there too, before any delete —
+ * the upserts that already happened are non-destructive, so guarding the delete
+ * is sufficient. Pass `softDeleteStale: false` to finalize() to commit the
+ * batches additively but skip removals (used when a crawl is too degraded to be
+ * trusted as the complete catalog).
+ */
+
+export type SupplierCatalogBatch = {
+  supplierProducts: Array<Record<string, unknown> & { id: string }>
+  canonicalProductMatches: Array<Record<string, unknown> & { id: string }>
+  priceSnapshots: Array<Record<string, unknown> & { id: string }>
+}
+
+export type SupplierCatalogReconcileSession = {
+  upsertBatch: (batch: SupplierCatalogBatch) => Promise<void>
+  finalize: (opts?: { softDeleteStale?: boolean }) => Promise<ReconcileResult>
+  desiredProductCount: () => number
+}
+
+// Per-batch match upsert: create placeholders for genuinely new products and
+// restore reappearing ones. Never updates or soft-deletes — the matcher owns
+// surviving rows, and stale removal is handled once, in finalize().
+async function upsertMatchesBatch(
+  medmkp: ReconcileService,
+  desired: Array<Record<string, unknown> & { id: string }>,
+  chunkSize: number
+) {
+  if (!desired.length) {
+    return { created: 0, restored: 0 }
+  }
+
+  const existing = await medmkp.listCanonicalProductMatches(
+    { id: desired.map((row) => row.id) },
+    { withDeleted: true, select: ["id", "deleted_at"] }
+  )
+  const active = new Set<string>()
+  const deleted = new Set<string>()
+  for (const row of existing) {
+    ;(isSoftDeleted(row) ? deleted : active).add(row.id)
+  }
+
+  const toCreate = desired.filter(
+    (row) => !active.has(row.id) && !deleted.has(row.id)
+  )
+  const toRestore = desired
+    .filter((row) => deleted.has(row.id))
+    .map((row) => row.id)
+
+  if (toCreate.length) {
+    await inChunks(toCreate, chunkSize, (chunk) =>
+      medmkp.createCanonicalProductMatches(chunk)
+    )
+  }
+  if (toRestore.length) {
+    await inChunks(toRestore, chunkSize, (chunk) =>
+      medmkp.restoreCanonicalProductMatches(chunk)
+    )
+  }
+
+  return { created: toCreate.length, restored: toRestore.length }
+}
+
+export async function beginSupplierCatalogReconcile(
+  medmkp: ReconcileService,
+  input: {
+    supplier_id: string
+    source_catalog: string
+    source: unknown
+  },
+  options: {
+    allowCatalogShrink: boolean
+    chunkSize?: number
+    log?: (...args: unknown[]) => void
+  }
+): Promise<SupplierCatalogReconcileSession> {
+  const chunkSize = options.chunkSize ?? DEFAULT_CHUNK
+  const log = options.log ?? (() => {})
+  const filters = {
+    supplier_id: input.supplier_id,
+    source_catalog: input.source_catalog,
+  }
+
+  // Only ids + deleted_at are needed to diff — never load full existing rows
+  // (the whole point is to stay memory-bounded on a large catalog).
+  const [existingProducts, existingSources] = await Promise.all([
+    medmkp.listSupplierProducts(filters, {
+      withDeleted: true,
+      select: ["id", "deleted_at"],
+    }),
+    medmkp.listSupplierCatalogSources(filters, { withDeleted: true }),
+  ])
+
+  const productActive = new Set<string>()
+  const productDeleted = new Set<string>()
+  for (const row of existingProducts) {
+    ;(isSoftDeleted(row) ? productDeleted : productActive).add(row.id)
+  }
+  const existingActiveProductCount = productActive.size
+
+  // Upsert the source row up-front so product creates have it present.
+  await reconcileById({
+    desired: asArray(input.source) as Array<
+      Record<string, unknown> & { id: string }
+    >,
+    existing: existingSources,
+    create: (rows) => medmkp.createSupplierCatalogSources(rows),
+    update: (rows) => medmkp.updateSupplierCatalogSources(rows),
+    restore: (ids) => medmkp.restoreSupplierCatalogSources(ids),
+    softDelete: (ids) => medmkp.softDeleteSupplierCatalogSources(ids),
+    chunkSize,
+  })
+
+  const desired = new Set<string>()
+  const counts = {
+    pCreate: 0,
+    pUpdate: 0,
+    pRestore: 0,
+    mCreate: 0,
+    mRestore: 0,
+    sCreate: 0,
+    sUpdate: 0,
+  }
+
+  return {
+    desiredProductCount: () => desired.size,
+
+    async upsertBatch(batch) {
+      const toCreate: typeof batch.supplierProducts = []
+      const toUpdate: typeof batch.supplierProducts = []
+      const toRestore: typeof batch.supplierProducts = []
+      for (const row of batch.supplierProducts) {
+        // A product can recur across batches (same SKU on multiple pages); its
+        // id is deterministic, so process it once.
+        if (desired.has(row.id)) continue
+        desired.add(row.id)
+        if (productActive.has(row.id)) toUpdate.push(row)
+        else if (productDeleted.has(row.id)) toRestore.push(row)
+        else toCreate.push(row)
+      }
+
+      if (toCreate.length) {
+        await inChunks(toCreate, chunkSize, (rows) =>
+          medmkp.createSupplierProducts(rows)
+        )
+      }
+      if (toRestore.length) {
+        await inChunks(
+          toRestore.map((row) => row.id),
+          chunkSize,
+          (ids) => medmkp.restoreSupplierProducts(ids)
+        )
+        await inChunks(toRestore, chunkSize, (rows) =>
+          medmkp.updateSupplierProducts(rows)
+        )
+      }
+      if (toUpdate.length) {
+        await inChunks(toUpdate, chunkSize, (rows) =>
+          medmkp.updateSupplierProducts(rows)
+        )
+      }
+      counts.pCreate += toCreate.length
+      counts.pUpdate += toUpdate.length
+      counts.pRestore += toRestore.length
+
+      // Only newly created/restored products need their placeholder match
+      // touched; scope the per-batch match upsert to those to avoid querying
+      // for survivors the matcher already owns.
+      const newProductIds = new Set([
+        ...toCreate.map((row) => row.id),
+        ...toRestore.map((row) => row.id),
+      ])
+      const matchBatch = batch.canonicalProductMatches.filter((row) =>
+        newProductIds.has(row.supplier_product_id as string)
+      )
+      const matches = await upsertMatchesBatch(medmkp, matchBatch, chunkSize)
+      counts.mCreate += matches.created
+      counts.mRestore += matches.restored
+
+      const snapshots = await reconcilePriceSnapshots(medmkp, {
+        desired: batch.priceSnapshots,
+        chunkSize,
+      })
+      counts.sCreate += snapshots.created
+      counts.sUpdate += snapshots.updated
+    },
+
+    async finalize(opts) {
+      const softDeleteStale = opts?.softDeleteStale ?? true
+      let productsSoftDeleted = 0
+      let matchesSoftDeleted = 0
+
+      if (softDeleteStale) {
+        assertCatalogReplaceNotDestructive({
+          supplierId: input.supplier_id,
+          sourceCatalog: input.source_catalog,
+          existingCount: existingActiveProductCount,
+          newCount: desired.size,
+          allowCatalogShrink: options.allowCatalogShrink,
+        })
+
+        const removed = [...productActive].filter((id) => !desired.has(id))
+        if (removed.length) {
+          await inChunks(removed, chunkSize, (ids) =>
+            medmkp.softDeleteSupplierProducts(ids)
+          )
+          productsSoftDeleted = removed.length
+
+          const staleMatchIds: string[] = []
+          await inChunks(removed, chunkSize, async (chunk) => {
+            const rows = await medmkp.listCanonicalProductMatches({
+              supplier_product_id: chunk,
+            })
+            for (const row of rows) staleMatchIds.push(row.id)
+          })
+          if (staleMatchIds.length) {
+            await inChunks(staleMatchIds, chunkSize, (ids) =>
+              medmkp.softDeleteCanonicalProductMatches(ids)
+            )
+            matchesSoftDeleted = staleMatchIds.length
+          }
+        }
+      }
+
+      log(
+        `[catalog-reconcile] supplier=${input.supplier_id} source=${input.source_catalog} ` +
+          `products(+${counts.pCreate}/~${counts.pUpdate}/restore ${counts.pRestore}/-${productsSoftDeleted}) ` +
+          `matches(+${counts.mCreate}/restore ${counts.mRestore}/-${matchesSoftDeleted}) ` +
+          `snapshots(+${counts.sCreate}/~${counts.sUpdate})` +
+          (softDeleteStale ? "" : " [stale soft-delete SKIPPED]")
+      )
+
+      return {
+        supplier_products: {
+          created: counts.pCreate,
+          updated: counts.pUpdate,
+          restored: counts.pRestore,
+          soft_deleted: productsSoftDeleted,
+        },
+        canonical_product_matches: {
+          created: counts.mCreate,
+          restored: counts.mRestore,
+          soft_deleted: matchesSoftDeleted,
+        },
+        price_snapshots: {
+          created: counts.sCreate,
+          updated: counts.sUpdate,
+        },
+      }
+    },
+  }
+}

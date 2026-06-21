@@ -10,6 +10,10 @@ import {
   buildSupplierCatalogIngestion,
   type SupplierCatalogRow,
 } from "../ingestion/supplier-catalog"
+import {
+  beginSupplierCatalogReconcile,
+  type ReconcileService,
+} from "../ingestion/supplier-catalog-reconcile"
 import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 
 /**
@@ -21,10 +25,14 @@ import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
  * rows feed substitute matching by MPN / name+brand; no price snapshots.
  *
  * Stage 1 reads the sitemap index → child sitemaps → /Supplies/ItemDetail URLs.
- * Stage 2 fetches each item page (concurrency-limited, browser UA, one retry)
- * and parses the embedded item model. Default run is a DRY RUN; --commit writes
- * (subject to the destructive-DB guard, so a remote/prod DB needs
- * ALLOW_REMOTE_DB_DESTRUCTIVE=true).
+ * Stage 2 fetches each item page (concurrency-limited, browser UA, one retry),
+ * parses the embedded item model, and STREAMS the rows to the DB in batches via
+ * the gap-free reconcile session. Streaming keeps peak memory at one batch +
+ * the set of seen ids — the whole-catalog-in-memory build OOM-killed the first
+ * 65k-product prod run on the 7 GB NUC.
+ *
+ * Default run is a DRY RUN; --commit writes (subject to the destructive-DB
+ * guard, so a remote/prod DB needs ALLOW_REMOTE_DB_DESTRUCTIVE=true).
  *
  *   yarn patterson:ingest                          # dry run, full catalog
  *   yarn patterson:ingest -- --max-products=200    # quick sample dry run
@@ -33,26 +41,16 @@ import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 
 const SUPPLIER_ID = "msup_pattersondental_com"
 const SOURCE_CATALOG = "patterson-website-public"
+const SOURCE_URL = "https://www.pattersondental.com/Supplies"
 const DB_CHUNK_SIZE = 500
+// How many item pages to fetch+parse+write per streamed batch. Bounds peak
+// memory; one batch of rows + its artifacts is all that's held at a time.
+const FETCH_BATCH_SIZE = 1000
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-async function forChunks<T>(
-  rows: T[],
-  work: (chunk: T[], index: number, total: number) => Promise<void>
-) {
-  const total = Math.ceil(rows.length / DB_CHUNK_SIZE)
-  for (let offset = 0; offset < rows.length; offset += DB_CHUNK_SIZE) {
-    await work(
-      rows.slice(offset, offset + DB_CHUNK_SIZE),
-      Math.floor(offset / DB_CHUNK_SIZE) + 1,
-      total
-    )
-  }
-}
 
 // Browser-UA fetch with one retry; returns "" on failure so the run skips a bad
 // page instead of aborting the whole crawl.
@@ -104,6 +102,12 @@ async function mapPool<T, R>(
   return results
 }
 
+function* chunk<T>(items: T[], size: number): Generator<T[]> {
+  for (let offset = 0; offset < items.length; offset += size) {
+    yield items.slice(offset, offset + size)
+  }
+}
+
 function parseArgs() {
   const args = process.argv.slice(2)
   let commit = false
@@ -115,7 +119,7 @@ function parseArgs() {
 
   for (const arg of args) {
     if (arg === "--commit") commit = true
-    else if (arg === "--allow-shrink") allowShrink = true
+    else if (arg === "--allow-shrink" || arg === "--allow-catalog-shrink") allowShrink = true
     else if (arg === "--allow-incomplete") allowIncomplete = true
     else if (arg.startsWith("--max-products=")) maxProducts = Number(arg.slice("--max-products=".length))
     else if (arg.startsWith("--concurrency=")) concurrency = Number(arg.slice("--concurrency=".length))
@@ -134,7 +138,7 @@ export default async function ingestPattersonCatalog({
   const { commit, allowShrink, allowIncomplete, maxProducts, concurrency, throttleMs } =
     parseArgs()
 
-  console.log(`[patterson] ${commit ? "COMMIT" : "DRY RUN"} — sitemap-driven identity catalog`)
+  console.log(`[patterson] ${commit ? "COMMIT" : "DRY RUN"} — sitemap-driven identity catalog (streamed)`)
 
   // Stage 1: discover product URLs from the sitemap.
   const itemUrls = await discoverPattersonItemUrls({
@@ -148,186 +152,147 @@ export default async function ingestPattersonCatalog({
   }
   console.log(`[patterson] Discovered ${itemUrls.length} product URLs; fetching pages…`)
 
-  // Stage 2: fetch + parse each item page.
-  let fetched = 0
-  let failures = 0
-  const parsed = await mapPool(itemUrls, concurrency, async (url) => {
-    const html = await fetchText(url)
-    if (throttleMs) await sleep(throttleMs)
-    const done = ++fetched
-    if (done % 250 === 0 || done === itemUrls.length) {
-      console.log(`[patterson]   fetched ${done}/${itemUrls.length} (failures ${failures})`)
+  if (commit) {
+    assertDestructiveDbOperationAllowed("patterson:ingest --commit (writes supplier catalog rows)")
+
+    // Ensure the Patterson supplier row exists before we stream products to it.
+    const existingSupplier = await medmkp.listSuppliers({ id: [SUPPLIER_ID] })
+    if (!existingSupplier.length) {
+      await medmkp.createSuppliers([
+        {
+          id: SUPPLIER_ID,
+          name: "Patterson Dental",
+          slug: "patterson-dental",
+          website_url: "https://www.pattersondental.com",
+          support_email: "",
+          onboarding_status: "in_review" as const,
+          ein_last_four: "",
+          certification_summary:
+            "Public identity catalog from the Patterson sitemap; prices remain login-gated.",
+          default_lead_time_days: 0,
+          ach_enabled: false,
+          catalog_source_urls: JSON.stringify([PATTERSON_SITEMAP_INDEX]),
+          catalog_source_notes:
+            "Public /Supplies/ItemDetail pages parsed from the embedded item model (name, brand, MPN, pack); no public price.",
+        },
+      ])
+      console.log(`[patterson] Created supplier ${SUPPLIER_ID}`)
     }
-    if (!html) {
-      failures++
-      return null
-    }
-    const row = extractPattersonProduct(html, url)
-    if (!row) failures++
-    return row
-  })
-
-  const bySku = new Map<string, SupplierCatalogRow>()
-  for (const row of parsed) {
-    if (!row?.sku) continue
-    if (!bySku.has(row.sku)) bySku.set(row.sku, row)
-  }
-  const rows = [...bySku.values()]
-  console.log(
-    `[patterson] Parsed ${rows.length} unique products from ${itemUrls.length} URLs (${failures} fetch/parse failures)`
-  )
-
-  if (!rows.length) {
-    console.error("[patterson] No products parsed — aborting.")
-    return
   }
 
-  // A high failure rate means a degraded crawl that must not replace the cache.
-  const failureRate = failures / itemUrls.length
-  if (commit && failureRate > 0.2 && !allowIncomplete) {
-    console.error(
-      `[patterson] ABORT: ${(failureRate * 100).toFixed(1)}% of pages failed to fetch/parse ` +
-        "(>20%); refusing to replace the cached catalog. Re-run, or pass --allow-incomplete."
-    )
-    return
-  }
-
-  // Match against the live canonical catalog (read-only) to preview substitute quality.
-  const canonicalProducts = await medmkp.listCanonicalProducts()
-  const ingestion = buildSupplierCatalogIngestion(
+  // The source row is upserted by the reconcile session; build it once (the
+  // build's other artifacts are produced per batch).
+  const { source } = buildSupplierCatalogIngestion(
     {
       supplier_id: SUPPLIER_ID,
       source_type: "website",
       source_catalog: SOURCE_CATALOG,
-      source_url: "https://www.pattersondental.com/Supplies",
+      source_url: SOURCE_URL,
       auth_required: false,
       refresh_frequency: "manual",
-      rows,
+      rows: [],
     },
-    canonicalProducts.map((p) => ({
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      attributes_text: p.attributes_text,
-    }))
+    []
   )
 
-  const matched = ingestion.canonicalProductMatches.filter(
-    (m) => (m as { canonical_product_id: string }).canonical_product_id
-  ).length
-  console.log(
-    `[patterson] ${rows.length} products | ${matched} matched to a canonical product | ${rows.length - matched} unmatched | price snapshots ${ingestion.priceSnapshots.length}`
-  )
+  const session = commit
+    ? await beginSupplierCatalogReconcile(
+        medmkp as unknown as ReconcileService,
+        { supplier_id: SUPPLIER_ID, source_catalog: SOURCE_CATALOG, source },
+        { allowCatalogShrink: allowShrink, chunkSize: DB_CHUNK_SIZE, log: console.log }
+      )
+    : null
 
-  const matchById = new Map(canonicalProducts.map((p) => [p.id, p.name] as const))
-  const productById = new Map(
-    (ingestion.supplierProducts as Array<{ id: string; name: string }>).map((p) => [p.id, p.name])
-  )
-  const samples = (ingestion.canonicalProductMatches as Array<{
-    supplier_product_id: string
-    canonical_product_id: string
-    match_status: string
-    confidence_score: number
-  }>)
-    .filter((m) => m.canonical_product_id)
-    .slice(0, 12)
-  console.log("[patterson] Sample matches (Patterson item → canonical, status):")
-  for (const m of samples) {
-    console.log(
-      `   • ${productById.get(m.supplier_product_id)?.slice(0, 48)} → ${matchById.get(m.canonical_product_id)?.slice(0, 48)} [${m.match_status} ${m.confidence_score}]`
-    )
+  // Stage 2: fetch + parse + write in streamed batches. Only one batch's pages
+  // and artifacts are in memory at a time; cross-batch SKU dedupe uses a set of
+  // strings (cheap), and the reconcile session tracks seen ids for the final
+  // stale soft-delete.
+  let fetched = 0
+  let failures = 0
+  let written = 0
+  const seenSku = new Set<string>()
+
+  for (const urlBatch of chunk(itemUrls, FETCH_BATCH_SIZE)) {
+    const parsed = await mapPool(urlBatch, concurrency, async (url) => {
+      const html = await fetchText(url)
+      if (throttleMs) await sleep(throttleMs)
+      const done = ++fetched
+      if (done % 500 === 0 || done === itemUrls.length) {
+        console.log(`[patterson]   fetched ${done}/${itemUrls.length} (failures ${failures}, written ${written})`)
+      }
+      if (!html) {
+        failures++
+        return null
+      }
+      const row = extractPattersonProduct(html, url)
+      if (!row) failures++
+      return row
+    })
+
+    const rows: SupplierCatalogRow[] = []
+    for (const row of parsed) {
+      if (!row?.sku || seenSku.has(row.sku)) continue
+      seenSku.add(row.sku)
+      rows.push(row)
+    }
+    if (!rows.length) continue
+
+    if (session) {
+      const ingestion = buildSupplierCatalogIngestion(
+        {
+          supplier_id: SUPPLIER_ID,
+          source_type: "website",
+          source_catalog: SOURCE_CATALOG,
+          source_url: SOURCE_URL,
+          auth_required: false,
+          refresh_frequency: "manual",
+          rows,
+        },
+        []
+      )
+      await session.upsertBatch({
+        supplierProducts: ingestion.supplierProducts as never,
+        canonicalProductMatches: ingestion.canonicalProductMatches as never,
+        priceSnapshots: ingestion.priceSnapshots as never,
+      })
+    }
+    written += rows.length
   }
 
-  if (!commit) {
+  console.log(
+    `[patterson] Parsed/${commit ? "wrote" : "would write"} ${written} unique products from ${itemUrls.length} URLs (${failures} fetch/parse failures)`
+  )
+
+  if (!written) {
+    console.error("[patterson] No products parsed — aborting.")
+    return
+  }
+
+  if (!session) {
     console.log("[patterson] DRY RUN complete — no writes. Re-run with --commit to persist.")
     return
   }
 
-  assertDestructiveDbOperationAllowed("patterson:ingest --commit (writes supplier catalog rows)")
-
-  // Ensure the Patterson supplier row exists.
-  const existingSupplier = await medmkp.listSuppliers({ id: [SUPPLIER_ID] })
-  if (!existingSupplier.length) {
-    await medmkp.createSuppliers([
-      {
-        id: SUPPLIER_ID,
-        name: "Patterson Dental",
-        slug: "patterson-dental",
-        website_url: "https://www.pattersondental.com",
-        support_email: "",
-        onboarding_status: "in_review" as const,
-        ein_last_four: "",
-        certification_summary:
-          "Public identity catalog from the Patterson sitemap; prices remain login-gated.",
-        default_lead_time_days: 0,
-        ach_enabled: false,
-        catalog_source_urls: JSON.stringify([PATTERSON_SITEMAP_INDEX]),
-        catalog_source_notes:
-          "Public /Supplies/ItemDetail pages parsed from the embedded item model (name, brand, MPN, pack); no public price.",
-      },
-    ])
-    console.log(`[patterson] Created supplier ${SUPPLIER_ID}`)
-  }
-
-  // Replace any prior Patterson rows for this source, then write the fresh ones.
-  const existingProducts = await medmkp.listSupplierProducts({
-    supplier_id: SUPPLIER_ID,
-    source_catalog: SOURCE_CATALOG,
-  })
-  // Shrink guard (cf. the DC Dental delete-and-replace incident): refuse a >50%
-  // drop unless forced, so a degraded crawl can't wipe a healthy catalog.
-  if (
-    existingProducts.length > 50 &&
-    rows.length < existingProducts.length * 0.5 &&
-    !allowShrink
-  ) {
-    console.error(
-      `[patterson] ABORT: crawl found ${rows.length} products but ${existingProducts.length} exist ` +
-        `(>50% shrink). Likely a partial crawl — not replacing. Re-run, or pass --allow-shrink to override.`
+  // A degraded crawl must not soft-delete the healthy catalog. The batches are
+  // already committed additively (gap-free); on high failure we keep them but
+  // skip stale removal (cleaned up by the next healthy run) unless forced.
+  const failureRate = failures / itemUrls.length
+  const degraded = failureRate > 0.2
+  const softDeleteStale = !degraded || allowIncomplete
+  if (degraded && !allowIncomplete) {
+    console.warn(
+      `[patterson] WARNING: ${(failureRate * 100).toFixed(1)}% of pages failed (>20%); ` +
+        "committed fetched rows but SKIPPING stale soft-delete (pass --allow-incomplete to force it)."
     )
-    return
-  }
-  if (existingProducts.length) {
-    const ids = existingProducts.map((p) => p.id)
-    await forChunks(ids, async (chunk) => {
-      const existingMatches = await medmkp.listCanonicalProductMatches({
-        supplier_product_id: chunk,
-      })
-      if (existingMatches.length) {
-        await forChunks(existingMatches.map((match) => match.id), async (matchChunk) => {
-          await medmkp.deleteCanonicalProductMatches(matchChunk)
-        })
-      }
-    })
-    await forChunks(ids, async (chunk) => {
-      await medmkp.deleteSupplierProducts(chunk)
-    })
-    console.log(`[patterson] Deleted ${ids.length} prior Patterson products`)
   }
 
-  const existingSources = await medmkp.listSupplierCatalogSources({
-    supplier_id: SUPPLIER_ID,
-    source_catalog: SOURCE_CATALOG,
-  })
-  if (existingSources.length) {
-    await medmkp.deleteSupplierCatalogSources(existingSources.map((source) => source.id))
-  }
-
-  await medmkp.createSupplierCatalogSources(ingestion.source)
-  await forChunks(ingestion.supplierProducts, async (chunk, index, total) => {
-    console.log(`[patterson] Creating product chunk ${index}/${total} (${chunk.length})`)
-    await medmkp.createSupplierProducts(
-      chunk as Parameters<typeof medmkp.createSupplierProducts>[0]
+  try {
+    const result = await session.finalize({ softDeleteStale })
+    console.log(
+      `[patterson] COMMIT complete — products(+${result.supplier_products.created}/~${result.supplier_products.updated}/restore ${result.supplier_products.restored}/-${result.supplier_products.soft_deleted}) ` +
+        `matches(+${result.canonical_product_matches.created}/restore ${result.canonical_product_matches.restored}/-${result.canonical_product_matches.soft_deleted}).`
     )
-  })
-  await forChunks(ingestion.canonicalProductMatches, async (chunk, index, total) => {
-    console.log(`[patterson] Creating match chunk ${index}/${total} (${chunk.length})`)
-    await medmkp.createCanonicalProductMatches(
-      chunk as Parameters<typeof medmkp.createCanonicalProductMatches>[0]
-    )
-  })
-
-  console.log(
-    `[patterson] COMMIT complete — wrote ${ingestion.supplierProducts.length} products + ${ingestion.canonicalProductMatches.length} matches.`
-  )
+  } catch (error) {
+    console.error(`[patterson] ABORT during finalize: ${(error as Error).message}`)
+  }
 }
