@@ -146,7 +146,7 @@ export function MobileBottomNav({ view, onNavigate, onScan }) {
       </button>
       <div className="m-nav-group">
         <button className={view === "history" ? "active" : ""} type="button" onClick={() => onNavigate("history")}>
-          <span><Icon name="icon-clock" className="mobile-bottom-icon" /></span>History
+          <span><Icon name="icon-clock" className="mobile-bottom-icon" /></span>Saved
         </button>
         <button className={view === "settings" ? "active" : ""} type="button" onClick={() => onNavigate("settings")}>
           <span><Icon name="icon-settings" className="mobile-bottom-icon" /></span>Settings

@@ -548,7 +548,7 @@ export default function Home() {
   }, [view, draftItems, uploadedDocs, buyingPrefs, recordLiveStock]);
 
   // Real summary of the current reorder list for the product-page rail (matches
-  // how archiveCurrentList tallies items/suppliers/spend).
+  // how saveCurrentList tallies items/suppliers/spend).
   const listSummary = useMemo(() => {
     const rows = deriveMatchRows(activeDraftItems, buyingPrefs);
     const suppliers = new Set(rows.map((row) => row.supplier).filter((name) => name && name !== "—"));
@@ -981,11 +981,11 @@ export default function Home() {
     }));
   }
 
-  // Snapshot the current list into History, then clear it. Rows are stored so
-  // the archived list stays readable even though it's no longer editable.
-  function archiveCurrentList() {
+  // Snapshot the current list into Saved lists, then clear it. Rows are stored
+  // so the saved list stays readable, and the raw items so it can be reopened.
+  function saveCurrentList() {
     if (!activeDraftItems.length) {
-      showToast("Nothing to archive yet");
+      showToast("Nothing to save yet");
       return;
     }
     const rows = deriveMatchRows(activeDraftItems, buyingPrefs);
@@ -1018,21 +1018,21 @@ export default function Home() {
     setSubmittedSuppliers([]);
     setListStage("draft");
     setBuyingPrefs(defaultBuyingPrefs);
-    showToast("List archived to History");
+    showToast("List saved");
   }
 
   // Both whole-list actions are guarded by a confirmation modal so a buyer can't
-  // wipe or archive their list with a single stray menu tap.
-  function requestArchiveList() {
+  // wipe or save-and-clear their list with a single stray menu tap.
+  function requestSaveList() {
     if (!activeDraftItems.length) {
-      showToast("Nothing to archive yet");
+      showToast("Nothing to save yet");
       return;
     }
     setConfirmDialog({
-      title: "Archive this list?",
-      body: "The current reorder list will be moved to History and a fresh, empty list will start. Archived lists stay viewable but can't be edited.",
-      confirmLabel: "Archive list",
-      onConfirm: archiveCurrentList,
+      title: "Save this list?",
+      body: "The current reorder list will be saved to Saved lists and a fresh, empty list will start. You can reopen or duplicate a saved list any time.",
+      confirmLabel: "Save list",
+      onConfirm: saveCurrentList,
     });
   }
 
@@ -1110,10 +1110,10 @@ export default function Home() {
     navigate(`/app/review/handoff?ho=${snapshot.id}`);
   }
 
-  // Archive the live list and return to a fresh Home — the frozen handoff lives
-  // on in History, so archiving here doesn't lose the order details.
-  function archiveFromHandoff() {
-    archiveCurrentList();
+  // Save the live list and return to a fresh Home — the frozen handoff lives on
+  // in Saved lists, so saving here doesn't lose the order details.
+  function saveFromHandoff() {
+    saveCurrentList();
     navigate("/app");
   }
 
@@ -1139,38 +1139,91 @@ export default function Home() {
     showToast(`Reopened ${supplier} — order no longer marked submitted`);
   }
 
-  // Rename an archived list in History (live list renames via setListName).
+  // Rename a saved list (live list renames via setListName).
   function renameArchivedList(id, name) {
     setArchivedLists((lists) => lists.map((entry) => (entry.id === id ? { ...entry, name } : entry)));
   }
 
-  // Copy an archived list into a fresh Current Reorder List. Restores the raw
-  // items (with new ids) and their docs so visibility holds; the original stays
-  // in History. Guards against silently overwriting an in-progress live list.
+  // Reopening or duplicating a saved list replaces the current reorder list. If
+  // the buyer has unsaved items in flight, offer to save them first so nothing
+  // is lost — Save current first / Discard current / Cancel.
+  function guardReplaceCurrentList(verb, entryName, proceed) {
+    if (!activeDraftItems.length) {
+      proceed();
+      return;
+    }
+    const n = activeDraftItems.length;
+    setConfirmDialog({
+      title: `${verb} "${entryName}"?`,
+      body: `Your current reorder list has ${n} unsaved item${n === 1 ? "" : "s"}. Save them to Saved lists first so you don't lose them, or discard them to continue.`,
+      confirmLabel: "Save current first",
+      secondaryLabel: "Discard current",
+      onConfirm: () => { saveCurrentList(); proceed(); },
+      onSecondary: proceed,
+    });
+  }
+
+  // Load a saved list's raw items (with fresh ids) and docs as the live reorder
+  // list. Shared by reopen (moves the entry out of Saved lists) and duplicate
+  // (leaves the original in place, names it a copy).
+  function loadSavedListAsCurrent(entry, { copy }) {
+    setDraftItems(entry.sourceItems.map((item) => ({ ...item, id: newItemId() })));
+    setUploadedDocs(entry.sourceDocs || []);
+    setListName(copy ? `${entry.name} (copy)` : entry.name);
+    setCurrentHandoffId(null);
+    setSubmittedSuppliers([]);
+    setListStage("draft");
+    setListTouched(true);
+    setLastUpload(null);
+    setHasUploadedInvoice(false);
+    navigate("/app");
+  }
+
+  // Reopen a saved list as the editable current list and remove it from Saved
+  // lists — it's no longer a past list once it's live again.
+  function reopenList(entry) {
+    if (!entry?.sourceItems?.length) {
+      showToast("This sample list has no items to reopen");
+      return;
+    }
+    guardReplaceCurrentList("Reopen", entry.name, () => {
+      loadSavedListAsCurrent(entry, { copy: false });
+      setArchivedLists((lists) => lists.filter((e) => e.id !== entry.id));
+      showToast(`Reopened "${entry.name}"`);
+    });
+  }
+
+  // Copy a saved list into a fresh current list; the original stays saved.
   function duplicateList(entry) {
     if (!entry?.sourceItems?.length) {
       showToast("This sample list has no items to duplicate");
       return;
     }
-    if (activeDraftItems.length && !window.confirm(`Replace your current reorder list with a copy of "${entry.name}"?`)) {
-      return;
-    }
-    setDraftItems(entry.sourceItems.map((item) => ({ ...item, id: newItemId() })));
-    setUploadedDocs(entry.sourceDocs || []);
-    setListName(`${entry.name} (copy)`);
-    setCurrentHandoffId(null);
-    setListStage("draft");
-    setListTouched(true);
-    setLastUpload(null);
-    setHasUploadedInvoice(false);
-    showToast(`Duplicated "${entry.name}" to a new list`);
-    navigate("/app");
+    guardReplaceCurrentList("Duplicate", entry.name, () => {
+      loadSavedListAsCurrent(entry, { copy: true });
+      showToast(`Duplicated "${entry.name}" to a new list`);
+    });
+  }
+
+  // Permanently remove a saved list. Confirmed because there's no undo.
+  function deleteSavedList(entry) {
+    setConfirmDialog({
+      title: `Delete "${entry.name}"?`,
+      body: "This saved list will be permanently removed. This can't be undone — reopen or duplicate it first if you might need it again.",
+      confirmLabel: "Delete list",
+      destructive: true,
+      onConfirm: () => {
+        setArchivedLists((lists) => lists.filter((e) => e.id !== entry.id));
+        showToast(`Deleted "${entry.name}"`);
+        if (view === "historyDetail") navigate("/app/history");
+      },
+    });
   }
 
   const navItems = [
     ["home", "icon-home", "Home"],
     ["catalog", "icon-grid", "Catalog"],
-    ["history", "icon-clock", "History / Past Lists"],
+    ["history", "icon-clock", "Saved lists"],
     ["settings", "icon-settings", "Settings"],
   ];
 
@@ -1363,7 +1416,7 @@ export default function Home() {
                 supplierShipping={supplierShipping}
                 onBuyingPrefs={setBuyingPrefs}
                 onApplyOptimized={applyOptimizedPlan}
-                onArchiveList={requestArchiveList}
+                onArchiveList={requestSaveList}
                 onClearList={requestClearList}
                 onConfirmMatch={applyMatchDecision}
                 onLinkProduct={linkProductToItem}
@@ -1397,14 +1450,22 @@ export default function Home() {
           {view === "handoff" && (
             <SupplierHandoffView
               handoff={(selectedHandoffId && handoffs.find((h) => h.id === selectedHandoffId)) || handoffs[0] || null}
-              onArchive={archiveFromHandoff}
+              onArchive={saveFromHandoff}
               onBuildCart={setCartGroup}
               onNavigate={navigate}
               onToast={showToast}
             />
           )}
 
-          {view === "history" && <HistoryView archivedLists={archivedLists} onOpen={(id) => navigate(`/app/history/${id}`)} />}
+          {view === "history" && (
+            <HistoryView
+              archivedLists={archivedLists}
+              onOpen={(id) => navigate(`/app/history/${id}`)}
+              onReopen={reopenList}
+              onDuplicate={duplicateList}
+              onDelete={deleteSavedList}
+            />
+          )}
 
           {view === "historyDetail" && (
             <HistoryDetail
@@ -1413,7 +1474,9 @@ export default function Home() {
               handoffs={handoffs}
               onBack={() => navigate("/app/history")}
               onRename={renameArchivedList}
+              onReopen={reopenList}
               onDuplicate={duplicateList}
+              onDelete={deleteSavedList}
               onViewHandoff={(hid) => navigate(`/app/review/handoff?ho=${hid}`)}
             />
           )}
@@ -1475,6 +1538,7 @@ export default function Home() {
         <ConfirmModal
           {...confirmDialog}
           onConfirm={() => { confirmDialog.onConfirm?.(); setConfirmDialog(null); }}
+          onSecondary={confirmDialog.onSecondary ? () => { confirmDialog.onSecondary(); setConfirmDialog(null); } : undefined}
           onClose={() => setConfirmDialog(null)}
         />
       )}

@@ -511,7 +511,7 @@ export function BuyingPreferencesCard({ prefs, supplierOptions, onSave, onToast,
 }
 
 
-export function ConfirmModal({ title, body, confirmLabel = "Confirm", destructive = false, onConfirm, onClose }) {
+export function ConfirmModal({ title, body, confirmLabel = "Confirm", secondaryLabel, destructive = false, onConfirm, onSecondary, onClose }) {
   return (
     <div className="crl-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="crl-modal crl-modal-confirm">
@@ -524,6 +524,9 @@ export function ConfirmModal({ title, body, confirmLabel = "Confirm", destructiv
         </header>
         <footer className="crl-modal-foot">
           <button className="crl-ghost-btn" type="button" onClick={onClose}>Cancel</button>
+          {secondaryLabel && onSecondary && (
+            <button className="secondary-action compact" type="button" onClick={onSecondary}>{secondaryLabel}</button>
+          )}
           <button className={`primary-action compact${destructive ? " danger" : ""}`} type="button" onClick={onConfirm}>{confirmLabel}</button>
         </footer>
       </div>

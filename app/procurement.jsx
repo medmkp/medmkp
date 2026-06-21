@@ -723,42 +723,60 @@ export function SupplierHandoffView({ handoff, onArchive, onBuildCart, onNavigat
       <footer className="ho-footer">
         <div className="ho-footer-copy">
           <strong>Order placed?</strong>
-          <small>Archive this list to move it to History and start a fresh reorder list. This frozen handoff stays available.</small>
+          <small>Save this list to your Saved lists and start a fresh reorder list. This frozen handoff stays available.</small>
         </div>
-        <button className="primary-action compact" type="button" onClick={onArchive}><Icon name="icon-clipboard" className="button-icon" />Archive list &amp; start new</button>
+        <button className="primary-action compact" type="button" onClick={onArchive}><Icon name="icon-clipboard" className="button-icon" />Save list &amp; start new</button>
       </footer>
     </div>
   );
 }
 
 
-export function HistoryView({ onOpen, archivedLists = [] }) {
-  const lists = [...archivedLists, ...ARCHIVED_LISTS];
+export function HistoryView({ onOpen, onReopen, onDuplicate, onDelete, archivedLists = [] }) {
+  // Show the buyer's real saved lists; fall back to the sample lists only when
+  // there are none yet, so the page reads as designed for new accounts.
+  const hasReal = archivedLists.length > 0;
+  const lists = hasReal ? archivedLists : ARCHIVED_LISTS;
   return (
     <div className="crl">
       <header className="crl-header">
-        <div className="crl-title"><h2>History / Past Lists</h2></div>
+        <div className="crl-title"><h2>Saved lists</h2></div>
       </header>
       <div className="history-list">
-        {lists.map((list) => (
-          <button className="history-row" type="button" key={list.id} onClick={() => onOpen(list.id)}>
-            <span className="history-icon"><Icon name="icon-clock" className="button-icon" /></span>
-            <span className="history-info">
-              <strong>{list.name}</strong>
-              <small>Archived {list.date} · {list.items} items · {list.suppliers} suppliers</small>
-            </span>
-            <ListStatusPill status={list.status} />
-            <span className="history-total">{list.total}</span>
-            <Icon name="icon-chevron-right" className="button-icon history-chev" />
-          </button>
-        ))}
+        {lists.map((list) => {
+          const canManage = hasReal && Boolean(list.sourceItems?.length);
+          return (
+            <div className="history-row" key={list.id}>
+              <button className="history-row-main" type="button" onClick={() => onOpen(list.id)}>
+                <span className="history-icon"><Icon name="icon-clock" className="button-icon" /></span>
+                <span className="history-info">
+                  <strong>{list.name}</strong>
+                  <small>Saved {list.date} · {list.items} items · {list.suppliers} suppliers</small>
+                </span>
+                <ListStatusPill status={list.status} />
+                <span className="history-total">{list.total}</span>
+              </button>
+              <div className="history-row-actions">
+                {canManage ? (
+                  <>
+                    <button className="history-action-btn" type="button" title="Reopen as current list" aria-label={`Reopen ${list.name}`} onClick={() => onReopen?.(list)}><Icon name="icon-edit" className="button-icon" /></button>
+                    <button className="history-action-btn" type="button" title="Duplicate to a new list" aria-label={`Duplicate ${list.name}`} onClick={() => onDuplicate?.(list)}><Icon name="icon-file-plus" className="button-icon" /></button>
+                    <button className="history-action-btn danger" type="button" title="Delete list" aria-label={`Delete ${list.name}`} onClick={() => onDelete?.(list)}><Icon name="icon-trash" className="button-icon" /></button>
+                  </>
+                ) : (
+                  <Icon name="icon-chevron-right" className="button-icon history-chev" />
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 
-export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename, onDuplicate, onViewHandoff }) {
+export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename, onReopen, onDuplicate, onDelete, onViewHandoff }) {
   const lists = [...archivedLists, ...ARCHIVED_LISTS];
   const list = lists.find((entry) => entry.id === id) || lists[0];
   const rows = list?.rows || [];
@@ -769,7 +787,7 @@ export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], o
     <div className="crl">
       <header className="crl-header">
         <div className="crl-title">
-          <button className="history-back" type="button" onClick={onBack}><Icon name="icon-chevron-left" className="button-icon" />History</button>
+          <button className="history-back" type="button" onClick={onBack}><Icon name="icon-chevron-left" className="button-icon" />Saved lists</button>
           {isReal ? (
             <input
               className="history-rename-input"
@@ -785,7 +803,7 @@ export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], o
         </div>
       </header>
       <div className="history-detail-stats">
-        <div><small>Archived</small><strong>{list.date}</strong></div>
+        <div><small>Saved</small><strong>{list.date}</strong></div>
         <div><small>Items</small><strong>{list.items}</strong></div>
         <div><small>Suppliers</small><strong>{list.suppliers}</strong></div>
         <div><small>Total</small><strong>{list.total}</strong></div>
@@ -824,11 +842,17 @@ export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], o
           })}
         </div>
       )}
-      <p className="history-detail-note">This reorder list is archived and read-only. Duplicate it to start a new reorder{linkedHandoff ? ", or revisit the supplier handoff" : ""}.</p>
+      <p className="history-detail-note">This saved list is read-only. Reopen it to keep editing as your current list, or duplicate it to start a fresh copy{linkedHandoff ? ", or revisit the supplier handoff" : ""}.</p>
       <div className="history-detail-actions">
-        <button className="primary-action compact" type="button" onClick={() => onDuplicate?.(list)}><Icon name="icon-file-plus" className="button-icon" />Duplicate to new list</button>
+        {isReal && (
+          <button className="primary-action compact" type="button" onClick={() => onReopen?.(list)}><Icon name="icon-edit" className="button-icon" />Reopen as current list</button>
+        )}
+        <button className="secondary-action compact" type="button" onClick={() => onDuplicate?.(list)}><Icon name="icon-file-plus" className="button-icon" />Duplicate to new list</button>
         {linkedHandoff && (
           <button className="secondary-action compact" type="button" onClick={() => onViewHandoff?.(list.handoffId)}><Icon name="icon-handshake" className="button-icon" />View handoff</button>
+        )}
+        {isReal && (
+          <button className="history-delete-btn" type="button" onClick={() => onDelete?.(list)}><Icon name="icon-trash" className="button-icon" />Delete list</button>
         )}
       </div>
     </div>
