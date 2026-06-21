@@ -264,6 +264,24 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     add("shade", match[1])
   }
 
+  // White-family composite shades (White / Extra White) carry no numeric A1–D7
+  // code, so the rule above leaves them shade-less — and a shade-less "WB"/"XW"
+  // product matches every numeric shade on name alone, transitively bridging the
+  // whole shade family into one cluster (e.g. 3M Filtek Supreme Ultra: A1B…D3B +
+  // WB + XWB all collapsed into one canonical). Capture white and extra-white as
+  // their own shade values so they conflict with the numeric shades. Extra-white
+  // is matched first so "XW"/"XWB" isn't read as plain white. Only standalone
+  // tokens match — the model code "6029XWB" has no word boundary before the
+  // letters, so it's left to the catalog-code logic.
+  const xWhiteRe = /\b(?:x[\s-]?w[be]?|(?:extra|xtra)[\s-]?white)\b/g
+  while ((match = xWhiteRe.exec(lowered))) {
+    add("shade", "xw")
+  }
+  const whiteRe = /\b(?:wb|whb|white)\b/g
+  while ((match = whiteRe.exec(lowered))) {
+    add("shade", "w")
+  }
+
   // Bare dimension "4x4" / "2x2" (sponges, gauze, matrix bands): two small
   // integers joined by x with no measure unit. Disjoint dimensions are a hard
   // conflict, like 25mm vs 31mm. Excludes decimals and unit-suffixed forms so

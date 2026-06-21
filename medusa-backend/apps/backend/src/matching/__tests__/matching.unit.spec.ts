@@ -218,6 +218,38 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(lettered ?? [])]).toEqual(["a1"])
   })
 
+  it("captures white-family shades (WB / XW / White) that carry no numeric code", () => {
+    // Regression: WB (white body) and XW (extra white) have no A1–D7 code, so
+    // they were shade-less and bridged every numeric shade into one cluster.
+    expect([...(extractNumericAttrs("3M Filtek Supreme Ultra Universal Composite WB Body Capsule Refill 20/Bt").get("shade") ?? [])]).toEqual(["w"])
+    expect([...(extractNumericAttrs("3M Filtek Supreme Ultra White Body Caps 20/Pack 6029WHB").get("shade") ?? [])]).toEqual(["w"])
+    expect([...(extractNumericAttrs("3M Filtek Supreme Ultra Universal Composite XW Body Capsule Refill 20/Bt").get("shade") ?? [])]).toEqual(["xw"])
+    expect([...(extractNumericAttrs("3M Filtek Supreme Ultra XW Body Caps 20/Pack 6029XWB").get("shade") ?? [])]).toEqual(["xw"])
+  })
+
+  it("rejects a white-family shade against a numeric shade (no transitive bridge)", () => {
+    // The shade-less white/extra-white rows were the bridge that merged A1B…D3B.
+    const whiteVsNumeric = score(
+      { brand: "3M", name: "3M Filtek Supreme Ultra Universal Composite WB Body Capsule Refill 20/Bt" },
+      { supplier_id: "msup_other_com", brand: "3M", name: "3M Filtek Supreme Ultra A1 Body Caps 20/Pack" }
+    )
+    expect(whiteVsNumeric.status).toBe("reject")
+    const xWhiteVsWhite = score(
+      { brand: "3M", name: "3M Filtek Supreme Ultra Universal Composite XW Body Capsule Refill 20/Bt" },
+      { supplier_id: "msup_other_com", brand: "3M", name: "3M Filtek Supreme Ultra White Body Caps 20/Pack" }
+    )
+    expect(xWhiteVsWhite.status).toBe("reject")
+  })
+
+  it("reads the same white shade from 'WB' and the word 'White', so they don't conflict", () => {
+    // White-vs-white must resolve to the same shade value, or the genuine
+    // cross-supplier white match would falsely hard-conflict.
+    const code = extractNumericAttrs("3M Filtek Supreme Ultra Universal Composite WB Body Capsule Refill").get("shade")
+    const word = extractNumericAttrs("3M Filtek Supreme Ultra White Body Caps 20/Pack").get("shade")
+    expect([...(code ?? [])]).toEqual(["w"])
+    expect([...(word ?? [])]).toEqual(["w"])
+  })
+
   it("rejects non-woven sponges that differ on bare dimension (4x4 vs 2x2)", () => {
     const decision = score(
       { brand: "Henry Schein", name: 'Essentials Rayon/Poly Blend Non-Woven Sponge 4x4" 4 Ply Non-Sterile' },

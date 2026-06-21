@@ -383,6 +383,15 @@ export function newItemId() { return `li_${Date.now().toString(36)}_${(itemIdSeq
 // app/api/requests/route.js, so a chosen offer survives re-derivation.
 
 export function offerKey(offer) { return `${offer?.supplier || ""}|${offer?.sku || ""}|${offer?.price ?? ""}`; }
+// "sku · pack" subline for an offer. Uses the normalized pack label (built from
+// the structured pack fields) rather than the raw supplier pack_size, so the
+// pack reads consistently ("24/Pack") instead of each supplier's own wording
+// ("Pkg of 24", "20/Bottle", "100/Bx").
+export function offerSub(offer) {
+  return [offer?.sku, formatPackLabel(offer?.packQty, offer?.packBasis, offer?.baseUnit, offer?.packSize)]
+    .filter(Boolean)
+    .join(" · ");
+}
 // Favicon/small logo per catalog supplier, saved under public/suppliers. Keyed
 // by a distinctive substring of the supplier name so it matches regardless of
 // how the name is formatted upstream.
@@ -794,12 +803,12 @@ export function deriveMatchRows(items, prefs) {
     const offers = (item.offers || []).map((offer) => ({
       ...offer,
       key: offerKey(offer),
-      sub: [offer.sku, normalizePackText(offer.packSize)].filter(Boolean).join(" · "),
+      sub: offerSub(offer),
     }));
     // "Recommended" is what our preferences pick — it never moves when the buyer
     // overrides their selection. "Selected" is the offer actually in the plan
     // (the buyer's choice, defaulting to our recommendation).
-    const fallback = item.bestOffer ? { ...item.bestOffer, key: offerKey(item.bestOffer), sub: [item.bestOffer.sku, normalizePackText(item.bestOffer.packSize)].filter(Boolean).join(" · ") } : null;
+    const fallback = item.bestOffer ? { ...item.bestOffer, key: offerKey(item.bestOffer), sub: offerSub(item.bestOffer) } : null;
     const recommended = notFound ? null : (pickBestOffer(offers, prefs, item) || fallback);
     const chosen = item.selectedOfferKey ? offers.find((offer) => offer.key === item.selectedOfferKey) : null;
     const best = notFound ? null : (chosen || recommended);
@@ -851,7 +860,7 @@ export function deriveMatchRows(items, prefs) {
       importedSub: item.sku ? `SKU: ${item.sku}` : (item.unit || ""),
       supplier,
       matchName: notFound ? null : (best?.name || item.canonicalName || item.product || null),
-      matchSub: notFound ? null : (best ? [best.sku, normalizePackText(best.packSize)].filter(Boolean).join(" · ") : ""),
+      matchSub: notFound ? null : (best ? offerSub(best) : ""),
       productUrl: notFound ? "" : (best?.productUrl || ""),
       // Stock signal for the selected offer — drives the OOS badge + switch flow.
       availability: notFound ? "unknown" : (best?.availability ?? "unknown"),
