@@ -50,6 +50,16 @@ describe("patterson adapter", () => {
     expect(row!.availability).toBe("unknown")
   })
 
+  it("decodes the double-encoded model (JSON \\u escape + inner HTML entity)", () => {
+    // "Brush & Paste" ships as `Brush &amp; Paste`: the & is an inner HTML
+    // entity, JSON-escaped, inside the entity-encoded model.
+    const html = `<input id="ItemSkuDetail_PublicItemNumber" type="hidden" value="070368886" />
+<script>var model = {&quot;ItemDescription&quot;:&quot;Brush \\u0026amp; Paste&quot;,&quot;PublicItemNumber&quot;:&quot;070368886&quot;,&quot;VendorName&quot;:&quot;Patterson Office Supplies&quot;,&quot;SeoFriendlyProductFamilyTitle&quot;:&quot;Calendar-Card&quot;};</script>`
+    const row = extractPattersonProduct(html, URL)
+    expect(row!.name).toBe("Calendar Card - Brush & Paste")
+    expect(row!.brand).toBe("Patterson Office Supplies")
+  })
+
   it("does not double the family when the description restates it", () => {
     const row = extractPattersonProduct(ITEM_HTML_REDUNDANT, URL)
     expect(row!.name).toBe("Door and Dam Gasket Kit M11 Sterilizer")

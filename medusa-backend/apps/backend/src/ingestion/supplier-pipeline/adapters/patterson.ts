@@ -14,8 +14,13 @@ import type {
  *
  * The page carries no JSON-LD. Instead the server embeds an HTML-entity-encoded
  * item model (…&quot;PublicItemNumber&quot;:&quot;070107516&quot;…) plus a set
- * of plain hidden inputs (id="ItemSkuDetail_PublicItemNumber" value="…"). We
- * decode the entities once and pull the handful of stable fields:
+ * of plain hidden inputs (id="ItemSkuDetail_PublicItemNumber" value="…"). The
+ * model is DOUBLE-encoded: a special char in a value is first an HTML entity in
+ * Patterson's data, then JSON-escaped, then the whole blob is HTML-entity
+ * encoded for the page — so "Brush & Paste" ships as `Brush &amp; Paste`.
+ * We undo the page entities once, then per field undo the JSON escape and the
+ * inner HTML entity (decodeModelValue) so names/brands read correctly. We pull
+ * the handful of stable fields:
  *
  *   - PublicItemNumber       → sku (Patterson item number, in the URL)
  *   - ManufacturerItemNumber → manufacturer_sku (the real MPN; cross-matches)
@@ -30,11 +35,28 @@ import type {
 
 const ITEM_DETAIL_RE = /\/Supplies\/ItemDetail\/(\d+)/i
 
+// A model string value, after the page-level entity decode, still carries JSON
+// escapes plus an inner HTML entity (e.g. `Brush &amp; Paste`). Undo the
+// JSON layer (\uXXXX, \", \\, \/, …) then the HTML entity, so the value reads as
+// the original text ("Brush & Paste"). Falls back to a manual \uXXXX unescape if
+// the captured fragment isn't a parseable JSON string.
+function decodeModelValue(raw: string): string {
+  let jsonDecoded = raw
+  try {
+    jsonDecoded = JSON.parse(`"${raw}"`)
+  } catch {
+    jsonDecoded = raw
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/\\(["\\/])/g, "$1")
+  }
+  return decodeHtml(jsonDecoded)
+}
+
 function jsonField(decoded: string, key: string): string {
   const match = decoded.match(
     new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`)
   )
-  return match ? decodeHtml(match[1]) : ""
+  return match ? decodeModelValue(match[1]) : ""
 }
 
 function hiddenInput(decoded: string, idSuffix: string): string {
@@ -50,7 +72,7 @@ function attributeValue(decoded: string, name: string): string {
   const match = decoded.match(
     new RegExp(`"Name"\\s*:\\s*"${name}"\\s*,\\s*"Value"\\s*:\\s*"([^"]*)"`, "i")
   )
-  return match ? decodeHtml(match[1]) : ""
+  return match ? decodeModelValue(match[1]) : ""
 }
 
 function humanize(slug: string): string {
