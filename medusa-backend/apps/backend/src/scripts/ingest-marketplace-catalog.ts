@@ -34,6 +34,7 @@ import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 type CliOptions = {
   provider: string
   limit: number
+  offset: number
   results: number
   queryPrefix: string
   category?: string
@@ -56,6 +57,7 @@ function parseOptions(): CliOptions {
   const options: CliOptions = {
     provider: process.env.MARKETPLACE_PROVIDER ?? "alibaba",
     limit: process.env.MARKETPLACE_LIMIT ? Number(process.env.MARKETPLACE_LIMIT) : 25,
+    offset: process.env.MARKETPLACE_OFFSET ? Number(process.env.MARKETPLACE_OFFSET) : 0,
     results: process.env.MARKETPLACE_RESULTS ? Number(process.env.MARKETPLACE_RESULTS) : 3,
     queryPrefix: process.env.MARKETPLACE_QUERY_PREFIX ?? "",
     category: process.env.MARKETPLACE_CATEGORY,
@@ -81,6 +83,7 @@ function parseOptions(): CliOptions {
     if (arg === "--commit") options.commit = true
     if (arg.startsWith("--provider=")) options.provider = optionValue(arg)
     if (arg.startsWith("--limit=")) options.limit = Number(optionValue(arg))
+    if (arg.startsWith("--offset=")) options.offset = Number(optionValue(arg))
     if (arg.startsWith("--results=")) options.results = Number(optionValue(arg))
     if (arg.startsWith("--query-prefix=")) options.queryPrefix = optionValue(arg)
     if (arg.startsWith("--category=")) options.category = optionValue(arg)
@@ -246,7 +249,8 @@ export default async function ingestMarketplaceCatalog({
   //  - seeds file: curated query phrases (e.g. the top-50 reorder list), each
   //    attached to its best-matching canonical product;
   //  - otherwise: the canonical products themselves (optionally category-filtered),
-  //    searched by their own name.
+  //    searched by their own name. --offset + --limit page through the catalog so a
+  //    scheduled job can sweep it in nightly batches (offset rotates by run date).
   const searchItems: CanonicalProductInput[] = options.seedsFile
     ? seedSearchItems(options.seedsFile, canonicalRecords, options.anchorMin)
     : (options.category
@@ -254,12 +258,13 @@ export default async function ingestMarketplaceCatalog({
             product.category?.toLowerCase().includes(options.category!.toLowerCase())
           )
         : canonicalRecords
-      ).slice(0, options.limit)
+      ).slice(options.offset, options.offset + options.limit)
 
   console.log(
     `[marketplace-ingestion] provider=${provider.id}` +
       ` ${options.seedsFile ? "seeds" : "canonical_products"}=${searchItems.length}` +
-      ` (of ${allCanonical.length} canonical) results_per_query=${options.results} commit=${options.commit}`
+      ` (offset ${options.offset}, limit ${options.limit}, of ${allCanonical.length} canonical)` +
+      ` results_per_query=${options.results} commit=${options.commit}`
   )
 
   if (options.resolveOnly) {
