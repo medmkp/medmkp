@@ -3,11 +3,16 @@
 // wiring it here — the runner stays supplier-agnostic.
 
 import * as dcdental from "./dcdental.mjs";
+import * as darby from "./darby.mjs";
 
 const ADAPTERS = {
   dcdental,
   // DC Dental's slug in the catalog is the bare domain; accept both forms.
   dcdental_com: dcdental,
+  // Darby's catalog slug is "darby-dental"; accept a few spelling variants.
+  "darby-dental": darby,
+  darby,
+  darbydental_com: darby,
 };
 
 export function adapterFor(slug) {

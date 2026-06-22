@@ -1323,7 +1323,7 @@ export function supplierSiteUrl(name) {
 // Suppliers the headless buying agent can drive (a NUC runner adapter exists).
 // Matched by name substring; grow this as adapters are added.
 
-export const AGENT_SUPPLIERS = ["dc dental"];
+export const AGENT_SUPPLIERS = ["dc dental", "darby"];
 
 export function isAgentSupplier(name) {
   const key = (name || "").toLowerCase();
