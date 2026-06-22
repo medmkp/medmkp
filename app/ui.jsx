@@ -151,6 +151,44 @@ export function useBarcodeScanner({ active, onScan }) {
   return { videoRef, cameraStatus, autoDetect, capture, retry };
 }
 
+// Phone-handoff QR: encodes an absolute scan URL so the buyer can point their
+// phone's camera at it and run the scanner there (where the camera is far
+// better than a desktop webcam). Rendered with @zxing/library — already a
+// dependency for reading barcodes — and lazy-loaded so it stays out of the
+// initial bundle. Black modules on a forced-white card so it scans in any theme.
+export function ScanHandoffQr({ url }) {
+  const ref = useRef(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!url) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { BrowserQRCodeSvgWriter, EncodeHintType } = await import("@zxing/library");
+        if (!alive || !ref.current) return;
+        const hints = new Map();
+        hints.set(EncodeHintType.ERROR_CORRECTION, "M");
+        hints.set(EncodeHintType.MARGIN, 1);
+        const svg = new BrowserQRCodeSvgWriter().write(url, 240, 240, hints);
+        const size = svg.getAttribute("width") || 240;
+        svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        svg.setAttribute("class", "scan-qr-svg");
+        ref.current.replaceChildren(svg);
+      } catch {
+        if (alive) setFailed(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [url]);
+
+  if (failed) {
+    return <p className="scan-qr-fallback">Couldn&rsquo;t render the code. Open <strong>{url}</strong> on your phone.</p>;
+  }
+  return <div className="scan-qr-canvas" ref={ref} role="img" aria-label="QR code — scan it with your phone to open the barcode scanner" />;
+}
+
 // The verify moment: after each scan/lookup, surface what matched so the buyer
 // can confirm it at a glance before scanning the next item. Matched/review
 // cards auto-dismiss so they don't block the next scan; a no-match card sticks

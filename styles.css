@@ -9904,6 +9904,26 @@ th {
   overflow: hidden;
 }
 
+/* Desktop phone-handoff: a QR (reusing the shared .scan-qr-* styles) beside the
+   how-to steps, styled as a card to match the camera view it replaces. */
+.pscan-qr {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.pscan-qr .scan-qr-canvas { width: 220px; height: 220px; }
+.pscan-qr-back { display: flex; width: fit-content; margin: 16px auto 18px; }
+@media (max-width: 560px) {
+  .pscan-qr { grid-template-columns: 1fr; justify-items: center; gap: 20px; padding: 22px; }
+  .pscan-qr .scan-qr-side { width: 100%; }
+}
+
 .pscan-stage {
   position: relative;
   aspect-ratio: 4 / 3;

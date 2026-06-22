@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { BrandMark, Icon } from "./icons";
 import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc } from "./lib";
-import { BuyingPreferencesCard, CandidateName, CandidateStock, ListStatusPill, MatchSupplier, ProductSearchResults, ProductThumb, useBarcodeScanner, useProductSearch } from "./ui";
+import { BuyingPreferencesCard, CandidateName, CandidateStock, ListStatusPill, MatchSupplier, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
   const [captured, setCaptured] = useState(false);
@@ -150,44 +150,6 @@ function DesktopScanTray({ result, onNavigate }) {
       )}
     </aside>
   );
-}
-
-// Phone-handoff QR: encodes the absolute /app/scan URL so the buyer can point
-// their phone's camera at it and run the scanner there (where the camera is far
-// better than a desktop webcam). Rendered with @zxing/library — already a
-// dependency for reading barcodes — and lazy-loaded so it stays out of the
-// initial bundle. Black modules on a forced-white card so it scans in any theme.
-function ScanHandoffQr({ url }) {
-  const ref = useRef(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (!url) return;
-    let alive = true;
-    (async () => {
-      try {
-        const { BrowserQRCodeSvgWriter, EncodeHintType } = await import("@zxing/library");
-        if (!alive || !ref.current) return;
-        const hints = new Map();
-        hints.set(EncodeHintType.ERROR_CORRECTION, "M");
-        hints.set(EncodeHintType.MARGIN, 1);
-        const svg = new BrowserQRCodeSvgWriter().write(url, 240, 240, hints);
-        const size = svg.getAttribute("width") || 240;
-        svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
-        svg.removeAttribute("width");
-        svg.removeAttribute("height");
-        svg.setAttribute("class", "scan-qr-svg");
-        ref.current.replaceChildren(svg);
-      } catch {
-        if (alive) setFailed(true);
-      }
-    })();
-    return () => { alive = false; };
-  }, [url]);
-
-  if (failed) {
-    return <p className="scan-qr-fallback">Couldn&rsquo;t render the code. Open <strong>{url}</strong> on your phone.</p>;
-  }
-  return <div className="scan-qr-canvas" ref={ref} role="img" aria-label="QR code — scan it with your phone to open the barcode scanner" />;
 }
 
 // Scan workspace as a modal. Desktop default: a QR code that hands scanning off

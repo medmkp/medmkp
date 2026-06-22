@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { BrandMark, Icon } from "./icons";
 import { DEFAULT_BUYING_PREFS } from "./lib";
 import { CurrentReorderList } from "./reorder";
-import { ScanResultCard, useBarcodeScanner } from "./ui";
+import { ScanHandoffQr, ScanResultCard, useBarcodeScanner } from "./ui";
 
 export function MobileScanItemView({ onBack, onScan, scanResult, onClearScanResult, scanCount }) {
   const [isMobile, setIsMobile] = useState(false);
@@ -389,6 +389,18 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
   const exhausted = freeScansUsed >= limit;
   const remaining = Math.max(0, limit - freeScansUsed);
 
+  // Desktop default: hand scanning off to the buyer's phone via a QR (desktop
+  // webcams read small item barcodes poorly), with a "use this computer's
+  // camera" fallback. Mobile keeps the camera — the phone already is the camera.
+  const [mode, setMode] = useState("camera"); // "qr" = phone handoff | "camera" = webcam
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 768px)").matches;
+    setIsDesktop(desktop);
+    if (desktop) setMode("qr");
+  }, []);
+  const scanUrl = typeof window !== "undefined" ? `${window.location.origin}/scan` : "";
+
   // Hold the wall back briefly after the last scan so its result card is seen.
   const [gateVisible, setGateVisible] = useState(false);
   useEffect(() => {
@@ -401,7 +413,7 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
   }, [exhausted]);
 
   const { videoRef, cameraStatus, autoDetect, capture, retry } = useBarcodeScanner({
-    active: !exhausted,
+    active: !exhausted && mode === "camera",
     onScan: (code) => {
       onScan?.(code);
       setCaptured(true);
@@ -439,9 +451,31 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
       <section className="pscan-body">
         <div className="pscan-intro">
           <h1>Scan a product to see its price benchmark</h1>
-          <p>Point your camera at any dental supply barcode &mdash; or key in the code &mdash; to identify the item and compare typical prices. {limit} scans free, no login required.</p>
+          <p>
+            {mode === "qr"
+              ? <>Point your phone&rsquo;s camera at the code to open the scanner &mdash; phone cameras read item barcodes far better than a laptop webcam. {limit} scans free, no login required.</>
+              : <>Point your camera at any dental supply barcode &mdash; or key in the code &mdash; to identify the item and compare typical prices. {limit} scans free, no login required.</>}
+          </p>
         </div>
 
+        {mode === "qr" ? (
+          <div className="pscan-qr">
+            <div className="scan-qr-code">
+              <ScanHandoffQr url={scanUrl} />
+            </div>
+            <div className="scan-qr-side">
+              <ol className="scan-qr-steps">
+                <li><span>1</span> Open your phone&rsquo;s camera and point it at the code.</li>
+                <li><span>2</span> Tap the link it shows to open the scanner on your phone.</li>
+                <li><span>3</span> Scan any product&rsquo;s barcode to see its price benchmark.</li>
+              </ol>
+              <button type="button" className="scan-qr-camera-link" onClick={() => setMode("camera")}>
+                <Icon name="icon-scan" className="button-icon" />
+                Use this computer&rsquo;s camera instead
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className={`pscan-card ${captured ? "scan-captured" : ""}`}>
           <div className="pscan-stage">
             <video ref={videoRef} className="pscan-video" playsInline muted autoPlay aria-label="Live camera preview"></video>
@@ -507,7 +541,13 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
           </div>
 
           <ScanResultCard result={scanResult} onClear={onClearScanResult} onEnterManually={() => {}} />
+          {isDesktop && (
+            <button type="button" className="scan-qr-back pscan-qr-back" onClick={() => setMode("qr")}>
+              <Icon name="icon-chevron-left" className="button-icon" />Scan with your phone instead
+            </button>
+          )}
         </div>
+        )}
       </section>
 
       {gateVisible && (
