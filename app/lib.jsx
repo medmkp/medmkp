@@ -81,6 +81,7 @@ export function viewFromPath(pathname = "/") {
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
   if (path === "/app/catalog") return { view: "catalog", isLoggedIn: true };
   if (path === "/app/catalog/search") return { view: "catalogSearch", isLoggedIn: true, searchQuery: query.get("q") || "" };
+  if (path.startsWith("/app/catalog/supplier/")) return { view: "catalogSupplier", isLoggedIn: true, supplierId: decodeURIComponent(path.split("/")[4] || "") };
   if (path.startsWith("/app/catalog/")) return { view: "catalogCategory", isLoggedIn: true, categorySlug: decodeURIComponent(path.split("/")[3] || "") };
   if (path.startsWith("/app/product/")) return { view: "productDetail", isLoggedIn: true, productHandle: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/settings") return { view: "settings", isLoggedIn: true };

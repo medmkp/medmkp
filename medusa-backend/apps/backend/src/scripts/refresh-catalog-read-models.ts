@@ -27,6 +27,8 @@ async function main() {
     await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY medmkp_category_priced_count`)
     // Per-supplier product count (reads base medmkp_supplier_product directly).
     await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY medmkp_supplier_product_count`)
+    // Browse-by-supplier listing; depends on the current-offer + current-price models above.
+    await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY medmkp_supplier_catalog_listing`)
     const indexed = await refreshMatchIndex(client)
     console.log(`Refreshed match index: ${indexed} products`)
   } finally {

@@ -229,9 +229,15 @@ export function CatalogView({ onNavigate }) {
             <ul className="cat-supplier-list">
               {(showAllSuppliers ? suppliers : suppliers.slice(0, 5)).map((supplier) => (
                 <li key={supplier.id}>
-                  <CatalogSupplierAvatar name={supplier.name} />
-                  <span className="cat-supplier-name">{supplier.name}</span>
-                  <em>{(supplier.product_count || 0).toLocaleString()}</em>
+                  <button
+                    type="button"
+                    className="cat-supplier-link"
+                    onClick={() => onNavigate(`/app/catalog/supplier/${encodeURIComponent(supplier.id)}`)}
+                  >
+                    <CatalogSupplierAvatar name={supplier.name} />
+                    <span className="cat-supplier-name">{supplier.name}</span>
+                    <Icon name="icon-chevron-right" className="button-icon" />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -407,6 +413,159 @@ export function CatalogSearchView({ query, onNavigate }) {
         <div className="empty-state">
           <strong>{query ? `No products for “${query}”` : "Start typing to search"}</strong>
           <span>Try gloves, burs, bibs, impression material, or anesthetics.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Browse by supplier (/app/catalog/supplier/<id>). A flat product table of one
+// supplier's catalog, ranked by that supplier's best per-unit price. Backed by
+// the medmkp_supplier_catalog_listing read model via /api/canonical-products
+// ?supplier=. Each row's price is this supplier's offer; the PDP still shows the
+// cross-supplier comparison.
+export function CatalogSupplierView({ supplierId, onNavigate }) {
+  const PAGE = 48;
+  const [supplier, setSupplier] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [status, setStatus] = useState("loading");
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Resolve the supplier's display name for the header.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/suppliers").then((r) => r.json()).catch(() => ({ suppliers: [] }))
+      .then(({ suppliers }) => {
+        if (!active) return;
+        setSupplier((suppliers || []).find((s) => s.id === supplierId) || null);
+      });
+    return () => { active = false; };
+  }, [supplierId]);
+
+  // First page of the supplier's products.
+  useEffect(() => {
+    if (!supplierId) return undefined;
+    const controller = new AbortController();
+    setStatus("loading");
+    setProducts([]);
+    fetch(`/api/canonical-products?supplier=${encodeURIComponent(supplierId)}&limit=${PAGE}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then(({ canonical_products, count }) => {
+        if (controller.signal.aborted) return;
+        setProducts(canonical_products || []);
+        setTotal(count || 0);
+        setStatus("ready");
+      })
+      .catch((error) => {
+        if (error.name === "AbortError") return;
+        setProducts([]);
+        setTotal(0);
+        setStatus("ready");
+      });
+    return () => controller.abort();
+  }, [supplierId]);
+
+  const loadMore = () => {
+    setLoadingMore(true);
+    fetch(`/api/canonical-products?supplier=${encodeURIComponent(supplierId)}&limit=${PAGE}&offset=${products.length}`)
+      .then((r) => r.json())
+      .then(({ canonical_products }) => {
+        setProducts((prev) => [...prev, ...(canonical_products || [])]);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
+  };
+
+  const name = supplier?.name || "Supplier";
+
+  return (
+    <div className="cat">
+      <nav className="cat-crumb" aria-label="Breadcrumb">
+        <button type="button" onClick={() => onNavigate("/app/catalog")}>Catalog</button>
+        <Icon name="icon-chevron-right" className="cat-crumb-sep" />
+        <span>Suppliers</span>
+        <Icon name="icon-chevron-right" className="cat-crumb-sep" />
+        <strong>{name}</strong>
+      </nav>
+      <h1 className="cat-title">{name}</h1>
+      <p className="cat-lede">
+        {status === "ready"
+          ? `${total.toLocaleString()} product${total === 1 ? "" : "s"} from ${name}, ranked by best price.`
+          : `Loading ${name}'s catalog…`}
+      </p>
+
+      {status === "loading" ? (
+        <div className="cat-ptable-wrap">
+          {Array.from({ length: 6 }).map((_, i) => <div className="cat-pt-skeleton" key={i} />)}
+        </div>
+      ) : products.length ? (
+        <>
+          <div className="cat-ptable-wrap">
+            <table className="cat-ptable">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Category / SKU</th>
+                  <th>Best price</th>
+                  <th className="cat-pt-act">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((product) => {
+                  const best = product.best_offer;
+                  const open = product.handle ? () => onNavigate(`/app/product/${product.handle}`) : undefined;
+                  return (
+                    <tr key={product.id}>
+                      <td>
+                        <div className="cat-pt-product">
+                          <span className="cat-pt-thumb">
+                            {product.image_url ? (
+                              <img src={product.image_url} alt="" loading="lazy" />
+                            ) : (
+                              <Icon name="icon-image" className="nav-icon" />
+                            )}
+                          </span>
+                          {open ? (
+                            <button type="button" className="cat-pt-name" onClick={open}>{product.name}</button>
+                          ) : (
+                            <span className="cat-pt-name">{product.name}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="cat-pt-path">
+                        <span>{product.category || "Uncategorized"}</span>
+                        <em>{best?.sku || "—"}</em>
+                      </td>
+                      <td>
+                        <CatBestPrice best={best} showBadge={false} />
+                      </td>
+                      <td className="cat-pt-act">
+                        {open && (
+                          <button type="button" className="cat-pt-view" onClick={open}>
+                            View product
+                            <Icon name="icon-link" className="button-icon" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {products.length < total && (
+            <button type="button" className="cat-pt-all" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : `Load more (${(total - products.length).toLocaleString()} more)`}
+              <Icon name="icon-chevron-right" className="button-icon" />
+            </button>
+          )}
+        </>
+      ) : (
+        <div className="empty-state">
+          <strong>No priced products for {name}</strong>
+          <span>We don&rsquo;t have current prices from this supplier yet.</span>
+          <button type="button" className="secondary-action compact" onClick={() => onNavigate("/app/catalog")}>Back to catalog</button>
         </div>
       )}
     </div>

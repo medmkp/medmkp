@@ -247,42 +247,46 @@ async function queryCategoryProducts(
     [category, qLike, limit, offset]
   )
 
-  const canonical_products: CategoryListItem[] = rows.map((row) => {
-    const image = row.best_image || ""
-    const isFamily = Boolean(row.family_id)
-    return {
-      id: row.id,
-      handle: isFamily ? row.family_handle : row.any_handle,
-      name: isFamily ? row.family_name : row.any_name,
-      category: row.any_category,
-      family_id: row.family_id ?? null,
-      variant_count: Number(row.variant_count),
-      offer_count: Number(row.offer_count),
-      best_offer: {
-        supplier_product_id: row.best_sp_id,
-        supplier_id: row.best_supplier_id,
-        supplier_name: row.best_supplier_name ?? "Unknown supplier",
-        sku: row.best_sku,
-        name: row.best_name,
-        brand: row.best_brand,
-        image_url: image,
-        product_url: row.best_url || "",
-        price_cents: Number(row.best_price),
-        unit_price_cents: row.best_unit_price != null ? Number(row.best_unit_price) : null,
-        pack_quantity: row.best_pack_qty != null ? Number(row.best_pack_qty) : null,
-        base_unit: row.best_base_unit ?? null,
-        pack_basis: row.best_pack_basis ?? null,
-        pack_size: row.best_pack_size || "",
-        unit_comparable: row.best_unit_price != null,
-        match_status: "matched",
-      },
-      offers: [],
-      image_url: image,
-      price_range_cents: null,
-    }
-  })
+  const canonical_products = rows.map(listRowToItem)
 
   return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
+}
+
+// Shared row → card mapper for the DB-ranked listing queries (category +
+// supplier browse), which select the same column aliases.
+function listRowToItem(row: any): CategoryListItem {
+  const image = row.best_image || ""
+  const isFamily = Boolean(row.family_id)
+  return {
+    id: row.id,
+    handle: isFamily ? row.family_handle : row.any_handle,
+    name: isFamily ? row.family_name : row.any_name,
+    category: row.any_category,
+    family_id: row.family_id ?? null,
+    variant_count: Number(row.variant_count),
+    offer_count: Number(row.offer_count),
+    best_offer: {
+      supplier_product_id: row.best_sp_id,
+      supplier_id: row.best_supplier_id,
+      supplier_name: row.best_supplier_name ?? "Unknown supplier",
+      sku: row.best_sku,
+      name: row.best_name,
+      brand: row.best_brand,
+      image_url: image,
+      product_url: row.best_url || "",
+      price_cents: Number(row.best_price),
+      unit_price_cents: row.best_unit_price != null ? Number(row.best_unit_price) : null,
+      pack_quantity: row.best_pack_qty != null ? Number(row.best_pack_qty) : null,
+      base_unit: row.best_base_unit ?? null,
+      pack_basis: row.best_pack_basis ?? null,
+      pack_size: row.best_pack_size || "",
+      unit_comparable: row.best_unit_price != null,
+      match_status: "matched",
+    },
+    offers: [],
+    image_url: image,
+    price_range_cents: null,
+  }
 }
 
 async function listCategoryProducts(
@@ -314,6 +318,84 @@ async function listCategoryProducts(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Fast browse-by-supplier listing (/app/catalog/supplier/<id>)
+//
+// Reads the medmkp_supplier_catalog_listing read model (one row per
+// supplier × product family, holding the supplier's own cheapest current offer)
+// and joins the supplier product for display fields of just the page. Ranking a
+// supplier's whole catalog by price live took ~11-28s; this is a single indexed
+// read (~60ms). Cached briefly like the category listing.
+// ---------------------------------------------------------------------------
+
+const supplierListCache = new Map<string, { loadedAt: number; result: CategoryListResult }>()
+const supplierListPromises = new Map<string, Promise<CategoryListResult>>()
+
+async function querySupplierProducts(
+  supplier: string,
+  q: string | undefined,
+  limit: number,
+  offset: number
+): Promise<CategoryListResult> {
+  const pool = getPostgresPool()
+  const qLike = q ? `%${q}%` : null
+  const { rows } = await pool.query(
+    `
+    SELECT
+      l.grp AS id, l.variant_count, l.family_id, l.family_handle, l.family_name,
+      l.any_handle, l.any_name, l.any_category,
+      l.variant_count AS offer_count,
+      l.price_cents AS best_price, l.unit_price_cents AS best_unit_price,
+      l.best_sp_id,
+      sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
+      sp.image_url AS best_image, sp.product_url AS best_url,
+      sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty,
+      sp.base_unit AS best_base_unit, sp.pack_basis AS best_pack_basis,
+      sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
+      COUNT(*) OVER() AS total_count
+    FROM medmkp_supplier_catalog_listing l
+    JOIN medmkp_supplier_product sp ON sp.id = l.best_sp_id AND sp.deleted_at IS NULL
+    LEFT JOIN medmkp_supplier s ON s.id = l.supplier_id AND s.deleted_at IS NULL
+    WHERE l.supplier_id = $1
+      AND ($2::text IS NULL OR l.any_name ILIKE $2 OR l.any_category ILIKE $2)
+    ORDER BY (l.unit_price_cents IS NULL) ASC, l.unit_price_cents ASC, l.price_cents ASC, l.any_name ASC
+    LIMIT $3 OFFSET $4
+    `,
+    [supplier, qLike, limit, offset]
+  )
+
+  const canonical_products = rows.map(listRowToItem)
+
+  return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
+}
+
+async function listSupplierProducts(
+  supplier: string,
+  q: string | undefined,
+  limit: number,
+  offset: number
+): Promise<CategoryListResult> {
+  const key = `${supplier}|${q ?? ""}|${limit}|${offset}`
+  const cached = supplierListCache.get(key)
+  if (cached && Date.now() - cached.loadedAt < CATEGORY_LIST_CACHE_TTL_MS) {
+    return cached.result
+  }
+
+  let promise = supplierListPromises.get(key)
+  if (!promise) {
+    promise = querySupplierProducts(supplier, q, limit, offset)
+    supplierListPromises.set(key, promise)
+  }
+
+  try {
+    const result = await promise
+    supplierListCache.set(key, { loadedAt: Date.now(), result })
+    return result
+  } finally {
+    supplierListPromises.delete(key)
+  }
+}
+
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const url = new URL(req.url, "http://localhost")
   const q = url.searchParams.get("q")?.trim()
@@ -337,6 +419,16 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       return
     } catch (error) {
       // Fall through to the general path if the read model is unavailable.
+    }
+  }
+
+  // Browse by supplier: rank + page the supplier's catalog from its read model.
+  if (supplier && !handle && !category) {
+    try {
+      res.json(await listSupplierProducts(supplier, q, limit, offset))
+      return
+    } catch (error) {
+      // Fall through to the general (in-memory) supplier filter if unavailable.
     }
   }
 
