@@ -10421,3 +10421,243 @@ th {
 }
 .camera-retry-btn:hover { background: #2f63db; }
 .camera-retry-btn .button-icon { width: 16px; height: 16px; }
+
+/* ===== Phase 1d — QR labels ===== */
+.qrl-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 2px 40px;
+}
+
+.qrl-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.qrl-head h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.qrl-head p {
+  margin: 0;
+  color: var(--muted);
+}
+.qrl-print-btn {
+  flex-shrink: 0;
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  padding: 0 16px;
+  height: 40px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qrl-print-btn:hover:not(:disabled) { background: #1250e0; }
+.qrl-print-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.qrl-body {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.qrl-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.qrl-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+.qrl-card h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.qrl-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.qrl-card-head h3 { margin: 0; }
+.qrl-link-btn {
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.qrl-link-btn:hover { text-decoration: underline; }
+
+.qrl-loc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qrl-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.qrl-check:hover { background: var(--surface-2); }
+.qrl-check input { width: 16px; height: 16px; accent-color: var(--blue); flex-shrink: 0; }
+.qrl-check-body { display: flex; flex-direction: column; gap: 1px; }
+.qrl-check-body strong { font-size: 14px; }
+.qrl-check-body small { color: var(--muted); font-size: 12px; }
+
+.qrl-sizes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qrl-size {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.qrl-size:hover { border-color: var(--blue-2); }
+.qrl-size.active {
+  border-color: var(--blue);
+  background: var(--blue-2);
+}
+.qrl-size strong { font-size: 14px; }
+.qrl-size small { color: var(--muted); font-size: 12px; }
+
+.qrl-toggles { display: flex; flex-direction: column; gap: 10px; }
+.qrl-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.qrl-toggle input { width: 16px; height: 16px; accent-color: var(--blue); }
+
+.qrl-preview {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 360px;
+}
+.qrl-preview-head {
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.qrl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 20px;
+  color: var(--muted);
+}
+.qrl-empty-icon { width: 28px; height: 28px; opacity: 0.5; }
+.qrl-empty p { margin: 0; }
+
+.qrl-sheet {
+  display: grid;
+  grid-template-columns: repeat(var(--qrl-cols), 1fr);
+  gap: 12px;
+}
+.qrl-label {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.qrl-sheet-three-up .qrl-label,
+.qrl-sheet-four-up .qrl-label {
+  flex-direction: column;
+  text-align: center;
+  gap: 8px;
+}
+.qrl-label-qr { flex-shrink: 0; line-height: 0; }
+.qrl-label-qr svg { display: block; height: auto; }
+.qrl-label-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.qrl-sheet-three-up .qrl-label-meta,
+.qrl-sheet-four-up .qrl-label-meta { align-items: center; }
+.qrl-label-mark { display: block; margin-bottom: 2px; }
+.qrl-label-name {
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.qrl-label-type {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.qrl-label-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+@media (max-width: 760px) {
+  .qrl-body { grid-template-columns: 1fr; }
+}
+
+/* Print only the label sheet — drop every app surface and the on-screen
+   controls so the labels land cleanly on the page. */
+@media print {
+  .topbar, .sidebar, .mobile-bottom-nav, .toast,
+  .qrl-head, .qrl-controls, .qrl-preview-head { display: none !important; }
+  .app-body, .app-main { display: block; }
+
+  .qrl-page { padding: 0; gap: 0; }
+  .qrl-body { display: block; }
+  .qrl-preview {
+    background: #fff;
+    border: 0;
+    padding: 0;
+    min-height: 0;
+  }
+  .qrl-sheet { gap: 0.18in; }
+  .qrl-label {
+    border: 1px solid #d8dde8;
+    border-radius: 6px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .qrl-label-type { color: #2F5BD6; }
+}
