@@ -17,6 +17,8 @@ import SupplierPriceSnapshot from "./models/supplier-price-snapshot"
 import Supplier from "./models/supplier"
 import SupplierProduct from "./models/supplier-product"
 import CartBuildJob from "./models/cart-build-job"
+import Location from "./models/location"
+import InventoryItem from "./models/inventory-item"
 
 class MedMKPModuleService extends MedusaService({
   DentalPractice,
@@ -37,6 +39,8 @@ class MedMKPModuleService extends MedusaService({
   ProcurementRequest,
   Quote,
   ReorderList,
+  Location,
+  InventoryItem,
 }) {}
 
 export default MedMKPModuleService
