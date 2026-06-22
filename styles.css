@@ -10091,6 +10091,9 @@ th {
 .pp-group-submitted .pp-group-lines { border-top: 1px solid var(--line); }
 .pp-group-head-toggle { cursor: pointer; border-bottom: none; }
 .pp-group-head-toggle:hover { background: var(--bg); }
+/* Active (non-submitted) groups collapse too; restore the header divider only
+   while the item table is showing. */
+.pp-group-head-open { border-bottom: 1px solid var(--line); }
 .pp-submitted-badge {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
   font-size: 12px; font-weight: 700; color: var(--green); background: #e3f6ed;
