@@ -440,12 +440,18 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const where: Record<string, any>[] = []
   if (handle) {
     // Resolve by the product's own handle/id or its family handle, so a family
-    // page (and any variant's handle) loads the whole family below.
+    // page (and any variant's handle) loads the whole family below. Exact
+    // equality (not $ilike): handle/id/family_handle are stored lowercase and the
+    // param is normalized to lowercase above, so this is semantically identical to
+    // the old case-insensitive match — but it uses the PK / btree indexes (a
+    // BitmapOr). $ilike could not use them (only the handle GIN-trigram index), so
+    // the OR degraded to a seq scan of every canonical row (~2.6s) on every
+    // product page load.
     where.push({
       $or: [
-        { handle: { $ilike: handle } },
-        { id: { $ilike: handle } },
-        { family_handle: { $ilike: handle } },
+        { handle },
+        { id: handle },
+        { family_handle: handle },
       ],
     })
   }
