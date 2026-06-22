@@ -129,6 +129,7 @@ export function CatalogView({ onNavigate }) {
   const [status, setStatus] = useState("loading");
   const [layout, setLayout] = useState("grid");
   const [recent, setRecent] = useState([]);
+  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -226,7 +227,7 @@ export function CatalogView({ onNavigate }) {
           <section className="cat-panel">
             <header><h3>Browse by supplier</h3></header>
             <ul className="cat-supplier-list">
-              {suppliers.slice(0, 5).map((supplier) => (
+              {(showAllSuppliers ? suppliers : suppliers.slice(0, 5)).map((supplier) => (
                 <li key={supplier.id}>
                   <CatalogSupplierAvatar name={supplier.name} />
                   <span className="cat-supplier-name">{supplier.name}</span>
@@ -234,9 +235,11 @@ export function CatalogView({ onNavigate }) {
                 </li>
               ))}
             </ul>
-            <button type="button" className="cat-panel-action" onClick={() => onNavigate("/app/settings")}>
-              View all suppliers ({suppliers.length})
-            </button>
+            {suppliers.length > 5 && (
+              <button type="button" className="cat-panel-action" onClick={() => setShowAllSuppliers((open) => !open)}>
+                {showAllSuppliers ? "Show fewer suppliers" : `View all suppliers (${suppliers.length})`}
+              </button>
+            )}
           </section>
 
           {recent.length > 0 && (
