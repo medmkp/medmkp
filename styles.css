@@ -8696,7 +8696,7 @@ th {
 .crl-status.possible { background: #fcf1dd; color: var(--gold); }
 .crl-status.nomatch { background: #fdeaea; color: var(--red); }
 
-.crl-status-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.crl-status-cell { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; min-width: 0; }
 
 /* Only when the detail panel is EXPANDED (detail-wide) does the table get
    narrow enough to need it: give the product title the room and collapse

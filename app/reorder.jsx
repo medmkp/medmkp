@@ -1386,7 +1386,7 @@ export function CurrentReorderList({
           />
 
           <section className="crl-card">
-            <h3>Plan Preview</h3>
+            <h3>Savings &amp; totals</h3>
             {usingReal ? (
               <>
                 {planSummary.savings > 0 && (
