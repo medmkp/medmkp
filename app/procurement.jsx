@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Icon } from "./icons";
-import { AGENT_SUPPLIERS, ARCHIVED_LISTS, CRL_STATUS, STRATEGY_LABELS, availabilityBadge, buildHandoffCsv, buildSupplierOrderText, deriveMatchRows, downloadTextFile, groupRowsBySupplier, isAgentSupplier, isOrderable, isPlanIncluded, isStrandedOutOfStock, money, mrEa, mrMoney, pickBestOffer, planSlug, shopifyStockKey, showPerEa, supplierSiteUrl } from "./lib";
+import { AGENT_SUPPLIERS, ARCHIVED_LISTS, CRL_STATUS, STRATEGY_LABELS, availabilityBadge, buildHandoffCsv, buildSupplierOrderText, deriveMatchRows, downloadTextFile, estimateArrival, formatArrival, groupRowsBySupplier, isAgentSupplier, isOrderable, isPlanIncluded, isStrandedOutOfStock, money, mrEa, mrMoney, normSupplierName, pickBestOffer, planSlug, shopifyStockKey, showPerEa, supplierSiteUrl } from "./lib";
 import { BuyingPreferencesCard, ListStatusPill, MatchSupplier, ProductThumb } from "./ui";
 import { MatchPanel, ReorderRow, ReorderTableHead } from "./reorder";
 
@@ -411,7 +411,7 @@ export function SupplierGroupCard({ group, onNavigate, onBuildCart, onSwitchOffe
 }
 
 
-export function ProcurementPlanView({ items, listName, listStatus = "draft", onBackToDraft, buyingPrefs, onBuyingPrefs, onBuildCart, onSwitchOffer, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate, onToast, submittedSuppliers = [], onReopenOrder }) {
+export function ProcurementPlanView({ items, listName, listStatus = "draft", onBackToDraft, buyingPrefs, onBuyingPrefs, onBuildCart, onSwitchOffer, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate, onToast, submittedSuppliers = [], onReopenOrder, supplierShipping = {}, shipToState = "" }) {
   // Product-match drawer state — mirrors the reorder list so a row click opens
   // the same MatchPanel, and the drawer replaces the right rail while open.
   const [detail, setDetail] = useState(null);
@@ -515,6 +515,22 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
                 const submitted = submittedSuppliers.includes(group.supplier);
                 const expanded = expandedSubmitted.has(group.supplier);
                 const collapsed = collapsedGroups.has(group.supplier);
+                // Ship-time estimate for this supplier's basket: published window
+                // refined per-destination, gated on stock. Backordered only when
+                // nothing in the group is orderable. Silent when no policy.
+                const groupOrderable = group.rows.some((row) => !row.outOfStock);
+                const arrivalEst = estimateArrival(
+                  supplierShipping?.[normSupplierName(group.supplier)] || null,
+                  shipToState,
+                  { available: groupOrderable }
+                );
+                const arrivalLabel = formatArrival(arrivalEst);
+                const arrivalBad = arrivalEst?.status === "backordered";
+                const arrivalChip = arrivalLabel ? (
+                  <span className={`pp-group-eta ${arrivalBad ? "bad" : ""}`} title="Estimated delivery — published transit time, business days, excludes holidays">
+                    <Icon name={arrivalBad ? "icon-alert-triangle" : "icon-truck"} className="button-icon" />{arrivalLabel}
+                  </span>
+                ) : null;
                 return (
                   <section className={`crl-card pp-group ${submitted ? "pp-group-submitted" : ""}`} key={group.supplier}>
                     {submitted ? (
@@ -530,6 +546,7 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSubmitted(group.supplier); } }}
                       >
                         <MatchSupplier name={group.supplier} />
+                        {arrivalChip}
                         <span className="pp-group-meta">{group.count} item{group.count === 1 ? "" : "s"} · <strong>{money.format(group.subtotal)}</strong></span>
                         <span className="pp-submitted-badge"><Icon name="icon-check-circle" className="button-icon" />Order submitted</span>
                         <Icon name={expanded ? "icon-chevron-down" : "icon-chevron-right"} className="button-icon pp-submitted-chevron" />
@@ -544,6 +561,7 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
                         onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleGroup(group.supplier); } }}
                       >
                         <MatchSupplier name={group.supplier} />
+                        {arrivalChip}
                         <span className="pp-group-meta">{group.count} item{group.count === 1 ? "" : "s"} · <strong>{money.format(group.subtotal)}</strong></span>
                         {onBuildCart && (
                           <button className="crl-ghost-btn pp-buildcart-btn" type="button" disabled={!buildable} onClick={(e) => { e.stopPropagation(); onBuildCart(group); }} title={buildable ? "" : "No supplier product links for these items"}>
