@@ -2,7 +2,7 @@ services:
   - type: web
     name: medmkp-medusa
     runtime: node
-    repo: https://github.com/medmkp/medmkp
+    repo: https://github.com/tracedds/tracedds
     branch: main
     rootDir: medusa-backend/apps/backend
     plan: starter
