@@ -136,15 +136,173 @@ export function initials(name) {
     .join("");
 }
 
-// Real availability from the latest price snapshot. We don't have ship-time
-// estimates, so we report only the status the supplier actually published and
-// leave anything unknown explicitly unconfirmed rather than inventing an ETA.
+// Real availability from the latest price snapshot. This reports only the stock
+// status the supplier actually published and leaves anything unknown explicitly
+// unconfirmed; ship-time estimation lives in estimateArrival() below.
 
 export function availabilityInfo(value) {
   if (value === "in_stock") return { label: "In stock", tone: "ok" };
   if (value === "limited") return { label: "Limited stock", tone: "warn" };
   if (value === "backordered") return { label: "Backordered", tone: "bad" };
   return { label: "Check with supplier", tone: "muted" };
+}
+
+// ---------------------------------------------------------------------------
+// Ship-time estimation
+//
+// Three honest layers, all opt-in on published data — we never invent an ETA:
+//   Layer 1  Published per-supplier delivery promise (stated transit window).
+//   Layer 2  Per-destination refinement: when a supplier's distribution-center
+//            ZIP(s) are confirmed, approximate ground transit days by the
+//            origin→destination distance instead of the blanket promise.
+//   Layer 3  Stock gate: a date is only meaningful if the item is orderable;
+//            an out-of-stock line shows "Backordered" instead of an arrival.
+//
+// The distance model is intentionally coarse (state centroids + ground-day
+// bands) — enough to separate "next-day-ish" from "cross-country", not a
+// substitute for a carrier rating API. Everything is labeled an estimate.
+// ---------------------------------------------------------------------------
+
+// Approximate geographic center (lat, lon) of each state + DC.
+export const STATE_CENTROIDS = {
+  AL: [32.8, -86.8], AK: [64.1, -152.3], AZ: [34.2, -111.7], AR: [34.9, -92.4],
+  CA: [37.2, -119.4], CO: [39.0, -105.5], CT: [41.6, -72.7], DE: [39.0, -75.5],
+  DC: [38.9, -77.0], FL: [28.6, -82.4], GA: [32.6, -83.4], HI: [20.3, -156.4],
+  ID: [44.4, -114.6], IL: [40.0, -89.2], IN: [39.9, -86.3], IA: [42.0, -93.5],
+  KS: [38.5, -98.4], KY: [37.5, -85.3], LA: [31.0, -92.0], ME: [45.4, -69.2],
+  MD: [39.0, -76.8], MA: [42.3, -71.8], MI: [44.3, -85.4], MN: [46.3, -94.3],
+  MS: [32.7, -89.7], MO: [38.4, -92.5], MT: [47.0, -109.6], NE: [41.5, -99.8],
+  NV: [39.3, -116.6], NH: [43.7, -71.6], NJ: [40.1, -74.7], NM: [34.4, -106.1],
+  NY: [42.9, -75.6], NC: [35.6, -79.4], ND: [47.5, -100.5], OH: [40.3, -82.8],
+  OK: [35.6, -97.5], OR: [44.0, -120.6], PA: [40.9, -77.8], RI: [41.7, -71.6],
+  SC: [33.9, -80.9], SD: [44.4, -100.2], TN: [35.9, -86.4], TX: [31.5, -99.3],
+  UT: [39.3, -111.7], VT: [44.1, -72.7], VA: [37.5, -78.9], WA: [47.4, -120.5],
+  WV: [38.6, -80.6], WI: [44.6, -90.0], WY: [43.0, -107.5],
+};
+
+// 3-digit ZIP prefix ranges → state. Coarse but enough to resolve a DC's ZIP to
+// a centroid for distance estimation. Ranges, not per-prefix, to stay compact.
+const ZIP3_STATE_RANGES = [
+  [10, 27, "MA"], [28, 29, "RI"], [30, 38, "NH"], [39, 49, "ME"], [50, 59, "VT"],
+  [60, 69, "CT"], [70, 89, "NJ"], [100, 149, "NY"], [150, 196, "PA"], [197, 199, "DE"],
+  [200, 205, "DC"], [206, 219, "MD"], [220, 246, "VA"], [247, 268, "WV"], [270, 289, "NC"],
+  [290, 299, "SC"], [300, 319, "GA"], [320, 349, "FL"], [350, 369, "AL"], [370, 385, "TN"],
+  [386, 397, "MS"], [398, 399, "GA"], [400, 427, "KY"], [430, 459, "OH"], [460, 479, "IN"],
+  [480, 499, "MI"], [500, 528, "IA"], [530, 549, "WI"], [550, 567, "MN"], [570, 577, "SD"],
+  [580, 588, "ND"], [590, 599, "MT"], [600, 629, "IL"], [630, 658, "MO"], [660, 679, "KS"],
+  [680, 693, "NE"], [700, 714, "LA"], [716, 729, "AR"], [730, 749, "OK"], [750, 799, "TX"],
+  [800, 816, "CO"], [820, 831, "WY"], [832, 838, "ID"], [840, 847, "UT"], [850, 865, "AZ"],
+  [870, 884, "NM"], [889, 898, "NV"], [900, 961, "CA"], [967, 968, "HI"], [970, 979, "OR"],
+  [980, 994, "WA"], [995, 999, "AK"],
+];
+
+export function zipToState(zip) {
+  const p = parseInt(String(zip || "").trim().slice(0, 3), 10);
+  if (!Number.isFinite(p)) return null;
+  for (const [lo, hi, st] of ZIP3_STATE_RANGES) if (p >= lo && p <= hi) return st;
+  return null;
+}
+
+function milesBetween(a, b) {
+  const [la1, lo1] = a, [la2, lo2] = b;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLa = toRad(la2 - la1), dLo = toRad(lo2 - lo1);
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(toRad(la1)) * Math.cos(toRad(la2)) * Math.sin(dLo / 2) ** 2;
+  return 3959 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// Ground transit days from shipped distance — approximates the published
+// UPS/FedEx ground time-in-transit maps.
+function groundDaysFromMiles(miles) {
+  if (miles <= 150) return 1;
+  if (miles <= 450) return 2;
+  if (miles <= 900) return 3;
+  if (miles <= 1500) return 4;
+  if (miles <= 2200) return 5;
+  return 6;
+}
+
+// Layer 2: fewest ground days from any of a supplier's distribution centers to
+// the destination state. Returns null unless both ends resolve to a centroid.
+export function estimateGroundDays(originZips, destState) {
+  const dest = STATE_CENTROIDS[String(destState || "").toUpperCase()];
+  if (!dest || !originZips) return null;
+  const zips = String(originZips).split(/[,\s]+/).filter(Boolean);
+  let best = null;
+  for (const zip of zips) {
+    const st = zipToState(zip);
+    const origin = st && STATE_CENTROIDS[st];
+    if (!origin) continue;
+    const days = groundDaysFromMiles(milesBetween(origin, dest));
+    if (best == null || days < best) best = days;
+  }
+  return best;
+}
+
+// Add N business days (skip Sat/Sun) to a date. Holidays are not modeled — the
+// result is an estimate, surfaced as such.
+export function addBusinessDays(date, n) {
+  const d = new Date(date);
+  let added = 0;
+  while (added < n) {
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) added += 1;
+  }
+  return d;
+}
+
+// Estimate when a line arrives. Combines the supplier's published window
+// (Layer 1) with per-destination ground refinement (Layer 2, when DCs are
+// known) and gates on stock (Layer 3). Returns null when the supplier publishes
+// no usable promise, so the UI stays silent rather than guessing.
+//   policy   — entry from buildShippingByName()
+//   destState— buyer's ship-to state (2-letter)
+//   opts     — { available?: boolean|null, now?: Date }
+export function estimateArrival(policy, destState, opts = {}) {
+  if (!policy) return null;
+  const { available = null, now = new Date() } = opts;
+  if (available === false) return { status: "backordered" };
+
+  let daysMin = null;
+  let daysMax = null;
+  let source = null;
+
+  const ground = policy.distCenterZips ? estimateGroundDays(policy.distCenterZips, destState) : null;
+  if (ground != null) {
+    // Distance gives a point estimate; widen by a day for real-world variance.
+    daysMin = ground;
+    daysMax = ground + 1;
+    source = "distance";
+  } else if (policy.transitMin != null || policy.transitMax != null) {
+    daysMin = policy.transitMin ?? policy.transitMax;
+    daysMax = policy.transitMax ?? policy.transitMin;
+    source = "published";
+  } else {
+    return null;
+  }
+
+  // Item ships next business day unless it makes the same-day cutoff.
+  const handlingDays = policy.shipsSameDay ? 0 : 1;
+  return {
+    status: "ok",
+    source,
+    daysMin,
+    daysMax,
+    arriveMin: addBusinessDays(now, handlingDays + daysMin),
+    arriveMax: addBusinessDays(now, handlingDays + daysMax),
+  };
+}
+
+// Headline string for an estimateArrival() result: "Arrives in ~2 business days"
+// / "Arrives in ~1–2 business days" / "Backordered — no ETA". Null in, null out.
+export function formatArrival(est) {
+  if (!est) return null;
+  if (est.status === "backordered") return "Backordered — no ETA";
+  const { daysMin, daysMax } = est;
+  const plural = (n) => (n === 1 ? "business day" : "business days");
+  if (daysMin === daysMax) return `Arrives in ~${daysMin} ${plural(daysMin)}`;
+  return `Arrives in ~${daysMin}–${daysMax} ${plural(daysMax)}`;
 }
 
 // Suppliers write the same pack a dozen ways ("100/Bx", "100/Box", "Box of 300",
@@ -615,10 +773,25 @@ export function buildShippingByName(suppliers) {
   for (const supplier of suppliers || []) {
     const key = normSupplierName(supplier.name);
     if (!key) continue;
+    // Tiers arrive as cents from the API; convert to a dollars-sorted ladder so
+    // the row math (which works in dollars) can pick the right step.
+    const tiers = Array.isArray(supplier.shipping_flat_tiers)
+      ? supplier.shipping_flat_tiers
+          .map((t) => ({ min: (t.min_subtotal_cents || 0) / 100, flat: (t.flat_cents || 0) / 100 }))
+          .sort((a, b) => a.min - b.min)
+      : null;
     map[key] = {
       name: supplier.name,
       freeThreshold: supplier.free_shipping_threshold_cents != null ? supplier.free_shipping_threshold_cents / 100 : null,
       flat: supplier.flat_shipping_cents != null ? supplier.flat_shipping_cents / 100 : null,
+      tiers: tiers && tiers.length ? tiers : null,
+      // Ship-time fields (Layer 1/2). Null where the supplier publishes nothing.
+      transitMin: supplier.transit_days_min ?? null,
+      transitMax: supplier.transit_days_max ?? null,
+      cutoffLocal: supplier.order_cutoff_local ?? null,
+      shipsSameDay: supplier.ships_same_day ?? null,
+      distCenterZips: supplier.dist_center_zips ?? null,
+      carrier: supplier.ship_carrier ?? null,
     };
   }
   return map;
@@ -626,12 +799,21 @@ export function buildShippingByName(suppliers) {
 
 // Shipping for one supplier's basket given its item subtotal. Returns null when
 // the policy can't price this basket, so the UI says "not estimated" rather than
-// implying free shipping.
+// implying free shipping. A tiered flat rate (Darby-style) takes precedence over
+// the single flat fee: the highest tier whose min is <= the subtotal wins.
 
 export function computeSupplierShipping(policy, subtotal) {
   if (!policy) return null;
-  const { freeThreshold, flat } = policy;
+  const { freeThreshold, flat, tiers } = policy;
   if (freeThreshold != null && subtotal >= freeThreshold) return 0;
+  if (Array.isArray(tiers) && tiers.length) {
+    let chosen = null;
+    for (const tier of tiers) {
+      if (subtotal >= tier.min) chosen = tier.flat;
+    }
+    // Below the lowest tier's floor, fall back to that first tier's fee.
+    return chosen != null ? chosen : tiers[0].flat;
+  }
   if (flat != null) return flat;
   return null;
 }

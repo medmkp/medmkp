@@ -1458,6 +1458,8 @@ export default function Home() {
               listStatus={liveListStatus}
               onBackToDraft={() => { backToDraft(); navigate("/app"); }}
               buyingPrefs={buyingPrefs}
+              supplierShipping={supplierShipping}
+              shipToState={me?.practice?.ship_state || ""}
               onBuyingPrefs={setBuyingPrefs}
               onBuildCart={setCartGroup}
               submittedSuppliers={submittedSuppliers}

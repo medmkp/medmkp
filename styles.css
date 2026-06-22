@@ -9992,6 +9992,13 @@ th {
 }
 .pp-group-meta { color: var(--muted); font-size: 13px; white-space: nowrap; margin-left: auto; }
 .pp-group-meta strong { color: var(--ink); font-weight: 700; }
+/* Per-supplier estimated delivery window, shown next to the supplier name. */
+.pp-group-eta {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  font-size: 12px; font-weight: 600; color: var(--green); white-space: nowrap;
+}
+.pp-group-eta .button-icon { width: 13px; height: 13px; }
+.pp-group-eta.bad { color: var(--gold); }
 /* The Review view reuses the reorder-list rows (.crl-row), grouped per supplier.
    The header row stays inside the card, no separate scroll container. */
 .pp-group-table .crl-row-head { box-shadow: inset 0 -1px 0 var(--line); }
