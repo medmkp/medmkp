@@ -425,6 +425,14 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
     if (next.has(supplier)) next.delete(supplier); else next.add(supplier);
     return next;
   });
+  // Active (non-submitted) supplier groups collapse on header click so the buyer
+  // can focus on one cart at a time. Default expanded; collapsed names live here.
+  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+  const toggleGroup = (supplier) => setCollapsedGroups((prev) => {
+    const next = new Set(prev);
+    if (next.has(supplier)) next.delete(supplier); else next.add(supplier);
+    return next;
+  });
   const rows = deriveMatchRows(items || [], buyingPrefs);
   const included = rows.filter(isPlanIncluded);
   // No-match lines plus "out of stock everywhere" lines both land here so the
@@ -506,6 +514,7 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
                 const buildable = group.rows.some((row) => row.productUrl);
                 const submitted = submittedSuppliers.includes(group.supplier);
                 const expanded = expandedSubmitted.has(group.supplier);
+                const collapsed = collapsedGroups.has(group.supplier);
                 return (
                   <section className={`crl-card pp-group ${submitted ? "pp-group-submitted" : ""}`} key={group.supplier}>
                     {submitted ? (
@@ -526,14 +535,22 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
                         <Icon name={expanded ? "icon-chevron-down" : "icon-chevron-right"} className="button-icon pp-submitted-chevron" />
                       </div>
                     ) : (
-                      <div className="pp-group-head">
+                      <div
+                        className={`pp-group-head pp-group-head-toggle ${collapsed ? "" : "pp-group-head-open"}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleGroup(group.supplier)}
+                        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleGroup(group.supplier); } }}
+                      >
                         <MatchSupplier name={group.supplier} />
                         <span className="pp-group-meta">{group.count} item{group.count === 1 ? "" : "s"} · <strong>{money.format(group.subtotal)}</strong></span>
                         {onBuildCart && (
-                          <button className="crl-ghost-btn pp-buildcart-btn" type="button" disabled={!buildable} onClick={() => onBuildCart(group)} title={buildable ? "" : "No supplier product links for these items"}>
+                          <button className="crl-ghost-btn pp-buildcart-btn" type="button" disabled={!buildable} onClick={(e) => { e.stopPropagation(); onBuildCart(group); }} title={buildable ? "" : "No supplier product links for these items"}>
                             <Icon name="icon-cart" className="button-icon" />Build cart
                           </button>
                         )}
+                        <Icon name={collapsed ? "icon-chevron-right" : "icon-chevron-down"} className="button-icon pp-submitted-chevron" />
                       </div>
                     )}
                     {submitted ? (
@@ -550,7 +567,7 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
                           </div>
                         </>
                       )
-                    ) : (
+                    ) : !collapsed && (
                       <div className="pp-group-table">
                         <ReorderTableHead />
                         {group.rows.map((row) => (
