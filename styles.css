@@ -9953,7 +9953,11 @@ th {
 
 /* ── Procurement Plan + Supplier Handoff ──────────────────────────────────── */
 .pp, .ho { max-width: 1320px; }
-.pp-header, .ho-header { max-width: none; align-items: flex-start; }
+.pp-header, .ho-header { align-items: flex-start; }
+/* Keep the handoff header full-width; let the Review header inherit
+   .crl-header's table-width cap so "Back to draft" right-aligns with the
+   build-cart tables (and goes full-width below the 2-col breakpoint). */
+.ho-header { max-width: none; }
 .pp-header .history-back, .ho-header .history-back { margin-bottom: 2px; }
 
 .pp-layout {
