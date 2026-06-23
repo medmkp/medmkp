@@ -5,6 +5,7 @@ import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { tokenizeName } from "../../../../matching/normalize"
 import { nameSimilarity, trigrams } from "../../../../matching/search"
 import { gtinVariants } from "../../../../matching/gtin"
+import { parseGs1 } from "../../../../matching/gs1"
 import { parseHibc } from "../../../../matching/hibc"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
 import { isMarketplaceSupplierId } from "../../../../ingestion/marketplace/suppliers"
@@ -41,27 +42,24 @@ function dedupeById<T extends { id: string }>(rows: T[]): T[] {
   return [...seen.values()]
 }
 
-// GS1 barcodes carry the product GTIN in application identifier 01, followed
-// by lot, expiry, quantity, and other production data. BarcodeDetector/ZXing
-// return the full payload, not just the GTIN, so peel out AI 01 before running
-// the exact barcode lookup. Readers may prefix a symbology identifier (]C1 for
-// GS1-128, ]d2 for GS1 Data Matrix); parenthesized manual input is accepted too.
-//
-// QR codes on packaging increasingly carry a GS1 Digital Link URL instead of a
-// raw element string — e.g. "https://id.gs1.org/01/00302730002188/10/LOT" — so
-// pull AI 01 out of the URL path too (the GTIN may be 8–14 digits there).
-function gs1Gtin(value: string): string | null {
-  const raw = value.trim().replace(/^\](?:C1|d2|Q\d?)/i, "")
+// Lot + expiry are read off the physical package by parseGs1 / parseHibc and
+// returned to the client as a `scanned` block on the scan response, alongside
+// the matched products. They identify the specific box on the shelf — the data
+// that feeds expiry alerts and recall pull-lists, and that exists nowhere in our
+// catalog or a practice's purchase history.
+type ScanMeta = { lot?: string; expiry?: string; production_date?: string }
 
-  const link = raw.match(/^https?:\/\/[^\s]*\/01\/(\d{8,14})(?:\/|\?|$)/i)
-  if (link) {
-    const gtin = link[1].padStart(14, "0")
-    return gtinVariants(gtin).length ? gtin : null
-  }
+function scanMeta(lot?: string, expiry?: string, productionDate?: string): ScanMeta | undefined {
+  if (!lot && !expiry && !productionDate) return undefined
+  const meta: ScanMeta = {}
+  if (lot) meta.lot = lot
+  if (expiry) meta.expiry = expiry
+  if (productionDate) meta.production_date = productionDate
+  return meta
+}
 
-  const match = raw.match(/^01(\d{14})/) || raw.match(/^\(01\)(\d{14})/)
-  if (!match) return null
-  return gtinVariants(match[1]).length ? match[1] : null
+function withScanned<T extends object>(resp: T, scanned?: ScanMeta): T {
+  return scanned ? { ...resp, scanned } : resp
 }
 
 // Reverse GUDID lookup: resolve a scanned GTIN to supplier products via the
@@ -401,14 +399,15 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   // EAN-13 vs GTIN-14). gtinVariants() returns [] for a non-GTIN / misread, so a
   // garbage code short-circuits to "none" without querying.
   if (barcode) {
-    const embeddedGtin = gs1Gtin(barcode)
-    const variants = gtinVariants(embeddedGtin || barcode)
+    const gs1 = parseGs1(barcode)
+    const variants = gtinVariants(gs1.gtin || barcode)
+    let scanned = scanMeta(gs1.lot, gs1.expiry, gs1.productionDate)
     const hits = variants.length
       ? dedupeById(await medmkp.listSupplierProducts({ barcode: variants }))
       : []
 
     if (hits.length) {
-      res.json(await scanResponse(medmkp, barcode, "barcode", hits, "barcode", limit))
+      res.json(withScanned(await scanResponse(medmkp, barcode, "barcode", hits, "barcode", limit), scanned))
       return
     }
 
@@ -418,6 +417,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     // scan path (e.g. Pulpdent "ER24" → manufacturer_sku ER24).
     const hibc = parseHibc(barcode)
     if (hibc) {
+      if (!scanned) scanned = scanMeta(hibc.lot, hibc.expiry)
       const codeVariants = [...new Set([hibc.pcn, hibc.pcn.toUpperCase()])]
       const [bySku, byMfrSku] = await Promise.all([
         medmkp.listSupplierProducts({ sku: codeVariants }),
@@ -425,7 +425,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       ])
       const hibcHits = dedupeById([...bySku, ...byMfrSku])
       if (hibcHits.length) {
-        res.json(await scanResponse(medmkp, barcode, "hibc", hibcHits, "sku", limit))
+        res.json(withScanned(await scanResponse(medmkp, barcode, "hibc", hibcHits, "sku", limit), scanned))
         return
       }
     }
@@ -437,13 +437,13 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       if (refIds.length) {
         const refHits = dedupeById(await medmkp.listSupplierProducts({ id: refIds }))
         if (refHits.length) {
-          res.json(await scanResponse(medmkp, barcode, "barcode", refHits, "barcode", limit))
+          res.json(withScanned(await scanResponse(medmkp, barcode, "barcode", refHits, "barcode", limit), scanned))
           return
         }
       }
     }
 
-    res.json({ query: barcode, kind: "none", count: 0, products: [] })
+    res.json(withScanned({ query: barcode, kind: "none", count: 0, products: [] }, scanned))
     return
   }
 

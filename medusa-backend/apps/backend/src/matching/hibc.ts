@@ -1,3 +1,5 @@
+import { yymmddToIso } from "./gs1"
+
 // HIBC (Health Industry Bar Code) parsing for the scanner lookup.
 //
 // Many dental / medical SKUs carry no GS1 GTIN — they're labeled with an HIBC
@@ -19,7 +21,29 @@
 // by an exact-match SKU lookup, so a misread simply returns no rows (a safe "no
 // match") rather than a wrong product.
 
-export type HibcParts = { lic: string; pcn: string }
+export type HibcParts = { lic: string; pcn: string; lot?: string; expiry?: string }
+
+// HIBC secondary supplemental data carries the lot/batch and, optionally, an
+// expiry — the package-only data that drives expiry and recall tracking. We
+// decode the two unambiguous lot-bearing forms:
+//   $$3<YYMMDD><lot><check>   lot + expiry (date-format flag 3 = YYMMDD)
+//   $<lot><check>             lot only, no date
+// The Mod-43 check character is the last character of the whole message, so the
+// trailing character of the secondary is dropped. Only flag 3 is verified
+// against a real label (Pulpdent ER24); for any other date flag we return
+// nothing rather than risk surfacing a wrong lot or expiry — a recall match on a
+// wrong lot is worse than a missing one.
+function parseHibcSecondary(secondary: string): { lot?: string; expiry?: string } {
+  if (!secondary.startsWith("$")) return {}
+  if (secondary.startsWith("$$")) {
+    if (secondary[2] !== "3") return {}
+    return {
+      expiry: yymmddToIso(secondary.slice(3, 9)),
+      lot: secondary.slice(9, -1) || undefined,
+    }
+  }
+  return { lot: secondary.slice(1, -1) || undefined }
+}
 
 export function parseHibc(value: string | null | undefined): HibcParts | null {
   if (typeof value !== "string") return null
@@ -35,12 +59,16 @@ export function parseHibc(value: string | null | undefined): HibcParts | null {
 
   const slash = rest.indexOf("/")
   let pcn: string
+  let lot: string | undefined
+  let expiry: string | undefined
   if (slash >= 0) {
     // Concatenated: the segment before "/" is PCN + UoM (the check character
-    // lives at the tail of the secondary data).
+    // lives at the tail of the secondary data); the segment after carries the
+    // lot and, optionally, the expiry.
     const primary = rest.slice(0, slash)
     if (primary.length < 2) return null
     pcn = primary.slice(0, -1) // drop the unit-of-measure digit
+    ;({ lot, expiry } = parseHibcSecondary(rest.slice(slash + 1)))
   } else {
     // Standalone primary: a trailing UoM digit + check character follow the PCN.
     if (rest.length < 3) return null
@@ -48,5 +76,5 @@ export function parseHibc(value: string | null | undefined): HibcParts | null {
   }
 
   if (!pcn) return null
-  return { lic, pcn }
+  return { lic, pcn, lot, expiry }
 }
