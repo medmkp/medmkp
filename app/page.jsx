@@ -7,7 +7,7 @@ import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NA
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { ScanSessionsView, ScanSessionView } from "./scansessions";
 import { EvidenceView, EvidenceBinderView } from "./evidence";
-import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, MobileBottomNav, MobileScanItemView, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
+import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, MobileScanItemView, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, SavingsView } from "./reorder";
 import { SettingsView } from "./settings";
@@ -34,6 +34,10 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  // Phone surface: mobile is scan-first, so `/app` (home) lands on the scan
+  // session start screen instead of the reorder list. Matches the breakpoint at
+  // which the desktop rail/topbar give way to the mobile layout.
+  const [isMobile, setIsMobile] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -156,6 +160,15 @@ export default function Home() {
     }
     setStateLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Track the phone breakpoint so the home view can render scan-first on mobile.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
   }, []);
 
   // Persist the sidebar collapse preference per-device.
@@ -720,12 +733,6 @@ export default function Home() {
 
   function setView(nextView) {
     navigate(pathForView(nextView));
-  }
-
-  function openMobileScan() {
-    setScanResult(null);
-    setScanCount(0);
-    navigate("/app/scan");
   }
 
   // Start (or resume) a real scan session for a location and drop into it. With
@@ -1344,6 +1351,64 @@ export default function Home() {
     ["settings", "icon-settings", "Settings"],
   ];
 
+  // The reorder list is the desktop home (`/app`) and, on mobile, a menu
+  // destination at `/app/reorder-list`. Defined once and reused in both places.
+  const reorderListEl = (
+    <CurrentReorderList
+      items={activePlanItems}
+      listName={listName}
+      listStatus={liveListStatus}
+      listStage={listStage}
+      onAdvanceStage={advanceToReview}
+      onRenameList={setListName}
+      buyerName={buyerName}
+      practiceName={practiceName}
+      buyerInitials={buyerInitials}
+      email={me?.customer?.email}
+      onLogout={handleLogout}
+      addMode={addMode}
+      onAddMode={setAddMode}
+      lastUpload={lastUpload}
+      onCloseUpload={() => { setAddMode(""); setLastUpload(null); setUploadError(""); }}
+      onUploadAnother={() => { setLastUpload(null); setUploadError(""); }}
+      uploadFormRef={uploadFormRef}
+      onUpload={handleUpload}
+      uploading={uploading}
+      uploadProgress={uploadProgress}
+      uploadElapsed={uploadElapsed}
+      uploadError={uploadError}
+      onCancelUpload={handleCancelUpload}
+      onClearUploadError={() => setUploadError("")}
+      isDraggingInvoice={isDraggingInvoice}
+      onDragStateChange={setIsDraggingInvoice}
+      onInvoiceDrop={handleInvoiceDrop}
+      onInvoiceFile={uploadInvoiceFile}
+      selectedInvoiceName={selectedInvoiceName}
+      hasUploadedInvoice={hasUploadedInvoice}
+      onScan={handleScanComplete}
+      scanResult={scanResult}
+      onClearScanResult={() => setScanResult(null)}
+      scanCount={scanCount}
+      searchTerm={searchTerm}
+      onSearchTerm={setSearchTerm}
+      searchResults={searchResults}
+      searchLoading={searchLoading}
+      onToast={showToast}
+      listTouched={listTouched}
+      buyingPrefs={buyingPrefs}
+      supplierShipping={supplierShipping}
+      onBuyingPrefs={setBuyingPrefs}
+      onApplyOptimized={applyOptimizedPlan}
+      onArchiveList={requestSaveList}
+      onClearList={requestClearList}
+      onConfirmMatch={applyMatchDecision}
+      onLinkProduct={linkProductToItem}
+      onRemoveItem={removeDraftItem}
+      onRefresh={refreshFromServer}
+      onNavigate={navigate}
+    />
+  );
+
   if (!isLoggedIn) {
     return (
       <>
@@ -1545,63 +1610,19 @@ export default function Home() {
                 onClearScanResult={() => setScanResult(null)}
                 scanCount={scanCount}
               />
-            ) : (
-              <CurrentReorderList
-                items={activePlanItems}
-                listName={listName}
-                listStatus={liveListStatus}
-                listStage={listStage}
-                onAdvanceStage={advanceToReview}
-                onRenameList={setListName}
-                buyerName={buyerName}
-                practiceName={practiceName}
-                buyerInitials={buyerInitials}
-                email={me?.customer?.email}
-                onLogout={handleLogout}
-                addMode={addMode}
-                onAddMode={setAddMode}
-                lastUpload={lastUpload}
-                onCloseUpload={() => { setAddMode(""); setLastUpload(null); setUploadError(""); }}
-                onUploadAnother={() => { setLastUpload(null); setUploadError(""); }}
-                uploadFormRef={uploadFormRef}
-                onUpload={handleUpload}
-                uploading={uploading}
-                uploadProgress={uploadProgress}
-                uploadElapsed={uploadElapsed}
-                uploadError={uploadError}
-                onCancelUpload={handleCancelUpload}
-                onClearUploadError={() => setUploadError("")}
-                isDraggingInvoice={isDraggingInvoice}
-                onDragStateChange={setIsDraggingInvoice}
-                onInvoiceDrop={handleInvoiceDrop}
-                onInvoiceFile={uploadInvoiceFile}
-                selectedInvoiceName={selectedInvoiceName}
-                hasUploadedInvoice={hasUploadedInvoice}
-                onScan={handleScanComplete}
-                scanResult={scanResult}
-                onClearScanResult={() => setScanResult(null)}
-                scanCount={scanCount}
-                searchTerm={searchTerm}
-                onSearchTerm={setSearchTerm}
-                searchResults={searchResults}
-                searchLoading={searchLoading}
+            ) : isMobile ? (
+              <ScanSessionsView
+                onOpenSession={(id) => navigate(`/app/scan-sessions/${id}`)}
                 onNavigate={navigate}
                 onToast={showToast}
-                listTouched={listTouched}
-                buyingPrefs={buyingPrefs}
-                supplierShipping={supplierShipping}
-                onBuyingPrefs={setBuyingPrefs}
-                onApplyOptimized={applyOptimizedPlan}
-                onArchiveList={requestSaveList}
-                onClearList={requestClearList}
-                onConfirmMatch={applyMatchDecision}
-                onLinkProduct={linkProductToItem}
-                onRemoveItem={removeDraftItem}
-                onRefresh={refreshFromServer}
-                onNavigate={navigate}
+                onLogout={handleLogout}
               />
+            ) : (
+              reorderListEl
             )
           )}
+
+          {view === "reorderList" && reorderListEl}
 
           {view === "locations" && (
             <LocationsBoardView
@@ -1635,6 +1656,7 @@ export default function Home() {
               onOpenSession={(id) => navigate(`/app/scan-sessions/${id}`)}
               onNavigate={navigate}
               onToast={showToast}
+              onLogout={handleLogout}
             />
           )}
 
@@ -1760,11 +1782,6 @@ export default function Home() {
             />
           )}
         </main>
-        <MobileBottomNav
-          view={view}
-          onNavigate={setView}
-          onScan={openMobileScan}
-        />
         </div>
       </div>
 

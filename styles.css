@@ -6981,7 +6981,7 @@ th {
 
 @media (max-width: 767px) {
   .app-body {
-    padding-bottom: 86px;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .mobile-add-item-shell {

@@ -130,33 +130,6 @@ export function MobileScanItemView({ onBack, onScan, scanResult, onClearScanResu
 }
 
 
-export function MobileBottomNav({ view, onNavigate, onScan }) {
-  return (
-    <nav className="mobile-bottom-nav" aria-label="Mobile primary navigation">
-      <div className="m-nav-group">
-        <button className={view === "home" ? "active" : ""} type="button" onClick={() => onNavigate("home")}>
-          <span><Icon name="icon-list" className="mobile-bottom-icon" /></span>List
-        </button>
-        <button className={view === "catalog" || view === "catalogCategory" ? "active" : ""} type="button" onClick={() => onNavigate("catalog")}>
-          <span><Icon name="icon-store" className="mobile-bottom-icon" /></span>Catalog
-        </button>
-      </div>
-      <button className="m-nav-fab" type="button" aria-label="Scan barcode" onClick={onScan}>
-        <Icon name="icon-scan" className="m-nav-fab-icon" />
-      </button>
-      <div className="m-nav-group">
-        <button className={view === "savings" ? "active" : ""} type="button" onClick={() => onNavigate("savings")}>
-          <span><Icon name="icon-dollar-circle" className="mobile-bottom-icon" /></span>Savings
-        </button>
-        <button className={view === "settings" ? "active" : ""} type="button" onClick={() => onNavigate("settings")}>
-          <span><Icon name="icon-settings" className="mobile-bottom-icon" /></span>Settings
-        </button>
-      </div>
-    </nav>
-  );
-}
-
-
 export function LoggedOutLanding({ onNavigate, authed = false }) {
   return (
     <main className="landing-page">

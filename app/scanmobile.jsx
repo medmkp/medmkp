@@ -64,8 +64,20 @@ function offerPack(line) {
 
 // ── Screen 1 + 5: Start scan session / Choose location ────────────────
 
-export function MobileScanStart({ loading, sessions, locations, starting, onOpenSession, onStart, onNavigate }) {
+// Destinations reachable from the scan-first home (mobile has no bottom nav, so
+// the low-frequency surfaces live behind a menu on this screen).
+const MENU_ITEMS = [
+  { label: "Reorder list", icon: "icon-cart", path: "/app/reorder-list" },
+  { label: "Locations", icon: "icon-map-pin", path: "/app/locations" },
+  { label: "History", icon: "icon-clock", path: "/app/history" },
+  { label: "Settings", icon: "icon-settings", path: "/app/settings" },
+];
+
+export function MobileScanStart({ loading, sessions, locations, starting, needsAttention, onOpenSession, onStart, onNavigate, onLogout }) {
   const [mode, setMode] = useState("home");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const attnItems = needsAttention?.items || 0;
+  const attnLocs = needsAttention?.locations || 0;
 
   const active = useMemo(() => sessions.filter((x) => x.status === "active"), [sessions]);
   const resume = active[0] || null;
@@ -158,8 +170,8 @@ export function MobileScanStart({ loading, sessions, locations, starting, onOpen
   return (
     <div className={s.screen}>
       <header className={s.topbar}>
-        <button type="button" className={s.iconBtn} onClick={() => onNavigate?.("/app")} aria-label="Back">
-          <Icon name="icon-chevron-left" />
+        <button type="button" className={s.iconBtn} onClick={() => setMenuOpen(true)} aria-label="Menu" aria-haspopup="menu">
+          <Icon name="icon-grid" />
         </button>
         <span className={s.brand}><BrandMark /></span>
         <span className={s.topSpacer} />
@@ -169,6 +181,17 @@ export function MobileScanStart({ loading, sessions, locations, starting, onOpen
           <h1 className={s.h1}>Start scan session</h1>
           <p className={s.sub}>Pick up where you left off or start a new location.</p>
         </div>
+
+        {attnItems > 0 && (
+          <button type="button" className={s.attnCard} onClick={() => onNavigate?.("/app/locations")}>
+            <span className={s.attnIcon}><Icon name="icon-alert-triangle" /></span>
+            <span className={s.attnBody}>
+              <span className={s.attnTitle}>{attnItems} item{attnItems === 1 ? "" : "s"} need{attnItems === 1 ? "s" : ""} attention</span>
+              <span className={s.attnSub}>Across {attnLocs} location{attnLocs === 1 ? "" : "s"} · expiring, low, or missing lot/expiry</span>
+            </span>
+            <span className={s.attnChevron}><Icon name="icon-chevron-right" /></span>
+          </button>
+        )}
 
         {loading ? (
           <div className={s.emptyNote}>Loading…</div>
@@ -224,6 +247,39 @@ export function MobileScanStart({ loading, sessions, locations, starting, onOpen
           </>
         )}
       </div>
+
+      {menuOpen && (
+        <div className={s.menuRoot} role="dialog" aria-modal="true" aria-label="Menu">
+          <div className={s.menuBackdrop} onClick={() => setMenuOpen(false)} />
+          <div className={s.menuSheet}>
+            <header className={s.menuHead}>
+              <strong>Menu</strong>
+              <button type="button" className={s.menuClose} aria-label="Close" onClick={() => setMenuOpen(false)}>
+                <Icon name="icon-x" />
+              </button>
+            </header>
+            <ul className={s.menuList}>
+              {MENU_ITEMS.map((item) => (
+                <li key={item.path}>
+                  <button type="button" className={s.menuItem} onClick={() => { setMenuOpen(false); onNavigate?.(item.path); }}>
+                    <span className={s.menuItemIcon}><Icon name={item.icon} /></span>
+                    <span className={s.menuItemLabel}>{item.label}</span>
+                    <Icon name="icon-chevron-right" className={s.menuItemChevron} />
+                  </button>
+                </li>
+              ))}
+              {onLogout && (
+                <li>
+                  <button type="button" className={`${s.menuItem} ${s.menuItemDanger}`} onClick={() => { setMenuOpen(false); onLogout(); }}>
+                    <span className={s.menuItemIcon}><Icon name="icon-logout" /></span>
+                    <span className={s.menuItemLabel}>Sign out</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

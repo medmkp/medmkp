@@ -49,6 +49,7 @@ export const routeByView = {
   resetPassword: "/reset-password",
   styleguide: "/styleguide",
   home: "/app",
+  reorderList: "/app/reorder-list",
   locations: "/app/locations",
   locationAdd: "/app/locations/new",
   scanSessions: "/app/scan-sessions",
@@ -81,6 +82,7 @@ export function viewFromPath(pathname = "/") {
 
   // Authenticated app
   if (path === "/app") return { view: "home", isLoggedIn: true };
+  if (path === "/app/reorder-list") return { view: "reorderList", isLoggedIn: true };
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
   if (path === "/app/scan-sessions") return { view: "scanSessions", isLoggedIn: true };
   if (path.startsWith("/app/scan-sessions/")) return { view: "scanSession", isLoggedIn: true, scanSessionId: decodeURIComponent(path.split("/")[3] || "") };
