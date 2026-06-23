@@ -13,9 +13,9 @@ import s from "./locations.module.css";
 // Per room-type icon + tint, mirroring the office-layout editor's vocabulary.
 const TYPE_META = {
   operatory: { icon: "icon-dental-chair", tint: s.tBlue, label: "Operatory" },
-  cabinet: { icon: "icon-archive-down", tint: s.tIndigo, label: "Cabinet" },
+  cabinet: { icon: "icon-cabinet", tint: s.tIndigo, label: "Cabinet" },
   sterilization: { icon: "icon-shield-check", tint: s.tTeal, label: "Sterilization" },
-  lab: { icon: "icon-bolt", tint: s.tViolet, label: "Lab" },
+  lab: { icon: "icon-microscope", tint: s.tViolet, label: "Lab" },
   storage: { icon: "icon-package", tint: s.tSlate, label: "Storage" },
   emergency_kit: { icon: "icon-alert-triangle", tint: s.tRed, label: "Emergency kit" },
   other: { icon: "icon-map-pin", tint: s.tBlue, label: "Location" },
