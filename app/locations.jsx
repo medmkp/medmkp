@@ -16,9 +16,9 @@ const TYPE_META = {
   operatory: { icon: "icon-dental-chair", tint: s.tBlue, label: "Operatory" },
   cabinet: { icon: "icon-cabinet", tint: s.tIndigo, label: "Cabinet" },
   sterilization: { icon: "icon-shield-check", tint: s.tTeal, label: "Sterilization" },
-  lab: { icon: "icon-microscope", tint: s.tViolet, label: "Lab" },
+  lab: { icon: "icon-flask", tint: s.tViolet, label: "Lab" },
   storage: { icon: "icon-package", tint: s.tSlate, label: "Storage" },
-  emergency_kit: { icon: "icon-alert-triangle", tint: s.tRed, label: "Emergency kit" },
+  emergency_kit: { icon: "icon-first-aid", tint: s.tRed, label: "Emergency kit" },
   other: { icon: "icon-map-pin", tint: s.tBlue, label: "Location" },
 };
 

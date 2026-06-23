@@ -221,12 +221,21 @@ export function IconSprite() {
         <rect x="13" y="13" width="7" height="7" rx="1.4" />
       </symbol>
       <symbol id="icon-dental-chair" viewBox="0 0 24 24">
-        <path d="M5 5.6 8.2 7.4" />
-        <path d="M6.4 6.4 10.6 12.4H18" />
-        <path d="M18 12.4 20.2 10.8" />
-        <path d="M12.4 12.4v3.6" />
-        <path d="M8.8 20.2h7.2" />
-        <path d="M12.4 16 9.9 20.2M12.4 16 14.9 20.2" />
+        <circle cx="18.5" cy="4.8" r="1.6" />
+        <path d="M17.2 5.7 13.6 8.2" />
+        <path d="M4.2 12.5 5 8.9a2 2 0 0 1 2.4-1.5l5 1a2 2 0 0 1 1.6 2.2l-.4 2.9" />
+        <path d="M4.2 12.5h9a2 2 0 0 1 0 4H7.4" />
+        <path d="M9 16.5V19.5M6.4 19.5h5.4" />
+      </symbol>
+      <symbol id="icon-flask" viewBox="0 0 24 24">
+        <path d="M14 3v6a2 2 0 0 0 .24.96l5.51 9.58A2 2 0 0 1 18 22.5H6a2 2 0 0 1-1.75-2.96L9.76 9.96A2 2 0 0 0 10 9V3" />
+        <path d="M6.6 15h10.8" />
+        <path d="M8.5 3h7" />
+      </symbol>
+      <symbol id="icon-first-aid" viewBox="0 0 24 24">
+        <path d="M6 7h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+        <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />
+        <path d="M12 11.5v5M9.5 14h5" />
       </symbol>
       <symbol id="icon-microscope" viewBox="0 0 24 24">
         <path d="M6 18h8" />
