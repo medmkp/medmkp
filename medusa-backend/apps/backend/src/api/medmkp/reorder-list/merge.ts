@@ -14,10 +14,14 @@
 
 export type Item = Record<string, any>
 
-// Stable identity for a row — mirrors the web client's keyOf so the same product
-// lands in the same merge bucket on both client and server.
+// Stable identity for a row — mirrors the web client's keyOf so the same item
+// lands in the same merge bucket on both client and server. Keys ONLY on fields
+// that never change over an item's lifecycle: `barcode` (the natural identity of
+// a scanned item) and `extractedFrom` (the original source text) are immutable;
+// `product` is deliberately excluded because matching an unmatched item fills it
+// in, which would change the key mid-life and split one item into two on merge.
 export const itemKey = (item: Item): string =>
-  (item && (item.product || item.extractedFrom || item.sku || item.id)) || ""
+  (item && (item.barcode || item.extractedFrom || item.sku || item.id)) || ""
 
 const itemTs = (item: Item): number => Number(item?.updatedAt) || 0
 
@@ -26,19 +30,32 @@ const itemTs = (item: Item): number => Number(item?.updatedAt) || 0
 // bound.
 export const TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
+// Choose the surviving copy of one item seen on both sides. Higher updatedAt
+// wins (newest write). On a TIE, a tombstone (`included:false`) beats an active
+// copy, so a deletion is "sticky": a stale device re-sending the pre-delete copy
+// with an equal — or absent/legacy-zero — timestamp can never resurrect it. A
+// genuine re-add still wins because it carries a strictly newer updatedAt.
+// Symmetric in its inputs, so the merge is order-independent (commutative).
+const pickSurvivor = (a: Item, b: Item): Item => {
+  const ta = itemTs(a)
+  const tb = itemTs(b)
+  if (ta !== tb) return ta > tb ? a : b
+  const aRemoved = a.included === false
+  const bRemoved = b.included === false
+  if (aRemoved !== bRemoved) return aRemoved ? a : b
+  return b
+}
+
 export function mergeDraftItems(
   existing: Item[] = [],
   incoming: Item[] = [],
   now: number = Date.now(),
 ): Item[] {
   const byKey = new Map<string, Item>()
-  for (const item of existing) byKey.set(itemKey(item), item)
-  for (const item of incoming) {
+  for (const item of [...existing, ...incoming]) {
     const key = itemKey(item)
     const current = byKey.get(key)
-    // Newest write wins per item; a tombstone with a fresher updatedAt beats a
-    // stale included:true copy, so removals/clears propagate across devices.
-    if (!current || itemTs(item) >= itemTs(current)) byKey.set(key, item)
+    byKey.set(key, current ? pickSurvivor(current, item) : item)
   }
   const cutoff = now - TOMBSTONE_TTL_MS
   // Drop expired tombstones; keep active items and any legacy row (updatedAt 0).

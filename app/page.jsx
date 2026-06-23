@@ -197,7 +197,10 @@ export default function Home() {
           // would drop one side; the union keeps both.
           const localItems = (local && local.draftItems) || [];
           const serverItems = data.state.draftItems || [];
-          const keyOf = (item) => item.product || item.extractedFrom || item.sku || item.id || "";
+          // Key on lifecycle-stable fields only (barcode/extractedFrom never change);
+      // `product` is excluded because matching fills it in, which would change an
+      // item's key mid-life and split it into a duplicate on the server merge.
+      const keyOf = (item) => item.barcode || item.extractedFrom || item.sku || item.id || "";
           const serverKeys = new Set(serverItems.map(keyOf));
           const localOnly = localItems.filter((item) => !serverKeys.has(keyOf(item)));
           // Union uploadedDocs too, else a kept local-only item whose source doc
@@ -306,13 +309,23 @@ export default function Home() {
         // best-effort; localStorage still holds the blob for next load
       }
     };
-    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        flush();
+      } else {
+        // Tab back in focus (e.g. switching phone -> desktop mid-demo): pull the
+        // latest so cross-device scans/clears appear without a manual refresh.
+        // refreshFromServer flushes any pending local edits before reading back.
+        refreshFromServer();
+      }
+    };
     window.addEventListener("pagehide", flush);
-    document.addEventListener("visibilitychange", onHide);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("pagehide", flush);
-      document.removeEventListener("visibilitychange", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed]);
 
   // Supplier names for the preferred-supplier picker, plus each supplier's
@@ -1001,7 +1014,10 @@ export default function Home() {
       // server doesn't have yet. Other fields take the server's value.
       const localItems = (latestBlobRef.current?.draftItems) || draftItems || [];
       const serverItems = data.state.draftItems || [];
-      const keyOf = (item) => item.product || item.extractedFrom || item.sku || item.id || "";
+      // Key on lifecycle-stable fields only (barcode/extractedFrom never change);
+      // `product` is excluded because matching fills it in, which would change an
+      // item's key mid-life and split it into a duplicate on the server merge.
+      const keyOf = (item) => item.barcode || item.extractedFrom || item.sku || item.id || "";
       const serverKeys = new Set(serverItems.map(keyOf));
       const localOnly = localItems.filter((item) => !serverKeys.has(keyOf(item)));
       // Union uploadedDocs too. A kept local-only item (e.g. a fresh invoice
