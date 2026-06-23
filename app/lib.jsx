@@ -83,6 +83,7 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/history") return { view: "history", isLoggedIn: true };
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
   if (path === "/app/locations/new") return { view: "locationAdd", isLoggedIn: true };
+  if (path.startsWith("/app/locations/")) return { view: "locationDetail", isLoggedIn: true, locationId: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/locations") return { view: "locations", isLoggedIn: true };
   if (path === "/app/savings") return { view: "savings", isLoggedIn: true };
   if (path === "/app/catalog") return { view: "catalog", isLoggedIn: true };

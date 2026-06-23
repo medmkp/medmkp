@@ -12,7 +12,8 @@
    grey that otherwise wins on the <svg>), and renders as a clean stroke — this
    also restores stroke rendering for the custom-classed chevrons. */
 .board svg,
-.add svg {
+.add svg,
+.detail svg {
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -128,8 +129,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 220px;
+  flex: 1 1 200px;
   min-width: 180px;
+  max-width: 280px;
   background: #f7f9fc;
   border: 1px solid #e0e6ef;
   border-radius: 10px;
@@ -158,19 +160,24 @@
 .field {
   position: relative;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
+  align-items: center;
   background: #fff;
   border: 1px solid #e0e6ef;
   border-radius: 10px;
-  padding: 5px 30px 5px 12px;
-  min-width: 132px;
+  padding: 0 30px 0 12px;
+  min-width: 128px;
 }
 
+/* Label notched into the field's top border (outlined-input style). */
 .fieldLabel {
+  position: absolute;
+  top: -7px;
+  left: 9px;
+  padding: 0 5px;
+  background: #fff;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1;
   color: #8a97a6;
 }
 
@@ -200,7 +207,13 @@
   pointer-events: none;
 }
 
-.toolbarSpacer { flex: 1 1 auto; }
+/* Action buttons stay grouped + right-aligned; wrap together (not singly) when
+   the toolbar runs out of room on narrower screens. */
+.toolbarActions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
 
 .scanBtn {
   display: inline-flex;
@@ -277,6 +290,14 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 }
 
 .cardIcon {
@@ -1179,4 +1200,336 @@
   .scanBtn { flex: 1 1 100%; justify-content: center; }
   .formRow { grid-template-columns: 1fr; }
   .useGrid { grid-template-columns: 1fr; }
+}
+
+/* ════════════════════════════════════════════════════════════════════ */
+/*  Location Detail                                                       */
+/* ════════════════════════════════════════════════════════════════════ */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1480px;
+}
+
+/* Foreground (text) tones for inline icons + status labels */
+.txBlue { color: #155dfc; }
+.txGreen { color: #0a9861; }
+.txAmber { color: #c2710c; }
+.txRed { color: #d1352b; }
+
+.badgeRed { color: #c5392e; background: #fdeceb; }
+
+/* ── Location header card ───────────────────────────────────────────── */
+.locHeader {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1.4fr) auto;
+  gap: 24px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 16px;
+  padding: 18px 20px;
+}
+
+.locHeadMain { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.locHeadBody { min-width: 0; }
+.locHeadName { font-size: 18px; font-weight: 700; color: #14202E; }
+
+.locProgress { display: flex; flex-direction: column; gap: 7px; }
+.locProgressLabel { font-size: 12.5px; font-weight: 600; color: #6b7888; }
+
+.locMeta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 4px; }
+.locMetaItem { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: #3a4a5a; }
+.locMetaItem svg { width: 15px; height: 15px; color: #9aa6b4; }
+.locMetaItem small { display: block; font-size: 11px; font-weight: 500; color: #9aa6b4; }
+
+.locActions { display: flex; flex-direction: column; gap: 8px; min-width: 180px; }
+.locActions .scanBtn { justify-content: center; height: 40px; }
+
+.btnWide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #d6deea;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #2a3a4a;
+  background: #fff;
+  cursor: pointer;
+}
+.btnWide svg { width: 15px; height: 15px; margin-left: auto; }
+.btnWide:hover { border-color: #2F5BD6; color: #2F5BD6; }
+
+.printLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: none;
+  border: 0;
+  padding: 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2F5BD6;
+  cursor: pointer;
+}
+.printLink svg { width: 15px; height: 15px; }
+.printLink:hover { color: #1f47b8; }
+
+/* ── Detail body grid ───────────────────────────────────────────────── */
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 18px;
+  align-items: start;
+}
+
+.detailMain { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.detailRail { display: flex; flex-direction: column; gap: 16px; }
+
+.cardHeadRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.cardHeadRow .panelTitle { margin: 0; }
+
+.filterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #e0e6ef;
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #3a4a5a;
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filterBtn svg { width: 15px; height: 15px; color: #8a97a6; }
+.filterBtn:hover { border-color: #2F5BD6; color: #2F5BD6; }
+
+/* ── Items table ────────────────────────────────────────────────────── */
+.tableWrap { overflow-x: auto; margin: 14px -4px 0; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8a97a6;
+  padding: 0 12px 9px;
+  border-bottom: 1px solid #eef1f6;
+  white-space: nowrap;
+}
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f4f8;
+  vertical-align: middle;
+  white-space: nowrap;
+  color: #2a3a4a;
+}
+.table tbody tr:hover { background: #fafcff; }
+
+.tItem { font-weight: 600; color: #14202E; }
+.tMuted { color: #8a97a6; }
+.tdRed { color: #d1352b; font-weight: 600; }
+.tdAmber { color: #c2710c; font-weight: 600; }
+
+.evi { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.evi svg { width: 14px; height: 14px; }
+
+.savings { color: #0a9861; font-weight: 700; }
+
+.tLink {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: #2F5BD6;
+  cursor: pointer;
+}
+.tLink:hover { text-decoration: underline; }
+
+.tActions { display: flex; align-items: center; gap: 4px; }
+.tBtn {
+  border: 1px solid #d6deea;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #2a3a4a;
+  background: #fff;
+  cursor: pointer;
+}
+.tBtn:hover { border-color: #2F5BD6; color: #2F5BD6; }
+
+.kebab {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  color: #9aa6b4;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.kebab:hover { background: #eef1f6; color: #2a3a4a; }
+
+/* Table footer + pager */
+.tableFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  font-size: 12.5px;
+}
+.pager { display: flex; align-items: center; gap: 4px; }
+.pageNum, .pageNav {
+  min-width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e0e6ef;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #3a4a5a;
+  cursor: pointer;
+}
+.pageNav svg { width: 15px; height: 15px; }
+.pageNum:hover, .pageNav:hover { border-color: #2F5BD6; color: #2F5BD6; }
+.pageActive { background: #2F5BD6; border-color: #2F5BD6; color: #fff; }
+.pageActive:hover { color: #fff; }
+
+/* ── Recent scans ───────────────────────────────────────────────────── */
+.scanRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid #eef1f6;
+}
+.scanRow:first-of-type { border-top: 0; }
+.scanBody { flex: 1; min-width: 0; }
+.scanText { font-size: 13.5px; font-weight: 600; color: #14202E; }
+.scanMeta { font-size: 12px; color: #8a97a6; margin-top: 1px; }
+.scanWho { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.scanWho .footMetaValue { font-size: 12.5px; }
+.scanTime { font-size: 12px; color: #8a97a6; white-space: nowrap; min-width: 64px; text-align: right; }
+
+/* ── Issues card ────────────────────────────────────────────────────── */
+.issueRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid #eef1f6;
+}
+.issueRow:first-of-type { border-top: 0; }
+.issueIcon { display: inline-flex; }
+.issueIcon svg { width: 17px; height: 17px; }
+.issueLabel { flex: 1; font-size: 13.5px; font-weight: 600; color: #2a3a4a; }
+.issueValue { font-size: 14px; font-weight: 700; color: #14202E; }
+
+.railBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid #d6deea;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #2a3a4a;
+  background: #fff;
+  cursor: pointer;
+}
+.railBtn svg { width: 15px; height: 15px; }
+.railBtn:hover { border-color: #2F5BD6; color: #2F5BD6; }
+
+/* ── Evidence card ──────────────────────────────────────────────────── */
+.evidenceRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid #eef1f6;
+}
+.evidenceRow:first-of-type { border-top: 0; }
+.eviDot { display: inline-flex; }
+.eviDot svg { width: 16px; height: 16px; }
+.eviLabel { flex: 1; font-size: 13px; color: #2a3a4a; }
+.eviStatus { font-size: 12.5px; font-weight: 600; }
+
+/* ── Reorder needs card ─────────────────────────────────────────────── */
+.reorderHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.reorderHead .railTitle { margin: 0 0 2px; }
+.reorderEst { text-align: right; }
+.reorderEst small { display: block; }
+.reorderEst .savings { font-size: 18px; }
+
+.reorderRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid #eef1f6;
+}
+.reorderName { font-size: 13px; font-weight: 600; color: #14202E; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.railPrimary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #2F5BD6;
+  cursor: pointer;
+}
+.railPrimary svg { width: 16px; height: 16px; }
+.railPrimary:hover { background: #2449b3; }
+
+/* ── Detail responsive ──────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .detailGrid { grid-template-columns: 1fr; }
+  .detailRail { flex-direction: row; flex-wrap: wrap; }
+  .detailRail .railCard { flex: 1 1 280px; }
+  .locHeader { grid-template-columns: 1fr; }
+  .locActions { min-width: 0; }
 }

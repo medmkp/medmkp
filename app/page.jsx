@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchResults } from "./catalog";
 import { BrandMark, Icon, IconSprite } from "./icons";
 import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, lookupScannedProduct, makeScanDraftItem, mapSearchOffer, money, newItemId, parseAttributes, pathForView, shopifyStockKey, slimHandoffRow, statusFromItem, viewFromPath } from "./lib";
-import { AddLocationView, LocationsBoardView } from "./locations";
+import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, MobileBottomNav, MobileScanItemView, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, SavingsView } from "./reorder";
@@ -26,6 +26,7 @@ export default function Home() {
   const [productHandle, setProductHandle] = useState(null);
   const [categorySlug, setCategorySlug] = useState(null);
   const [supplierId, setSupplierId] = useState(null);
+  const [locationId, setLocationId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -678,6 +679,7 @@ export default function Home() {
     setProductHandle(next.productHandle || null);
     setCategorySlug(next.categorySlug || null);
     setSupplierId(next.supplierId || null);
+    setLocationId(next.locationId || null);
     setSearchQuery(next.searchQuery || "");
     setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
     setMenuOpen(false);
@@ -1566,6 +1568,7 @@ export default function Home() {
             <LocationsBoardView
               onStartScan={openMobileScan}
               onAddLocation={() => navigate("/app/locations/new")}
+              onOpenLocation={(id) => navigate(`/app/locations/${id}`)}
               onToast={showToast}
             />
           )}
@@ -1574,6 +1577,15 @@ export default function Home() {
             <AddLocationView
               onCancel={() => navigate("/app/locations")}
               onSave={() => navigate("/app/locations")}
+              onToast={showToast}
+            />
+          )}
+
+          {view === "locationDetail" && (
+            <LocationDetailView
+              locationId={locationId}
+              onBack={() => navigate("/app/locations")}
+              onStartScan={openMobileScan}
               onToast={showToast}
             />
           )}

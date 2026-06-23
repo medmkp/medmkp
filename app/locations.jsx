@@ -35,6 +35,8 @@ const STATUS_META = {
 };
 
 const TONE = { blue: s.tBlue, green: s.tGreen, amber: s.tAmber, red: s.tRed, violet: s.tViolet, slate: s.tSlate };
+// Text/foreground tone (no background) for inline icons + status labels.
+const TONE_TEXT = { blue: s.txBlue, green: s.txGreen, amber: s.txAmber, red: s.txRed };
 
 const BOARD_MOCK = {
   stats: {
@@ -199,14 +201,14 @@ function Select({ label, value, onChange, options }) {
   );
 }
 
-function LocationCard({ loc, onAction }) {
+function LocationCard({ loc, onAction, onOpen }) {
   const meta = typeMeta(loc.type);
   const status = STATUS_META[loc.status] || STATUS_META.not_started;
   const complete = loc.progress === 100 || loc.status === "healthy";
 
   return (
     <article className={s.card}>
-      <div className={s.cardHead}>
+      <button type="button" className={s.cardHead} onClick={() => onOpen?.(loc.id)} title={`Open ${loc.name}`}>
         <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
         <div className={s.cardHeadBody}>
           <div className={s.cardTitleRow}>
@@ -215,7 +217,7 @@ function LocationCard({ loc, onAction }) {
           </div>
           <div className={s.cardSub}>{loc.room}{loc.sub ? ` · ${loc.sub}` : ` · ${meta.label}`}</div>
         </div>
-      </div>
+      </button>
 
       {loc.empty ? (
         <div className={s.cardEmpty}>
@@ -283,7 +285,7 @@ function LocationCard({ loc, onAction }) {
   );
 }
 
-export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocation, onToast }) {
+export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocation, onOpenLocation, onToast }) {
   const { stats, locations, activity } = data;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -312,8 +314,9 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
 
   const tellSoon = () => onToast?.("Scan sessions land in an upcoming phase.");
 
-  function handleCardAction(action) {
+  function handleCardAction(action, loc) {
     if (action === "resume") return (onStartScan ? onStartScan() : tellSoon());
+    if (action === "open" || action === "review") return onOpenLocation?.(loc.id);
     tellSoon();
   }
 
@@ -381,15 +384,16 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
             { value: "attention", label: "Needs attention" },
           ]}
         />
-        <span className={s.toolbarSpacer} />
-        <button type="button" className={s.addBtn} onClick={() => onAddLocation?.()}>
-          <Icon name="icon-plus" />
-          Add location
-        </button>
-        <button type="button" className={s.scanBtn} onClick={() => (onStartScan ? onStartScan() : tellSoon())}>
-          <Icon name="icon-scan" />
-          Start mobile scan
-        </button>
+        <div className={s.toolbarActions}>
+          <button type="button" className={s.addBtn} onClick={() => onAddLocation?.()}>
+            <Icon name="icon-plus" />
+            Add location
+          </button>
+          <button type="button" className={s.scanBtn} onClick={() => (onStartScan ? onStartScan() : tellSoon())}>
+            <Icon name="icon-scan" />
+            Start mobile scan
+          </button>
+        </div>
       </div>
 
       <div className={s.layout}>
@@ -397,7 +401,7 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
           {visible.length === 0 ? (
             <div className={s.empty}>No locations match your filters.</div>
           ) : (
-            visible.map((loc) => <LocationCard key={loc.id} loc={loc} onAction={handleCardAction} />)
+            visible.map((loc) => <LocationCard key={loc.id} loc={loc} onAction={handleCardAction} onOpen={onOpenLocation} />)
           )}
         </div>
 
@@ -680,6 +684,272 @@ export function AddLocationView({ onCancel, onSave, onToast }) {
             <button type="button" className={s.railLink} onClick={() => onToast?.("Docs coming soon.")}>
               Learn more about locations
               <Icon name="icon-arrow-right" />
+            </button>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+// ── Location Detail ───────────────────────────────────────────────────
+
+// Representative per-location detail. The clicked location's identity (name,
+// room, type, status, progress, assignee) is read from the board mock for the
+// header + breadcrumb; the item table / evidence / reorder data below is shared
+// mock until the Phase-1 backend exposes per-item inventory.
+const DETAIL = {
+  items: [
+    { name: "Nitrile Exam Gloves, Medium", sku: "GLV-NTR-M", onHand: "2 boxes", onHandTone: "red", par: "10 boxes", status: { label: "Reorder now", tone: "red" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$11.25" }, scanned: "May 16, 2024 · 9:10 AM", action: "Reorder" },
+    { name: "CaviWipes Disinfectant Wipes", sku: "CW-160", onHand: "1 canister", onHandTone: "red", par: "4 canisters", status: { label: "Needs review", tone: "amber" }, evidence: { label: "Expiration captured", icon: "icon-clock", tone: "amber" }, reorder: { type: "link", value: "Review" }, scanned: "May 15, 2024 · 3:22 PM", action: "Review" },
+    { name: "Procedure Face Masks, Blue", sku: "MASK-BLUE", onHand: "4 boxes", par: "8 boxes", status: { label: "Needs details", tone: "amber" }, evidence: { label: "Missing lot", icon: "icon-alert-triangle", tone: "red" }, reorder: { type: "link", value: "Add details" }, scanned: "May 14, 2024 · 11:05 AM", action: "Add details" },
+    { name: "Sterilization Pouch 3.5\" x 9\"", sku: "DEF-359", onHand: "3 boxes", par: "6 boxes", status: { label: "Healthy", tone: "green" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$6.35" }, scanned: "May 16, 2024 · 8:55 AM", action: "Reorder" },
+    { name: "Patient Bibs, Blue", sku: "BIB-BLUE", onHand: "12 packs", par: "10 packs", status: { label: "Healthy", tone: "green" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$4.80" }, scanned: "May 16, 2024 · 8:48 AM", action: "Reorder" },
+    { name: "Saliva Ejectors, Green", sku: "SE-GRN", onHand: "2 bags", onHandTone: "amber", par: "5 bags", status: { label: "Low stock", tone: "amber" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$3.20" }, scanned: "May 15, 2024 · 4:12 PM", action: "Reorder" },
+    { name: "Prophy Angles, Soft", sku: "PA-SOFT", onHand: "6 packs", par: "6 packs", status: { label: "Expiring soon", tone: "amber" }, evidence: { label: "Expiration in 25 days", icon: "icon-clock", tone: "amber" }, reorder: { type: "savings", value: "$5.60" }, scanned: "May 14, 2024 · 10:20 AM", action: "Reorder" },
+  ],
+  scans: [
+    { id: 1, text: "Nitrile Exam Gloves, Medium scanned", sku: "GLV-NTR-M", qty: "2 boxes", who: "Alex Kim", time: "2 min ago", icon: "icon-check-circle", tone: "green" },
+    { id: 2, text: "CaviWipes Disinfectant Wipes flagged for review", sku: "CW-160", qty: "1 canister", who: "Jamie Lee", time: "15 min ago", icon: "icon-alert-triangle", tone: "amber" },
+    { id: 3, text: "Procedure Face Masks, Blue updated", sku: "MASK-BLUE", qty: "4 boxes", who: "Alex Kim", time: "32 min ago", icon: "icon-file-text", tone: "blue" },
+    { id: 4, text: "Sterilization Pouch 3.5\" x 9\" scanned", sku: "DEF-359", qty: "3 boxes", who: "Hannah Lee", time: "45 min ago", icon: "icon-check-circle", tone: "green" },
+    { id: 5, text: "Patient Bibs, Blue scanned", sku: "BIB-BLUE", qty: "12 packs", who: "Hannah Lee", time: "1 hr ago", icon: "icon-check-circle", tone: "green" },
+  ],
+  issues: [
+    { label: "Needs review", value: 2, icon: "icon-alert-triangle", tone: "red" },
+    { label: "Missing details", value: 6, icon: "icon-info", tone: "amber" },
+    { label: "Reorder now", value: 3, icon: "icon-cart", tone: "red" },
+  ],
+  evidence: [
+    { label: "Expiration proof", status: "Verified", tone: "green" },
+    { label: "Lot capture", status: "Partial", tone: "amber" },
+    { label: "SDS linked", status: "Verified", tone: "green" },
+    { label: "IFU linked", status: "Verified", tone: "green" },
+    { label: "Price evidence", status: "Captured", tone: "green" },
+  ],
+  reorder: {
+    estValue: "$84.20",
+    items: [
+      { name: "Nitrile Exam Gloves, Medium", qty: "2 boxes", price: "$22.50" },
+      { name: "Saliva Ejectors, Green", qty: "2 bags", price: "$16.00" },
+      { name: "Prophy Angles, Soft", qty: "6 packs", price: "$13.75" },
+    ],
+  },
+};
+
+const PILL_TONE = { red: s.badgeRed, amber: s.badgeAmber, green: s.badgeGreen, blue: s.badgeBlue, slate: s.badgeSlate };
+
+// Pull the four header stats from the clicked location's mini-stats, falling
+// back to the wireframe defaults for locations with a different stat shape.
+function detailStats(loc) {
+  const find = (re, fallback) => {
+    const hit = (loc.stats || []).find((x) => re.test(x.label));
+    return hit ? hit.value : fallback;
+  };
+  return {
+    tracked: find(/scanned|tracked/i, 37),
+    confirmed: find(/confirmed/i, 29),
+    needDetails: find(/details|missing/i, 6),
+    needReview: find(/review/i, 2),
+  };
+}
+
+export function LocationDetailView({ locationId, onBack, onStartScan, onToast }) {
+  const loc = BOARD_MOCK.locations.find((l) => l.id === locationId) || BOARD_MOCK.locations[0];
+  const meta = typeMeta(loc.type);
+  const status = STATUS_META[loc.status] || STATUS_META.not_started;
+  const top = detailStats(loc);
+  const progress = loc.progress ?? 78;
+  const tellSoon = () => onToast?.("Scan sessions land in an upcoming phase.");
+  const scan = () => (onStartScan ? onStartScan() : tellSoon());
+
+  return (
+    <div className={s.detail}>
+      <nav className={s.crumbs} aria-label="Breadcrumb">
+        <button type="button" className={s.crumbLink} onClick={() => onBack?.()}>Locations</button>
+        <span className={s.crumbSep}>/</span>
+        <span className={s.crumbCurrent}>{loc.name}</span>
+      </nav>
+
+      <header className={s.head}>
+        <h1 className={s.title}>Location Detail</h1>
+        <p className={s.subtitle}>Track inventory, scan progress, evidence, and reorder needs for this location.</p>
+      </header>
+
+      <div className={s.stats}>
+        <Stat icon="icon-package" tint={s.tBlue} label="Tracked items" value={top.tracked} />
+        <Stat icon="icon-check-circle" tint={s.tGreen} label="Confirmed" value={top.confirmed} />
+        <Stat icon="icon-info" tint={s.tAmber} label="Needs details" value={top.needDetails} />
+        <Stat icon="icon-alert-triangle" tint={s.tRed} label="Needs review" value={top.needReview} />
+      </div>
+
+      <section className={s.locHeader}>
+        <div className={s.locHeadMain}>
+          <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
+          <div className={s.locHeadBody}>
+            <div className={s.cardTitleRow}>
+              <span className={s.locHeadName}>{loc.name}</span>
+              <span className={`${s.badge} ${status.badge}`}>{status.label}</span>
+            </div>
+            <div className={s.cardSub}>{loc.room}{loc.sub ? ` · ${loc.sub}` : ` · ${meta.label}`}</div>
+          </div>
+        </div>
+
+        <div className={s.locProgress}>
+          <span className={s.locProgressLabel}>Scan progress</span>
+          <div className={s.progress}>
+            <span className={s.progressTrack}>
+              <span className={`${s.progressFill} ${progress >= 100 ? s.complete : ""}`} style={{ width: `${progress}%` }} />
+            </span>
+            <span className={s.progressPct}>{progress}%</span>
+          </div>
+          <div className={s.locMeta}>
+            <span className={s.locMetaItem}><Icon name="icon-clock" /><span><small>Last updated</small>{loc.updated || "2 min ago"}</span></span>
+            <span className={s.locMetaItem}><Icon name="icon-users" /><span><small>Assigned to</small>{loc.assignee || "Alex Kim"}</span></span>
+            <span className={s.locMetaItem}><Icon name="icon-calendar" /><span><small>Last scan today</small>9:15 AM</span></span>
+          </div>
+        </div>
+
+        <div className={s.locActions}>
+          <button type="button" className={s.scanBtn} onClick={scan}><Icon name="icon-scan" />Resume mobile scan</button>
+          <button type="button" className={s.btnWide} onClick={tellSoon}>Open scan session<Icon name="icon-chevron-right" /></button>
+          <button type="button" className={s.printLink} onClick={tellSoon}><Icon name="icon-file-text" />Print QR label</button>
+        </div>
+      </section>
+
+      <div className={s.detailGrid}>
+        <div className={s.detailMain}>
+          <section className={s.panel}>
+            <h2 className={s.panelTitle}>Items in this location</h2>
+            <div className={s.toolbar}>
+              <label className={s.search}>
+                <Icon name="icon-search" />
+                <input type="search" placeholder="Search items, SKUs, or categories…" aria-label="Search items" />
+              </label>
+              <Select label="Status" value="all" onChange={() => {}} options={[{ value: "all", label: "All status" }]} />
+              <Select label="Category" value="all" onChange={() => {}} options={[{ value: "all", label: "All categories" }]} />
+              <Select label="Reorder state" value="all" onChange={() => {}} options={[{ value: "all", label: "All states" }]} />
+              <button type="button" className={s.filterBtn} onClick={tellSoon}><Icon name="icon-filter" />Filters</button>
+            </div>
+
+            <div className={s.tableWrap}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>Item</th><th>SKU</th><th>On hand</th><th>Par level</th><th>Status</th><th>Evidence</th><th>Reorder</th><th>Last scanned</th><th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DETAIL.items.map((it) => (
+                    <tr key={it.sku}>
+                      <td className={s.tItem}>{it.name}</td>
+                      <td className={s.tMuted}>{it.sku}</td>
+                      <td><span className={it.onHandTone === "red" ? s.tdRed : it.onHandTone === "amber" ? s.tdAmber : ""}>{it.onHand}</span></td>
+                      <td className={s.tMuted}>{it.par}</td>
+                      <td><span className={`${s.badge} ${PILL_TONE[it.status.tone]}`}>{it.status.label}</span></td>
+                      <td><span className={`${s.evi} ${TONE_TEXT[it.evidence.tone]}`}><Icon name={it.evidence.icon} />{it.evidence.label}</span></td>
+                      <td>{it.reorder.type === "savings" ? <span className={s.savings}>Savings {it.reorder.value}</span> : <button type="button" className={s.tLink} onClick={tellSoon}>{it.reorder.value}</button>}</td>
+                      <td className={s.tMuted}>{it.scanned}</td>
+                      <td className={s.tActions}>
+                        <button type="button" className={s.tBtn} onClick={tellSoon}>{it.action}</button>
+                        <button type="button" className={s.kebab} onClick={tellSoon} aria-label="More actions">⋮</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className={s.tableFoot}>
+              <span className={s.tMuted}>Showing 1 to 7 of 37 items</span>
+              <div className={s.pager}>
+                <button type="button" className={s.pageNav} onClick={tellSoon} aria-label="Previous"><Icon name="icon-chevron-left" /></button>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} type="button" className={`${s.pageNum} ${n === 1 ? s.pageActive : ""}`} onClick={tellSoon}>{n}</button>
+                ))}
+                <button type="button" className={s.pageNav} onClick={tellSoon} aria-label="Next"><Icon name="icon-chevron-right" /></button>
+              </div>
+            </div>
+          </section>
+
+          <section className={s.panel}>
+            <div className={s.cardHeadRow}>
+              <h2 className={s.panelTitle}>Recent scans</h2>
+              <button type="button" className={s.railLink} onClick={tellSoon}>View all activity<Icon name="icon-arrow-right" /></button>
+            </div>
+            {DETAIL.scans.map((ev) => (
+              <div className={s.scanRow} key={ev.id}>
+                <span className={`${s.activityIcon} ${TONE[ev.tone] || s.tSlate}`}><Icon name={ev.icon} /></span>
+                <div className={s.scanBody}>
+                  <div className={s.scanText}>{ev.text}</div>
+                  <div className={s.scanMeta}>SKU: {ev.sku} · {ev.qty}</div>
+                </div>
+                <div className={s.scanWho}>
+                  <span className={s.avatar}>{initials(ev.who)}</span>
+                  <span className={s.footMetaValue}>{ev.who}</span>
+                </div>
+                <span className={s.scanTime}>{ev.time}</span>
+              </div>
+            ))}
+          </section>
+        </div>
+
+        <aside className={s.detailRail}>
+          <section className={s.railCard}>
+            <h2 className={s.railTitle}>Issues in this location</h2>
+            {DETAIL.issues.map((iss) => (
+              <div className={s.issueRow} key={iss.label}>
+                <span className={`${s.issueIcon} ${TONE_TEXT[iss.tone]}`}><Icon name={iss.icon} /></span>
+                <span className={s.issueLabel}>{iss.label}</span>
+                <span className={s.issueValue}>{iss.value}</span>
+              </div>
+            ))}
+            <button type="button" className={s.railBtn} onClick={tellSoon}>Review issues<Icon name="icon-chevron-right" /></button>
+          </section>
+
+          <section className={s.railCard}>
+            <h2 className={s.railTitle}>Evidence</h2>
+            {DETAIL.evidence.map((ev) => (
+              <div className={s.evidenceRow} key={ev.label}>
+                <span className={`${s.eviDot} ${TONE_TEXT[ev.tone]}`}><Icon name={ev.tone === "green" ? "icon-check-circle" : "icon-clock"} /></span>
+                <span className={s.eviLabel}>{ev.label}</span>
+                <span className={`${s.eviStatus} ${TONE_TEXT[ev.tone]}`}>{ev.status}</span>
+              </div>
+            ))}
+            <button type="button" className={s.railLink} onClick={tellSoon}>View all evidence<Icon name="icon-arrow-right" /></button>
+          </section>
+
+          <section className={s.railCard}>
+            <div className={s.reorderHead}>
+              <div>
+                <div className={s.railTitle}>Reorder needs</div>
+                <small className={s.tMuted}>{DETAIL.reorder.items.length} items below par</small>
+              </div>
+              <div className={s.reorderEst}>
+                <small className={s.tMuted}>Est. reorder value</small>
+                <strong className={s.savings}>{DETAIL.reorder.estValue}</strong>
+              </div>
+            </div>
+            {DETAIL.reorder.items.map((it) => (
+              <div className={s.reorderRow} key={it.name}>
+                <span className={s.reorderName}>{it.name}</span>
+                <span className={s.tMuted}>{it.qty}</span>
+                <span className={s.footMetaValue}>{it.price}</span>
+              </div>
+            ))}
+            <button type="button" className={s.railPrimary} onClick={tellSoon}><Icon name="icon-cart" />Create reorder draft</button>
+          </section>
+
+          <section className={s.railCard}>
+            <h2 className={s.railTitle}>Mobile scan shortcuts</h2>
+            <button type="button" className={s.shortcut} onClick={scan}>
+              <span className={s.shortcutIcon}><Icon name="icon-scan" /></span>Resume scan<Icon name="icon-chevron-right" className={s.shortcutChevron} />
+            </button>
+            <button type="button" className={s.shortcut} onClick={tellSoon}>
+              <span className={s.shortcutIcon}><Icon name="icon-scan" /></span>Open on mobile<Icon name="icon-chevron-right" className={s.shortcutChevron} />
+            </button>
+            <button type="button" className={s.shortcut} onClick={() => onBack?.()}>
+              <span className={s.shortcutIcon}><Icon name="icon-map-pin" /></span>Choose another location<Icon name="icon-chevron-right" className={s.shortcutChevron} />
             </button>
           </section>
         </aside>
