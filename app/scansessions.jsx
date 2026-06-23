@@ -11,7 +11,8 @@ import {
   traceApi,
   traceErrorMessage,
 } from "./lib";
-import { ScanHandoffQr, useBarcodeScanner, useProductSearch, ProductSearchResults } from "./ui";
+import { ScanHandoffQr, useProductSearch, ProductSearchResults } from "./ui";
+import { MobileScanStart, MobileScanSession } from "./scanmobile";
 import s from "./scansessions.module.css";
 
 // Phase 2 — Scan Sessions. A stateful, resumable inventory audit: choose a
@@ -56,6 +57,9 @@ export function ScanSessionsView({ onOpenSession, onNavigate, onToast }) {
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
   const [starting, setStarting] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => { setIsMobile(window.matchMedia("(max-width: 900px)").matches); }, []);
 
   useEffect(() => {
     let alive = true;
@@ -84,6 +88,20 @@ export function ScanSessionsView({ onOpenSession, onNavigate, onToast }) {
       setStarting("");
       setPicking(false);
     }
+  }
+
+  if (isMobile) {
+    return (
+      <MobileScanStart
+        loading={loading}
+        sessions={sessions}
+        locations={locations}
+        starting={starting}
+        onOpenSession={onOpenSession}
+        onStart={startFor}
+        onNavigate={onNavigate}
+      />
+    );
   }
 
   return (
@@ -229,6 +247,7 @@ function LocationPicker({ locations, starting, onPick, onAddLocation, onClose })
 export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
   const [session, setSession] = useState(null);
   const [lines, setLines] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [isMobile, setIsMobile] = useState(false);
@@ -237,6 +256,10 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
   const flashTimer = useRef();
 
   useEffect(() => { setIsMobile(window.matchMedia("(max-width: 900px)").matches); }, []);
+
+  useEffect(() => {
+    traceApi.listLocations().then((d) => setLocations(d.locations || [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -255,22 +278,36 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       const { product, scanned } = await scanLookup(code);
       const payload = scanLinePayload(code, product, scanned);
       const { line, counts } = await traceApi.addLine(sessionId, payload);
-      const merged = { ...line, _offer: product?.best_offer || null };
+      const merged = { ...line, _offer: product?.best_offer || product?.offers?.[0] || null };
       setLines((prev) => [merged, ...prev]);
       setSession((prev) => (prev ? { ...prev, counts } : prev));
-      setFlash({ name: line.name, status: line.status, lot: line.lot_number, expiry: line.expiration_date });
-      window.clearTimeout(flashTimer.current);
-      flashTimer.current = window.setTimeout(() => setFlash(null), 2600);
+      setFlash(merged);
+      // Desktop auto-dismisses the flash; mobile keeps the result card up so its
+      // Undo / Edit / Review actions stay reachable until the next scan.
+      if (!isMobile) {
+        window.clearTimeout(flashTimer.current);
+        flashTimer.current = window.setTimeout(() => setFlash(null), 2600);
+      }
       if (navigator.vibrate) navigator.vibrate(40);
     } catch {
       onToast?.("Scan failed — try again.");
     }
-  }, [active, sessionId, onToast]);
+  }, [active, sessionId, onToast, isMobile]);
 
-  const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
-    active: isMobile && active && !loading,
-    onScan: handleScan,
-  });
+  // Add an item the buyer picked from search (no barcode) as a scan line.
+  const addProduct = useCallback(async (product) => {
+    if (!active) return;
+    try {
+      const payload = scanLinePayload(null, product, null);
+      const { line, counts } = await traceApi.addLine(sessionId, payload);
+      const merged = { ...line, _offer: product?.best_offer || product?.offers?.[0] || null };
+      setLines((prev) => [merged, ...prev]);
+      setSession((prev) => (prev ? { ...prev, counts } : prev));
+      setFlash(merged);
+    } catch {
+      onToast?.("Couldn't add that item.");
+    }
+  }, [active, sessionId, onToast]);
 
   function submitManual(e) {
     e.preventDefault();
@@ -311,6 +348,17 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
     }
   }
 
+  // Walk to another room mid-audit: start/resume that location's session and
+  // navigate into it (the backend keeps one active session per location).
+  async function switchLocation(location) {
+    try {
+      const { session: next } = await traceApi.startSession({ location_id: location.id });
+      onNavigate?.(`/app/scan-sessions/${next.id}`);
+    } catch {
+      onToast?.("Couldn't switch location.");
+    }
+  }
+
   const counts = session?.counts || { scanned: 0, confirmed: 0, needs_details: 0, needs_review: 0 };
   const traced = useMemo(() => lines.filter((l) => l.lot_number && l.expiration_date).length, [lines]);
   const tracePct = counts.scanned ? Math.round((traced / counts.scanned) * 100) : 0;
@@ -322,6 +370,28 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
 
   if (loading) return <div className={s.page}><div className={s.empty}>Loading session…</div></div>;
   if (!session) return <div className={s.page}><div className={s.empty}>Session not found.</div></div>;
+
+  if (isMobile) {
+    return (
+      <MobileScanSession
+        session={session}
+        lines={lines}
+        counts={counts}
+        active={active}
+        flash={flash}
+        onScan={handleScan}
+        onAddProduct={addProduct}
+        onPatchLine={patchLine}
+        onRemoveLine={removeLine}
+        onComplete={complete}
+        onBack={onBack}
+        onClearFlash={() => setFlash(null)}
+        locations={locations}
+        onSwitchLocation={switchLocation}
+        onNavigate={onNavigate}
+      />
+    );
+  }
 
   const meta = typeMeta(session.location_type);
 
@@ -362,34 +432,16 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
         <div className={s.main}>
           {active && (
             <section className={s.scanPanel}>
-              {isMobile ? (
-                <div className={s.cameraStage}>
-                  <video ref={videoRef} className={s.cameraVideo} playsInline muted autoPlay aria-label="Live camera preview" />
-                  {cameraStatus !== "ready" && (
-                    <div className={s.cameraState}>
-                      <Icon name="icon-scan" />
-                      <strong>{cameraStatus === "requesting" ? "Camera access needed" : "Camera unavailable"}</strong>
-                      {cameraStatus !== "requesting" && (
-                        <button type="button" className={s.ghostBtn} onClick={retry}><Icon name="icon-refresh" /> Try again</button>
-                      )}
-                    </div>
-                  )}
-                  <div className={s.scanFrame} aria-hidden="true"><span /><span /><span /><span /></div>
-                  <div className={s.scanHint}>{autoDetect ? "Point at a barcode" : "Enter the code below"}</div>
-                  {flash && <FlashCard flash={flash} />}
+              <div className={s.handoff}>
+                <div className={s.handoffQr}>
+                  <ScanHandoffQr url={typeof window !== "undefined" ? `${window.location.origin}/app/scan-sessions/${session.id}` : ""} />
                 </div>
-              ) : (
-                <div className={s.handoff}>
-                  <div className={s.handoffQr}>
-                    <ScanHandoffQr url={typeof window !== "undefined" ? `${window.location.origin}/app/scan-sessions/${session.id}` : ""} />
-                  </div>
-                  <div className={s.handoffBody}>
-                    <strong>Scan with your phone</strong>
-                    <p>Open this session on your phone&rsquo;s camera for a far better read of small Data Matrix codes — or key a code in below.</p>
-                    {flash && <FlashCard flash={flash} inline />}
-                  </div>
+                <div className={s.handoffBody}>
+                  <strong>Scan with your phone</strong>
+                  <p>Open this session on your phone&rsquo;s camera for a far better read of small Data Matrix codes — or key a code in below.</p>
+                  {flash && <FlashCard flash={flash} inline />}
                 </div>
-              )}
+              </div>
               <form className={s.manualRow} onSubmit={submitManual}>
                 <label className={s.manualField}>
                   <Icon name="icon-scan" />
@@ -474,12 +526,14 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
 
 function FlashCard({ flash, inline }) {
   const bucket = SCAN_BUCKETS[flash.status] || SCAN_BUCKETS.needs_review;
+  const expiry = flash.expiration_date;
+  const lot = flash.lot_number;
   return (
     <div className={`${s.flash} ${inline ? s.flashInline : ""} ${TONE_TX[bucket.tone] || ""}`} role="status" aria-live="polite">
       <Icon name={bucket.icon} />
       <div className={s.flashBody}>
         <strong>{flash.name}</strong>
-        <small>{flash.expiry ? `Exp ${formatTraceDate(flash.expiry)}${flash.lot ? ` · Lot ${flash.lot}` : ""}` : bucket.label}</small>
+        <small>{expiry ? `Exp ${formatTraceDate(expiry)}${lot ? ` · Lot ${lot}` : ""}` : bucket.label}</small>
       </div>
     </div>
   );
