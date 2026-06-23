@@ -757,6 +757,10 @@ export function makeScanDraftItem(code, product) {
     draftQty: 1,
     qty: 1,
     included: true,
+    // Per-item version for cross-device merge: the server keeps the copy with
+    // the greatest updatedAt, so a tombstone (included:false) always beats a
+    // stale included:true copy and a fresh scan beats an old edit.
+    updatedAt: Date.now(),
     documentIds: ["scan"],
     documentQuantities: { scan: 1 },
     barcode: code || "",

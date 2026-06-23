@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MEDMKP_MODULE } from "../../../modules/medmkp"
 import type MedMKPModuleService from "../../../modules/medmkp/service"
 import { resolvePracticeId } from "../../../utils/practice"
+import { mergeReorderState } from "./merge"
 
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   if (!req.auth_context?.actor_id) {
@@ -34,15 +35,25 @@ export async function PUT(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     return
   }
 
-  // The whole app-state blob is the body; we store it as-is (last-write-wins).
-  const state = (req.body ?? {}) as Record<string, unknown>
+  const incoming = (req.body ?? {}) as Record<string, unknown>
 
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
   const [existing] = await medmkp.listReorderLists({ practice_id: practiceId })
+
+  // Merge the incoming blob into the stored one instead of overwriting it. The
+  // list is edited from multiple devices (desk + phone); a blind last-write-wins
+  // PUT lets a stale tab clobber items another device just added. The merge is
+  // commutative — an item is only removed by an explicit tombstone
+  // (included:false), never by being absent from one device's blob — so devices
+  // converge regardless of write order and a scan can't be wiped by a stale save.
+  const state = mergeReorderState(
+    (existing?.state ?? {}) as Record<string, unknown>,
+    incoming,
+  )
 
   const saved = existing
     ? await medmkp.updateReorderLists({ id: existing.id, state })
     : await medmkp.createReorderLists({ practice_id: practiceId, state })
 
-  res.json({ ok: true, updated_at: saved.updated_at })
+  res.json({ ok: true, state: saved.state, updated_at: saved.updated_at })
 }

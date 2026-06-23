@@ -108,6 +108,10 @@ export default function Home() {
     // decisions have a row to write back to.
     const items = (saved.draftItems || []).map((item) => (item.id ? item : { ...item, id: newItemId() }));
     setDraftItems(items);
+    // Removed/cleared items linger as tombstones (included:false) so the deletion
+    // survives the cross-device merge; they don't count toward "is this list in
+    // progress", so a cleared list reloads as empty.
+    const activeCount = items.filter((item) => item.included !== false).length;
     setUploadedDocs(saved.uploadedDocs || []);
     setArchivedLists(saved.archivedLists || []);
     setHandoffs(saved.handoffs || []);
@@ -119,8 +123,8 @@ export default function Home() {
     setDefaultBuyingPrefs(savedDefaults);
     // A list with no items is "new", so it starts from the saved defaults;
     // an in-progress list keeps its own working preferences.
-    setBuyingPrefs(items.length ? { ...DEFAULT_BUYING_PREFS, ...(saved.buyingPrefs || {}) } : savedDefaults);
-    if (items.length) setHasUploadedInvoice(true);
+    setBuyingPrefs(activeCount ? { ...DEFAULT_BUYING_PREFS, ...(saved.buyingPrefs || {}) } : savedDefaults);
+    if (activeCount) setHasUploadedInvoice(true);
   };
 
   // Hydrate from localStorage first for an instant paint; the per-practice
@@ -828,6 +832,7 @@ export default function Home() {
               ...existing,
               draftQty: existing.draftQty + item.qty,
               included: true,
+              updatedAt: Date.now(),
               documentQuantities,
               documentIds: Array.from(new Set([...existing.documentIds, documentId])),
             });
@@ -839,6 +844,7 @@ export default function Home() {
             id: newItemId(),
             draftQty: item.qty,
             included: true,
+            updatedAt: Date.now(),
             documentQuantities: { [documentId]: item.qty },
             documentIds: [documentId],
           });
@@ -934,7 +940,7 @@ export default function Home() {
   function removeDraftItem(target) {
     const id = typeof target === "string" ? target : target?.id;
     if (!id) return;
-    setDraftItems((items) => items.map((item) => (item.id === id ? { ...item, included: false } : item)));
+    setDraftItems((items) => items.map((item) => (item.id === id ? { ...item, included: false, updatedAt: Date.now() } : item)));
   }
 
   // Push any debounced (not-yet-sent) save immediately and wait for it to land.
@@ -1022,6 +1028,7 @@ export default function Home() {
         const n = patch.paidUnitPrice === null || patch.paidUnitPrice === "" ? null : Number(patch.paidUnitPrice);
         next.paidUnitPrice = Number.isFinite(n) && n > 0 ? n : null;
       }
+      next.updatedAt = Date.now();
       return next;
     }));
   }
@@ -1034,7 +1041,7 @@ export default function Home() {
     setListTouched(true);
     setDraftItems((items) => items.map((item) => {
       const key = assignmentByItemId[item.id];
-      return key ? { ...item, selectedOfferKey: key } : item;
+      return key ? { ...item, selectedOfferKey: key, updatedAt: Date.now() } : item;
     }));
     showToast("Plan optimized for lowest landed cost");
   }
@@ -1063,6 +1070,7 @@ export default function Home() {
         linked: true,
         draftQty: options.qty ?? item.draftQty ?? item.qty ?? 1,
         note: options.note ?? item.note ?? "",
+        updatedAt: Date.now(),
       };
     }));
   }
@@ -1096,7 +1104,7 @@ export default function Home() {
       sourceDocs: uploadedDocs,
     };
     setArchivedLists((lists) => [entry, ...lists]);
-    setDraftItems([]);
+    tombstoneAllItems();
     setUploadedDocs([]);
     setLastUpload(null);
     setHasUploadedInvoice(false);
@@ -1136,12 +1144,23 @@ export default function Home() {
     });
   }
 
+  // Clearing a list is a *soft* clear: every item is tombstoned (included:false)
+  // rather than dropped from the array. A tombstone is a real, mergeable signal
+  // ("this was removed at T"), so the deletion propagates to other devices
+  // instead of a stale device re-adding the items it still remembers. Physically
+  // emptying the array looks identical to "this device just hasn't seen the new
+  // items yet", which is exactly what made cleared items resurrect on refresh.
+  function tombstoneAllItems() {
+    setDraftItems((items) =>
+      items.map((item) => (item.included === false ? item : { ...item, included: false, updatedAt: Date.now() })));
+  }
+
   function clearCurrentList() {
     if (!activeDraftItems.length) {
       showToast("List is already empty");
       return;
     }
-    setDraftItems([]);
+    tombstoneAllItems();
     setUploadedDocs([]);
     setLastUpload(null);
     setHasUploadedInvoice(false);
@@ -1253,7 +1272,9 @@ export default function Home() {
   // list. Shared by reopen (moves the entry out of Saved lists) and duplicate
   // (leaves the original in place, names it a copy).
   function loadSavedListAsCurrent(entry, { copy }) {
-    setDraftItems(entry.sourceItems.map((item) => ({ ...item, id: newItemId() })));
+    // Fresh updatedAt so a reopened item beats any same-key tombstone left on
+    // the server by an earlier clear of the current list.
+    setDraftItems(entry.sourceItems.map((item) => ({ ...item, id: newItemId(), included: true, updatedAt: Date.now() })));
     setUploadedDocs(entry.sourceDocs || []);
     setListName(copy ? `${entry.name} (copy)` : entry.name);
     setCurrentHandoffId(null);
