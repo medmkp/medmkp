@@ -1,4 +1,5 @@
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import type { MedusaContainer } from "@medusajs/framework"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
 import { LOCATION_TYPES, mintQrCode } from "../utils/inventory"
@@ -31,7 +32,7 @@ function argValue(key: string): string | undefined {
   return hit ? hit.split("=").slice(1).join("=").trim() : undefined
 }
 
-export default async function seedLocations({ container }: { container: any }) {
+export default async function seedLocations({ container }: { container: MedusaContainer }) {
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
   const knex = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
   const medmkp = container.resolve<MedMKPModuleService>(MEDMKP_MODULE)
