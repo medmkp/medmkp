@@ -300,9 +300,13 @@ export default function Home() {
   }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, submittedSuppliers, listStage, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
 
   // Flush a pending (debounced) save when the tab is hidden or unloaded, so a
-  // refresh/close within the 800ms save window can't drop the latest edits.
-  // `keepalive` lets the PUT outlive the page; pagehide covers the bfcache and
-  // mobile-Safari cases beforeunload misses.
+  // refresh/close within the debounce window can't drop the latest edits.
+  // Deliberately NOT `keepalive`: the app-state blob (archived lists + handoffs
+  // accumulate) can exceed the 64KB keepalive body cap, which fails the request
+  // outright with "Failed to fetch". A normal same-origin PUT completes fine on
+  // tab-hide; the rare true-unload case is the only gap, and keepalive couldn't
+  // cover it past 64KB anyway. localStorage still holds the blob for next load.
+  // pagehide covers the bfcache and mobile-Safari cases beforeunload misses.
   useEffect(() => {
     if (authed !== true) return;
     const flush = () => {
@@ -313,8 +317,7 @@ export default function Home() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(latestBlobRef.current),
-          keepalive: true,
-        });
+        }).catch(() => {});
         pendingSaveRef.current = false;
       } catch {
         // best-effort; localStorage still holds the blob for next load
