@@ -48,6 +48,8 @@ export const routeByView = {
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
   home: "/app",
+  locations: "/app/locations",
+  locationAdd: "/app/locations/new",
   plan: "/app/review",
   catalog: "/app/catalog",
   savings: "/app/savings",
@@ -80,6 +82,8 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/review" || path === "/app/plan") return { view: "plan", isLoggedIn: true };
   if (path === "/app/history") return { view: "history", isLoggedIn: true };
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
+  if (path === "/app/locations/new") return { view: "locationAdd", isLoggedIn: true };
+  if (path === "/app/locations") return { view: "locations", isLoggedIn: true };
   if (path === "/app/savings") return { view: "savings", isLoggedIn: true };
   if (path === "/app/catalog") return { view: "catalog", isLoggedIn: true };
   if (path === "/app/catalog/search") return { view: "catalogSearch", isLoggedIn: true, searchQuery: query.get("q") || "" };

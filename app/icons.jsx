@@ -220,6 +220,14 @@ export function IconSprite() {
         <rect x="4" y="13" width="7" height="7" rx="1.4" />
         <rect x="13" y="13" width="7" height="7" rx="1.4" />
       </symbol>
+      <symbol id="icon-dental-chair" viewBox="0 0 24 24">
+        <path d="M5 5.6 8.2 7.4" />
+        <path d="M6.4 6.4 10.6 12.4H18" />
+        <path d="M18 12.4 20.2 10.8" />
+        <path d="M12.4 12.4v3.6" />
+        <path d="M8.8 20.2h7.2" />
+        <path d="M12.4 16 9.9 20.2M12.4 16 14.9 20.2" />
+      </symbol>
       <symbol id="icon-truck" viewBox="0 0 24 24">
         <path d="M2.5 7.5h11v9H2.5Z" />
         <path d="M13.5 10.5h4l3 3v3H13.5Z" />

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchResults } from "./catalog";
 import { BrandMark, Icon, IconSprite } from "./icons";
 import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, lookupScannedProduct, makeScanDraftItem, mapSearchOffer, money, newItemId, parseAttributes, pathForView, shopifyStockKey, slimHandoffRow, statusFromItem, viewFromPath } from "./lib";
+import { AddLocationView, LocationsBoardView } from "./locations";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, MobileBottomNav, MobileScanItemView, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, SavingsView } from "./reorder";
@@ -1290,10 +1291,10 @@ export default function Home() {
   // but disabled until their phase lands. Catalog + History stay live so nothing
   // from the old IA becomes unreachable (Savings is kept but demoted).
   const navItems = [
-    ["dashboard", "icon-grid", "Dashboard", true],
+    ["dashboard", "icon-home", "Dashboard", true],
     ["needs-attention", "icon-alert-triangle", "Needs attention", true],
     ["home", "icon-list", "Reorder list"],
-    ["locations", "icon-map-pin", "Locations", true],
+    ["locations", "icon-map-pin", "Locations"],
     ["scan-sessions", "icon-scan", "Scan sessions", true],
     ["savings", "icon-dollar-circle", "Savings"],
     ["evidence", "icon-shield-check", "Evidence", true],
@@ -1468,7 +1469,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && view === "locationAdd") ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1559,6 +1560,22 @@ export default function Home() {
                 onNavigate={navigate}
               />
             )
+          )}
+
+          {view === "locations" && (
+            <LocationsBoardView
+              onStartScan={openMobileScan}
+              onAddLocation={() => navigate("/app/locations/new")}
+              onToast={showToast}
+            />
+          )}
+
+          {view === "locationAdd" && (
+            <AddLocationView
+              onCancel={() => navigate("/app/locations")}
+              onSave={() => navigate("/app/locations")}
+              onToast={showToast}
+            />
           )}
 
           {view === "plan" && (
