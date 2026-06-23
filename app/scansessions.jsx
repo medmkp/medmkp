@@ -8,6 +8,7 @@ import {
   formatTraceDate,
   scanLinePayload,
   scanLookup,
+  scanMissReason,
   traceApi,
   traceErrorMessage,
 } from "./lib";
@@ -275,13 +276,18 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
   const handleScan = useCallback(async (code) => {
     if (!code || !active) return;
     try {
-      const { product, scanned } = await scanLookup(code);
+      const { product, scanned, kind } = await scanLookup(code);
       const payload = scanLinePayload(code, product, scanned);
       const { line, counts } = await traceApi.addLine(sessionId, payload);
       const merged = { ...line, _offer: product?.best_offer || product?.offers?.[0] || null };
       setLines((prev) => [merged, ...prev]);
       setSession((prev) => (prev ? { ...prev, counts } : prev));
       setFlash(merged);
+      // Tell the buyer why an unmatched scan landed in review (marketing QR,
+      // uncarried barcode, non-product code) rather than leaving it unexplained;
+      // and flag a case/pack-barcode match so they can confirm the pack size.
+      if (kind === "none" && !product) onToast?.(scanMissReason(code));
+      else if (kind === "barcode_pack") onToast?.("Matched by case/pack barcode — confirm the pack size is right.");
       // Desktop auto-dismisses the flash; mobile keeps the result card up so its
       // Undo / Edit / Review actions stay reachable until the next scan.
       if (!isMobile) {

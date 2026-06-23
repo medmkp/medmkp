@@ -41,3 +41,26 @@ export function gtinVariants(scanned: string | number): string[] {
     core.padStart(14, "0"),  // GTIN-14
   ])]
 }
+
+// A GTIN-14 with a non-zero indicator digit (1–8) is a packaging level — a case
+// or inner pack — of a base unit that shares the same 12-digit item reference.
+// Derive the base unit's GTIN (indicator 0, check digit recomputed) so a scanned
+// case can fall back to the each in the catalog. Returns [] for anything that
+// isn't an indicator-1–8 GTIN-14 (indicator 0 is already the base unit; 9 marks a
+// variable-measure trade item, not a fixed pack of the same each). This is NOT
+// folded into gtinVariants: a case and an each are distinct sellable units, so
+// the caller must opt in to the cross-pack-level match and flag it as such.
+export function baseUnitGtinVariants(scanned: string | number): string[] {
+  const digits = String(scanned ?? "").replace(/\D/g, "")
+  if (digits.length !== 14 || !isValidGtin(digits)) return []
+  const indicator = digits[0]
+  if (indicator === "0" || indicator === "9") return []
+  const body = "0" + digits.slice(1, 13) // indicator 0 + shared item reference
+  let sum = 0
+  for (let i = 0; i < body.length; i++) {
+    const weight = (body.length - i) % 2 === 1 ? 3 : 1
+    sum += Number(body[i]) * weight
+  }
+  const base = body + String((10 - (sum % 10)) % 10)
+  return gtinVariants(base).filter((v) => v !== digits)
+}

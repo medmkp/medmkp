@@ -672,6 +672,31 @@ export async function scanLookup(code) {
   }
 }
 
+// Standard GTIN mod-10 check (mirrors backend matching/gtin.ts) so we can tell a
+// real-but-uncarried barcode from an unreadable / non-product code on the client.
+function isLikelyGtin(value) {
+  const d = String(value ?? "").replace(/\D/g, "");
+  if (d.length < 8 || d.length > 14) return false;
+  const body = d.slice(0, -1);
+  const check = Number(d[d.length - 1]);
+  let sum = 0;
+  for (let i = 0; i < body.length; i++) sum += Number(body[i]) * ((body.length - i) % 2 === 1 ? 3 : 1);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+// Why a scan didn't resolve to a catalog product, phrased for the buyer. Turns a
+// silent "Needs review" into an explanation: a QR that's only a marketing URL, an
+// HIBC/GTIN we don't carry yet, or a code that isn't a product at all (an
+// equipment serial, say). The item is still added for review either way.
+export function scanMissReason(code) {
+  const raw = (code || "").trim();
+  if (!raw) return "Couldn't read a code — try Enter SKU or Search product.";
+  if (/^https?:\/\//i.test(raw)) return "That's a website link (QR), not a product barcode — added for review.";
+  if (raw.startsWith("+")) return "HIBC code isn't in the catalog yet — added for review.";
+  if (isLikelyGtin(raw)) return `Barcode ${raw.replace(/\D/g, "")} isn't in the catalog yet — added for review.`;
+  return "Not a recognized product code — added for review.";
+}
+
 // Build the POST body for a scan-session line from a scan lookup. Splits the
 // matched identity into canonical (mcp_) vs supplier-only (msp_) by id prefix so
 // the server derives the right review bucket, and carries the decoded lot/expiry.

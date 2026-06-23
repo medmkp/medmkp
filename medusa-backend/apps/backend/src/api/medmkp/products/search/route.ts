@@ -4,7 +4,7 @@ import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { tokenizeName } from "../../../../matching/normalize"
 import { nameSimilarity, trigrams } from "../../../../matching/search"
-import { gtinVariants } from "../../../../matching/gtin"
+import { gtinVariants, baseUnitGtinVariants } from "../../../../matching/gtin"
 import { parseGs1 } from "../../../../matching/gs1"
 import { parseHibc } from "../../../../matching/hibc"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
@@ -440,6 +440,20 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
           res.json(withScanned(await scanResponse(medmkp, barcode, "barcode", refHits, "barcode", limit), scanned))
           return
         }
+      }
+    }
+
+    // Last resort: a scanned case / inner-pack GTIN (indicator digit 1–8) shares
+    // its item reference with the base unit. If nothing matched the scanned code,
+    // try the base-unit GTIN so scanning a case still identifies the each on the
+    // shelf. Flagged kind "barcode_pack" so the client can prompt a pack check —
+    // the matched product is a different pack level than what was scanned.
+    const packVariants = baseUnitGtinVariants(gs1.gtin || barcode)
+    if (packVariants.length) {
+      const packHits = dedupeById(await medmkp.listSupplierProducts({ barcode: packVariants }))
+      if (packHits.length) {
+        res.json(withScanned(await scanResponse(medmkp, barcode, "barcode_pack", packHits, "barcode", limit), scanned))
+        return
       }
     }
 

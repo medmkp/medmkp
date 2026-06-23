@@ -32,6 +32,7 @@ export function useBarcodeScanner({ active, onScan }) {
     let cooling = false;
     let lastCode = null;  // last code fired while it stays in frame
     let emptyFrames = 0;  // consecutive frames with no barcode in view
+    let rotCanvas = null; // reused offscreen canvas for the rotated re-read
 
     // Fire one scan, then cool down briefly so flicker/misreads between frames
     // don't double-register. A barcode held continuously in frame is suppressed
@@ -46,15 +47,42 @@ export function useBarcodeScanner({ active, onScan }) {
       cooldownId = window.setTimeout(() => { cooling = false; }, 1200);
     }
 
-    async function detectFrame() {
-      const video = videoRef.current;
-      if (!video || !detector || video.readyState < 2) return null;
+    async function detectOn(source) {
       try {
-        const codes = await detector.detect(video);
+        const codes = await detector.detect(source);
         return codes && codes.length ? codes[0].rawValue : null;
       } catch (error) {
         return null;
       }
+    }
+
+    async function detectFrame() {
+      const video = videoRef.current;
+      if (!video || !detector || video.readyState < 2) return null;
+
+      // Try the frame as-is first — the common case, and the cheapest.
+      const upright = await detectOn(video);
+      if (upright) return upright;
+
+      // Ladder-oriented codes — a 1D barcode printed rotated 90°, common on
+      // bottles, tubes, and unit-dose labels (e.g. the chlorhexidine bottle whose
+      // UPC runs top-to-bottom) — don't decode upright because the reader samples
+      // a horizontal line across what are now horizontal bars. Re-read a
+      // quarter-turned snapshot so those scan without the user rotating the phone.
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) return null;
+      if (!rotCanvas) rotCanvas = document.createElement("canvas");
+      rotCanvas.width = h;
+      rotCanvas.height = w;
+      const ctx = rotCanvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.save();
+      ctx.translate(h / 2, w / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(video, -w / 2, -h / 2);
+      ctx.restore();
+      return detectOn(rotCanvas);
     }
 
     // Shutter press: read the current frame; proceed even if no barcode is
@@ -73,8 +101,13 @@ export function useBarcodeScanner({ active, onScan }) {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            // Capture as high as the device offers (ideal degrades gracefully):
+            // small / dense codes — unit-dose labels, GS1 Data Matrix — need the
+            // extra pixels to resolve. Continuous autofocus keeps a close-held
+            // package sharp as the buyer moves it under the camera.
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: "continuous" }],
           },
           audio: false,
         });

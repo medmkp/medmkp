@@ -46,11 +46,21 @@ export function yymmddToIso(yymmdd: string): string | undefined {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 }
 
-function elements(payload: string): Record<string, string> {
+// Walk the element string into AI → value. `clean` is false when the boundaries
+// stop making sense — the tell-tale of a reader that dropped the FNC1 separators,
+// after which only the leading GTIN can be trusted (see parseGs1).
+function elements(payload: string): { ai: Record<string, string>; clean: boolean } {
   const out: Record<string, string> = {}
+  // First occurrence of an AI wins. Without FNC1 the walk can mis-frame and
+  // re-read a spurious AI — keeping the first stops that from clobbering a field
+  // we already read correctly, notably the GTIN (01), which by spec leads.
+  const set = (ai: string, val: string) => {
+    if (!(ai in out)) out[ai] = val
+  }
+
   if (payload.includes("(")) {
-    for (const m of payload.matchAll(/\((\d{2,4})\)([^(]*)/g)) out[m[1]] = m[2]
-    return out
+    for (const m of payload.matchAll(/\((\d{2,4})\)([^(]*)/g)) set(m[1], m[2])
+    return { ai: out, clean: true }
   }
   let i = 0
   while (i < payload.length) {
@@ -62,16 +72,21 @@ function elements(payload: string): Record<string, string> {
     i += 2
     const fixed = FIXED_AI_LEN[ai]
     if (fixed != null) {
-      out[ai] = payload.slice(i, i + fixed)
+      const val = payload.slice(i, i + fixed)
+      // Every fixed-length GS1 AI is all-numeric. A short or non-numeric value
+      // means a variable-length field ran into this one because its FNC1
+      // terminator was stripped — the element string is unframed from here on.
+      if (val.length < fixed || !/^\d+$/.test(val)) return { ai: out, clean: false }
+      set(ai, val)
       i += fixed
     } else {
       let end = payload.indexOf(FNC1, i)
       if (end < 0) end = payload.length
-      out[ai] = payload.slice(i, end)
+      set(ai, payload.slice(i, end))
       i = end
     }
   }
-  return out
+  return { ai: out, clean: true }
 }
 
 export function parseGs1(value: string | null | undefined): Gs1Parts {
@@ -92,8 +107,15 @@ export function parseGs1(value: string | null | undefined): Gs1Parts {
     }
   }
 
-  const ai = elements(raw)
+  const { ai, clean } = elements(raw)
   const gtin = ai["01"] && gtinVariants(ai["01"]).length ? ai["01"] : null
+
+  // An unframed string (reader dropped the FNC1 separators) only lets us trust
+  // the GTIN — AI 01 is fixed-length and, per GS1, the first element. We won't
+  // surface a lot/expiry we can't stand behind: a wrong recall lot is worse than
+  // a missing one. This still recovers the catalog match, which is what matters.
+  if (!clean) return { gtin }
+
   return {
     gtin,
     lot: ai["10"] || undefined,

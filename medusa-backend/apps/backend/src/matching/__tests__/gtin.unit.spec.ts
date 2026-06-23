@@ -1,4 +1,4 @@
-import { gtinVariants, isValidGtin } from "../gtin"
+import { gtinVariants, isValidGtin, baseUnitGtinVariants } from "../gtin"
 
 // A real, check-digit-valid UPC-A and its wider GTIN representations (the same
 // number with leading-zero padding). DC Dental stores the 12-digit UPC-A.
@@ -57,5 +57,26 @@ describe("gtinVariants", () => {
     expect(gtinVariants("036000291453")).toEqual([]) // bad check digit
     expect(gtinVariants("abcdefgh")).toEqual([]) // non-numeric
     expect(gtinVariants("")).toEqual([])
+  })
+})
+
+describe("baseUnitGtinVariants", () => {
+  // A case/inner-pack GTIN-14 (indicator 1–8) maps to the base unit that shares
+  // its item reference. The Covidien Shiley case "30884522026721" (indicator 3)
+  // is the each "00884522026720" / UPC-A "884522026720" — same 884522 02672 item
+  // reference, with the check digit recomputed for indicator 0.
+  it("derives the base-unit GTIN from a case GTIN (indicator 3 → 0)", () => {
+    const variants = baseUnitGtinVariants("30884522026721")
+    expect(variants).toContain("00884522026720") // base GTIN-14
+    expect(variants).toContain("884522026720") // base UPC-A (likely stored form)
+    expect(variants).not.toContain("30884522026721") // never the scanned case itself
+  })
+
+  it("returns [] when there's no separate base unit to fall back to", () => {
+    expect(baseUnitGtinVariants("00036000291452")).toEqual([]) // indicator 0 = already base
+    expect(baseUnitGtinVariants("90884522026723")).toEqual([]) // indicator 9 = variable measure
+    expect(baseUnitGtinVariants("036000291452")).toEqual([]) // UPC-A, not a GTIN-14
+    expect(baseUnitGtinVariants("30884522026720")).toEqual([]) // bad check digit
+    expect(baseUnitGtinVariants("")).toEqual([])
   })
 })

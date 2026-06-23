@@ -58,6 +58,26 @@ describe("parseGs1", () => {
     })
   })
 
+  it("recovers the GTIN when the reader dropped the FNC1 separators (Emerald Prophy Angles)", () => {
+    // Real GS1-128 read back as a flat Code-128 string with no GS (\x1d) bytes.
+    // The naive walk re-read a spurious AI 01 and clobbered the GTIN; we keep the
+    // leading one. Lot/expiry are unrecoverable here, so we surface neither
+    // rather than a fabricated value off the mis-framed tail.
+    expect(parseGs1("010060453940417111120101010MK005458")).toEqual({
+      gtin: "00604539404171",
+    })
+  })
+
+  it("still reads lot + expiry from an FNC1-stripped string when the framing stays clean", () => {
+    // 01 (fixed) → 17 (fixed) → 10 (variable, last) needs no separator and stays
+    // unambiguous, so the trace fields are trustworthy and we keep them.
+    expect(parseGs1("0100605861017657" + "17" + "281204" + "10" + "13593092")).toEqual({
+      gtin: "00605861017657",
+      lot: "13593092",
+      expiry: "2028-12-04",
+    })
+  })
+
   it("parses a GS1 Digital Link URL", () => {
     expect(parseGs1("https://id.gs1.org/01/00605861017657/10/13593092/17/281204")).toEqual({
       gtin: "00605861017657",
