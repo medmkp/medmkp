@@ -7,6 +7,7 @@ import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NA
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { ScanSessionsView, ScanSessionView } from "./scansessions";
 import { EvidenceView, EvidenceBinderView } from "./evidence";
+import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, MobileScanItemView, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, SavingsView } from "./reorder";
@@ -1339,7 +1340,7 @@ export default function Home() {
   // from the old IA becomes unreachable (Savings is kept but demoted).
   const navItems = [
     ["dashboard", "icon-home", "Dashboard", true],
-    ["needs-attention", "icon-alert-triangle", "Needs attention", true],
+    ["needsAttention", "icon-alert-triangle", "Needs attention", false, NEEDS_ATTENTION_BADGE],
     ["home", "icon-cart", "Reorder list"],
     ["locations", "icon-map-pin", "Locations"],
     ["scanSessions", "icon-scan", "Scan sessions"],
@@ -1572,7 +1573,7 @@ export default function Home() {
         <div className="app-body">
         <aside className="sidebar">
           <nav className="nav-tabs" aria-label="Primary navigation">
-            {navItems.map(([target, icon, label, soon]) => (
+            {navItems.map(([target, icon, label, soon, count]) => (
               <button
                 key={target}
                 className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail")) || (target === "scanSessions" && view === "scanSession") || (target === "evidence" && view === "evidenceBinder") ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
@@ -1585,6 +1586,7 @@ export default function Home() {
                 <Icon name={icon} />
                 <strong>{label}</strong>
                 {soon && <span className="nav-soon-badge">Soon</span>}
+                {!soon && count ? <span className="nav-count-badge">{count}</span> : null}
               </button>
             ))}
           </nav>
@@ -1623,6 +1625,8 @@ export default function Home() {
           )}
 
           {view === "reorderList" && reorderListEl}
+
+          {view === "needsAttention" && <NeedsAttentionView onToast={showToast} />}
 
           {view === "locations" && (
             <LocationsBoardView

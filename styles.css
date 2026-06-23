@@ -163,6 +163,7 @@ p {
 }
 
 .nav-tab {
+  position: relative;
   display: grid;
   grid-template-columns: 30px 1fr;
   align-items: center;
@@ -226,6 +227,29 @@ p {
   text-transform: uppercase;
 }
 
+/* Live count badge on an active rail item (e.g. open Needs Attention issues).
+   Scoped under .nav-tab so it beats `.nav-tab span { display: contents }`, which
+   would otherwise zero out the box and let the number wrap as inline text. */
+.nav-tab .nav-count-badge {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.13);
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 /* Collapse toggle lives at the very bottom of the rail as a quiet utility — not
    in the nav's prime real estate. Collapsing shrinks the sidebar to a narrow
    icon-only rail rather than hiding it. */
@@ -282,7 +306,8 @@ p {
     display: none;
   }
 
-  .app-shell.nav-collapsed .nav-soon-badge {
+  .app-shell.nav-collapsed .nav-soon-badge,
+  .app-shell.nav-collapsed .nav-count-badge {
     display: none;
   }
 
