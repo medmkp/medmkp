@@ -18,9 +18,19 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
   const [existing] = await medmkp.listReorderLists({ practice_id: practiceId })
 
+  // Stable version token for the 3s client poll. When the caller passes the
+  // version it already has (?since=) and nothing changed, skip the body so an
+  // idle list is a near-free request.
+  const current = existing?.updated_at ? new Date(existing.updated_at as any).toISOString() : null
+  const since = typeof req.query?.since === "string" ? req.query.since : undefined
+  if (since && current && since === current) {
+    res.json({ unchanged: true, updated_at: current })
+    return
+  }
+
   res.json({
     state: existing?.state ?? null,
-    updated_at: existing?.updated_at ?? null,
+    updated_at: current,
   })
 }
 
