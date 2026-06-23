@@ -889,15 +889,29 @@ export default function Home() {
       ? docs
       : [...docs, { id: "scan", name: "Barcode scans", itemCount: 0 }]);
 
-    // One instance per product: a code already on the list re-surfaces so the
-    // buyer sees it registered, but never bumps the quantity — they set quantity
-    // back on the reorder list. This keeps a barcode lingering in frame (or a
-    // deliberate re-scan) from piling up duplicate counts.
-    const existing = code ? draftItems.find((item) => item.barcode === code) : null;
+    // One instance per product: a code already ON the list (active) re-surfaces
+    // so the buyer sees it registered, but never bumps the quantity — they set
+    // quantity back on the reorder list. This keeps a barcode lingering in frame
+    // (or a deliberate re-scan) from piling up duplicate counts. Match only
+    // active items: a removed/cleared item is a tombstone (included:false), and
+    // re-scanning it should bring it back, not be rejected as a duplicate.
+    const existing = code ? draftItems.find((item) => item.barcode === code && item.included !== false) : null;
     if (existing) {
       setScanResult({ status: statusFromItem(existing), item: existing, isDuplicate: true, qty: existing.draftQty || 1 });
       showToast("Already on your list");
       return false;
+    }
+
+    // Re-scanning a removed/cleared item revives its tombstone in place (keeping
+    // any qty/notes/price it carried) rather than adding a parallel duplicate.
+    const tombstone = code ? draftItems.find((item) => item.barcode === code && item.included === false) : null;
+    if (tombstone) {
+      const revived = { ...tombstone, included: true, updatedAt: Date.now() };
+      setDraftItems((items) => items.map((it) => (it.id === tombstone.id ? revived : it)));
+      setScanCount((n) => n + 1);
+      setScanResult({ status: statusFromItem(revived), item: revived, isDuplicate: false, qty: revived.draftQty || 1 });
+      showToast(`Added ${revived.product || revived.canonicalName || code || "item"}`);
+      return true;
     }
 
     // Resolve against the real catalog: GTIN/UPC barcode first, then exact SKU.
@@ -905,7 +919,7 @@ export default function Home() {
     const item = makeScanDraftItem(code, product);
 
     setDraftItems((items) => {
-      if (code && items.some((it) => it.barcode === code)) return items; // race guard
+      if (code && items.some((it) => it.barcode === code && it.included !== false)) return items; // race guard
       return [...items, item];
     });
     setScanCount((n) => n + 1);
