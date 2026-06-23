@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchResults } from "./catalog";
 import { BrandMark, Icon, IconSprite } from "./icons";
-import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, lookupScannedProduct, makeScanDraftItem, mapSearchOffer, money, newItemId, parseAttributes, pathForView, shopifyStockKey, slimHandoffRow, statusFromItem, viewFromPath } from "./lib";
+import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, lookupScannedProduct, makeScanDraftItem, mapSearchOffer, money, newItemId, parseAttributes, pathForView, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
+import { ScanSessionsView, ScanSessionView } from "./scansessions";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, MobileBottomNav, MobileScanItemView, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, SavingsView } from "./reorder";
@@ -27,6 +28,7 @@ export default function Home() {
   const [categorySlug, setCategorySlug] = useState(null);
   const [supplierId, setSupplierId] = useState(null);
   const [locationId, setLocationId] = useState(null);
+  const [scanSessionId, setScanSessionId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -328,12 +330,13 @@ export default function Home() {
       const nextRoute = viewFromPath(window.location.pathname + window.location.search);
       setIsLoggedIn(nextRoute.isLoggedIn);
       setViewState(nextRoute.view);
-      setLocationId(nextRoute.locationId || null);
       setHistoryId(nextRoute.historyId || null);
       setSelectedHandoffId(nextRoute.handoffId || null);
       setProductHandle(nextRoute.productHandle || null);
       setCategorySlug(nextRoute.categorySlug || null);
       setSupplierId(nextRoute.supplierId || null);
+      setLocationId(nextRoute.locationId || null);
+      setScanSessionId(nextRoute.scanSessionId || null);
       setSearchQuery(nextRoute.searchQuery || "");
       setMobileAddItemRoute(Boolean(nextRoute.mobileAddItemRoute));
       setMenuOpen(false);
@@ -681,6 +684,7 @@ export default function Home() {
     setCategorySlug(next.categorySlug || null);
     setSupplierId(next.supplierId || null);
     setLocationId(next.locationId || null);
+    setScanSessionId(next.scanSessionId || null);
     setSearchQuery(next.searchQuery || "");
     setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
     setMenuOpen(false);
@@ -706,6 +710,18 @@ export default function Home() {
     setScanResult(null);
     setScanCount(0);
     navigate("/app/scan");
+  }
+
+  // Start (or resume) a real scan session for a location and drop into it. With
+  // no location, fall back to the Scan Sessions list (which has the picker).
+  async function startScanSession(locId) {
+    if (!locId) { navigate("/app/scan-sessions"); return; }
+    try {
+      const { session } = await traceApi.startSession({ location_id: locId });
+      navigate(`/app/scan-sessions/${session.id}`);
+    } catch {
+      showToast("Couldn't start a scan session.");
+    }
   }
 
   function handleScanComplete(code) {
@@ -1298,7 +1314,7 @@ export default function Home() {
     ["needs-attention", "icon-alert-triangle", "Needs attention", true],
     ["home", "icon-cart", "Reorder list"],
     ["locations", "icon-map-pin", "Locations"],
-    ["scan-sessions", "icon-scan", "Scan sessions", true],
+    ["scanSessions", "icon-scan", "Scan sessions"],
     ["savings", "icon-dollar-circle", "Savings"],
     ["evidence", "icon-shield-check", "Evidence", true],
     ["reports", "icon-chart", "Reports", true],
@@ -1472,7 +1488,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && view === "locationAdd") ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail")) || (target === "scanSessions" && view === "scanSession") ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1567,7 +1583,7 @@ export default function Home() {
 
           {view === "locations" && (
             <LocationsBoardView
-              onStartScan={openMobileScan}
+              onStartScan={startScanSession}
               onAddLocation={() => navigate("/app/locations/new")}
               onOpenLocation={(id) => navigate(`/app/locations/${id}`)}
               onToast={showToast}
@@ -1577,7 +1593,7 @@ export default function Home() {
           {view === "locationAdd" && (
             <AddLocationView
               onCancel={() => navigate("/app/locations")}
-              onSave={() => navigate("/app/locations")}
+              onSaved={() => navigate("/app/locations")}
               onToast={showToast}
             />
           )}
@@ -1586,7 +1602,25 @@ export default function Home() {
             <LocationDetailView
               locationId={locationId}
               onBack={() => navigate("/app/locations")}
-              onStartScan={openMobileScan}
+              onStartScan={() => startScanSession(locationId)}
+              onToast={showToast}
+              onNavigate={navigate}
+            />
+          )}
+
+          {view === "scanSessions" && (
+            <ScanSessionsView
+              onOpenSession={(id) => navigate(`/app/scan-sessions/${id}`)}
+              onNavigate={navigate}
+              onToast={showToast}
+            />
+          )}
+
+          {view === "scanSession" && (
+            <ScanSessionView
+              sessionId={scanSessionId}
+              onBack={() => navigate("/app/scan-sessions")}
+              onNavigate={navigate}
               onToast={showToast}
               onNavigate={navigate}
             />

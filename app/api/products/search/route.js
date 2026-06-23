@@ -27,6 +27,10 @@ export async function GET(request) {
       canonical_products: body.products || [],
       kind: body.kind || "none",
       source: "medusa",
+      // Lot / expiry / production date the backend decoded off the package
+      // (GS1 / HIBC). Present only on barcode scans that carry traceability.
+      ...(body.scanned ? { scanned: body.scanned } : {}),
+      ...(body.identified ? { identified: body.identified } : {}),
     });
   } catch {
     return NextResponse.json({

@@ -50,6 +50,7 @@ export const routeByView = {
   home: "/app",
   locations: "/app/locations",
   locationAdd: "/app/locations/new",
+  scanSessions: "/app/scan-sessions",
   plan: "/app/review",
   catalog: "/app/catalog",
   savings: "/app/savings",
@@ -77,6 +78,8 @@ export function viewFromPath(pathname = "/") {
   // Authenticated app
   if (path === "/app") return { view: "home", isLoggedIn: true };
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
+  if (path === "/app/scan-sessions") return { view: "scanSessions", isLoggedIn: true };
+  if (path.startsWith("/app/scan-sessions/")) return { view: "scanSession", isLoggedIn: true, scanSessionId: decodeURIComponent(path.split("/")[3] || "") };
   // /app/plan is the former name — kept so old links/bookmarks still resolve.
   if (path === "/app/review/handoff" || path === "/app/plan/handoff") return { view: "handoff", isLoggedIn: true, handoffId: query.get("ho") || "" };
   if (path === "/app/review" || path === "/app/plan") return { view: "plan", isLoggedIn: true };
@@ -632,6 +635,118 @@ export async function lookupScannedProduct(code) {
     }
   };
   return (await tryLookup("barcode")) || (await tryLookup("code"));
+}
+
+// Scan-session lookup: like lookupScannedProduct but also returns the lot/expiry
+// the backend decoded off the package (the `scanned` block). The barcode path
+// carries traceability (GS1 / HIBC); the SKU path is a plain identity fallback.
+export async function scanLookup(code) {
+  if (!code) return { product: null, scanned: null, kind: "none" };
+  try {
+    const response = await fetch(`/api/products/search?barcode=${encodeURIComponent(code)}&limit=1`);
+    const data = await response.json();
+    const product = data.canonical_products?.[0] || null;
+    const scanned = data.scanned || null;
+    if (product || scanned) return { product, scanned, kind: data.kind || "none" };
+  } catch {
+    /* fall through to SKU lookup */
+  }
+  try {
+    const response = await fetch(`/api/products/search?code=${encodeURIComponent(code)}&limit=1`);
+    const data = await response.json();
+    return { product: data.canonical_products?.[0] || null, scanned: null, kind: data.kind || "none" };
+  } catch {
+    return { product: null, scanned: null, kind: "none" };
+  }
+}
+
+// Build the POST body for a scan-session line from a scan lookup. Splits the
+// matched identity into canonical (mcp_) vs supplier-only (msp_) by id prefix so
+// the server derives the right review bucket, and carries the decoded lot/expiry.
+export function scanLinePayload(code, product, scanned) {
+  const best = product?.best_offer || product?.offers?.[0] || null;
+  const id = product?.id || "";
+  return {
+    barcode: code || null,
+    canonical_product_id: id.startsWith("mcp") ? id : null,
+    supplier_product_id: best?.supplier_product_id || (id.startsWith("msp") ? id : null),
+    name: product?.name || (code ? `Unknown item · ${code}` : "Unknown item"),
+    image_url: product?.image_url || best?.image_url || "",
+    lot_number: scanned?.lot || null,
+    expiration_date: scanned?.expiry || null,
+    production_date: scanned?.production_date || null,
+    quantity: 1,
+  };
+}
+
+// Thin client for the Locations + Scan-Session proxies. Each returns parsed JSON
+// or throws; callers handle the empty / signed-out / unreachable states.
+async function traceFetch(path, opts) {
+  const response = await fetch(path, opts);
+  if (!response.ok) {
+    // Surface the backend's own message ({ error } from our routes, { message }
+    // from the Medusa framework) and the status, so callers can tell a real
+    // auth failure apart from validation / no-practice / server errors.
+    const data = await response.json().catch(() => ({}));
+    const error = new Error(data.error || data.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+function jsonBody(method, body) {
+  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+
+// Maps a traceFetch rejection to a user-facing toast. Only a 401 is really an
+// "are you signed in?" case; 4xx errors carry an actionable backend message, so
+// surface it rather than blaming auth. 5xx / network fall back to a retry hint.
+export function traceErrorMessage(err, fallback) {
+  if (err?.status === 401) return "Your session expired — please sign in again.";
+  if (err?.status && err.status < 500 && err.message) return err.message;
+  return fallback;
+}
+
+export const traceApi = {
+  listLocations: () => traceFetch("/api/locations"),
+  createLocation: (body) => traceFetch("/api/locations", jsonBody("POST", body)),
+  getLocation: (id) => traceFetch(`/api/locations/${encodeURIComponent(id)}`),
+  updateLocation: (id, body) => traceFetch(`/api/locations/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
+  deleteLocation: (id, force) =>
+    traceFetch(`/api/locations/${encodeURIComponent(id)}${force ? "?force=1" : ""}`, { method: "DELETE" }),
+  listSessions: (query = "") => traceFetch(`/api/scan-sessions${query}`),
+  startSession: (body) => traceFetch("/api/scan-sessions", jsonBody("POST", body)),
+  getSession: (id) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}`),
+  updateSession: (id, body) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
+  deleteSession: (id) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  addLine: (id, body) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}/lines`, jsonBody("POST", body)),
+  updateLine: (id, body) => traceFetch(`/api/scan-lines/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
+  deleteLine: (id) => traceFetch(`/api/scan-lines/${encodeURIComponent(id)}`, { method: "DELETE" }),
+};
+
+// Shared review-bucket vocabulary for scan-session lines (UI labels + tone).
+export const SCAN_BUCKETS = {
+  confirmed: { label: "Confirmed", tone: "green", icon: "icon-check-circle" },
+  needs_details: { label: "Needs details", tone: "amber", icon: "icon-clock" },
+  needs_review: { label: "Needs review", tone: "red", icon: "icon-alert-triangle" },
+};
+
+// Format an ISO date for the traceability UI ("Dec 4, 2028"), tolerant of the
+// date-time the backend stores. Returns "" for null/unparseable.
+export function formatTraceDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+// Days until an expiration date (negative = already expired); null when absent.
+export function daysUntil(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86_400_000);
 }
 
 

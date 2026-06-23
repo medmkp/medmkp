@@ -30,5 +30,25 @@ export default defineMiddlewares({
       method: ["GET", "POST"],
       middlewares: [authenticate("customer", ["bearer", "session"])],
     },
+    // Phase 2 Locations / Inventory / Scan-Session routes. Every path in these
+    // families is practice-scoped (they call requirePractice / read actor_id),
+    // so gate the whole subtree — base path plus /:id, /layout, /:id/inventory,
+    // /:id/lines — across all methods.
+    {
+      matcher: "/medmkp/locations*",
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
+    {
+      matcher: "/medmkp/inventory*",
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
+    {
+      matcher: "/medmkp/scan-sessions*",
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
+    {
+      matcher: "/medmkp/scan-lines*",
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
   ],
 })

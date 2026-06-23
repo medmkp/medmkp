@@ -1346,16 +1346,14 @@
 }
 .table tbody tr:hover { background: #fafcff; }
 
-/* Fixed column widths so 9 columns always fit the panel — no horizontal scroll. */
-.table th:nth-child(1), .table td:nth-child(1) { width: 24%; }   /* Item */
-.table th:nth-child(2), .table td:nth-child(2) { width: 9%; }    /* SKU */
-.table th:nth-child(3), .table td:nth-child(3) { width: 8%; }    /* On hand */
-.table th:nth-child(4), .table td:nth-child(4) { width: 8%; }    /* Par level */
-.table th:nth-child(5), .table td:nth-child(5) { width: 10%; }   /* Status */
-.table th:nth-child(6), .table td:nth-child(6) { width: 11%; }   /* Evidence */
-.table th:nth-child(7), .table td:nth-child(7) { width: 7%; }    /* Reorder */
-.table th:nth-child(8), .table td:nth-child(8) { width: 9%; }    /* Last scanned */
-.table th:nth-child(9), .table td:nth-child(9) { width: 14%; }   /* Actions */
+/* Fixed column widths so the 7 columns always fit the panel — no horizontal scroll. */
+.table th:nth-child(1), .table td:nth-child(1) { width: 30%; }   /* Item */
+.table th:nth-child(2), .table td:nth-child(2) { width: 9%; }    /* On hand */
+.table th:nth-child(3), .table td:nth-child(3) { width: 7%; }    /* Par */
+.table th:nth-child(4), .table td:nth-child(4) { width: 14%; }   /* Lot */
+.table th:nth-child(5), .table td:nth-child(5) { width: 14%; }   /* Expiration */
+.table th:nth-child(6), .table td:nth-child(6) { width: 12%; }   /* Status */
+.table th:nth-child(7), .table td:nth-child(7) { width: 14%; }   /* Last counted */
 
 .tItem { font-weight: 600; color: #14202E; }
 .tItemCell { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -1394,18 +1392,16 @@
 
 .tActions { display: flex; align-items: center; gap: 4px; }
 .tBtn {
-  flex: none;
-  border: 1px solid #2F5BD6;
+  border: 1px solid #d6deea;
   border-radius: 8px;
-  padding: 5px 9px;
-  font-size: 12px;
+  padding: 6px 12px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #fff;
-  background: #2F5BD6;
+  color: #2a3a4a;
+  background: #fff;
   cursor: pointer;
-  white-space: nowrap;
 }
-.tBtn:hover { background: #244dbd; border-color: #244dbd; color: #fff; }
+.tBtn:hover { border-color: #2F5BD6; color: #2F5BD6; }
 
 .kebab {
   border: 0;

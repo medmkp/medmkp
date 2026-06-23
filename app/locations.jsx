@@ -2,22 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./icons";
-import { money } from "./lib";
+import { daysUntil, formatTraceDate, traceApi, traceErrorMessage } from "./lib";
 import { ProductThumb } from "./ui";
 import s from "./locations.module.css";
 
-// Locations surface: the Location Board (room/cabinet scan coverage) and the
-// Add Location form. Self-contained — both render off the MOCK below so the
-// parent can drop them in and swap `data` for real practice data later. The
-// scan-session richness (per-location scanned/confirmed counts, progress, recent
-// activity) isn't in the Phase-1 backend yet, so it's mock for now.
+// Locations surface: the Location Board (real per-practice locations with scan
+// coverage), the Add Location form (creates a real location), and the per-
+// location Detail (real inventory + scan entry). Scan coverage is rolled from
+// the location's scan sessions; inventory comes from the Phase-1 backend.
 
 // Per room-type icon + tint, mirroring the office-layout editor's vocabulary.
 const TYPE_META = {
   operatory: { icon: "icon-dental-chair", tint: s.tBlue, label: "Operatory" },
-  cabinet: { icon: "icon-archive-down", tint: s.tIndigo, label: "Cabinet" },
+  cabinet: { icon: "icon-cabinet", tint: s.tIndigo, label: "Cabinet" },
   sterilization: { icon: "icon-shield-check", tint: s.tTeal, label: "Sterilization" },
-  lab: { icon: "icon-bolt", tint: s.tViolet, label: "Lab" },
+  lab: { icon: "icon-microscope", tint: s.tViolet, label: "Lab" },
   storage: { icon: "icon-package", tint: s.tSlate, label: "Storage" },
   emergency_kit: { icon: "icon-alert-triangle", tint: s.tRed, label: "Emergency kit" },
   other: { icon: "icon-map-pin", tint: s.tBlue, label: "Location" },
@@ -39,142 +38,6 @@ const STATUS_META = {
 const TONE = { blue: s.tBlue, green: s.tGreen, amber: s.tAmber, red: s.tRed, violet: s.tViolet, slate: s.tSlate };
 // Text/foreground tone (no background) for inline icons + status labels.
 const TONE_TEXT = { blue: s.txBlue, green: s.txGreen, amber: s.txAmber, red: s.txRed };
-
-const BOARD_MOCK = {
-  stats: {
-    total: 12,
-    rooms: 5,
-    inProgress: 3,
-    inProgressPct: 25,
-    needAttention: 5,
-    needAttentionPct: 42,
-    completed: 7,
-    completedLocations: 4,
-  },
-  locations: [
-    {
-      id: "loc_hyg",
-      name: "Hygiene Cabinet",
-      room: "Hygiene Room",
-      type: "cabinet",
-      status: "in_progress",
-      stats: [
-        { icon: "icon-scan", value: 37, label: "Scanned", tone: "blue" },
-        { icon: "icon-check-circle", value: 29, label: "Confirmed", tone: "green" },
-        { icon: "icon-clock", value: 6, label: "Need details", tone: "amber" },
-        { icon: "icon-alert-triangle", value: 2, label: "Need review", tone: "red" },
-      ],
-      progress: 78,
-      updated: "2 min ago",
-      assignee: "Alex Kim",
-      actions: [
-        { label: "Resume scan", icon: "icon-scan", kind: "primary", action: "resume" },
-        { label: "Open board", icon: "icon-chevron-right", iconRight: true, action: "open" },
-      ],
-    },
-    {
-      id: "loc_op1",
-      name: "Operatory 1",
-      room: "Operatory",
-      sub: "Treatment Room",
-      type: "operatory",
-      status: "in_progress",
-      stats: [
-        { icon: "icon-scan", value: 24, label: "Scanned", tone: "blue" },
-        { icon: "icon-check-circle", value: 21, label: "Confirmed", tone: "green" },
-        { icon: "icon-clock", value: 3, label: "Need details", tone: "amber" },
-        { icon: "icon-alert-triangle", value: 1, label: "Need review", tone: "red" },
-      ],
-      progress: 81,
-      updated: "18 min ago",
-      assignee: "Hannah Lee",
-      actions: [
-        { label: "Resume scan", icon: "icon-scan", kind: "primary", action: "resume" },
-        { label: "Open board", icon: "icon-chevron-right", iconRight: true, action: "open" },
-      ],
-    },
-    {
-      id: "loc_steri",
-      name: "Sterilization",
-      room: "Sterilization Room",
-      sub: "Equipment",
-      type: "sterilization",
-      status: "completed",
-      stats: [
-        { icon: "icon-scan", value: 48, label: "Scanned", tone: "blue" },
-        { icon: "icon-check-circle", value: 48, label: "Confirmed", tone: "green" },
-        { icon: "icon-check-circle", value: 0, label: "Unresolved", tone: "slate" },
-      ],
-      progress: 100,
-      updated: "Verified today",
-      updatedAt: "9:30 AM",
-      assignee: "Jamie Lee",
-      actions: [{ label: "View board", icon: "icon-chevron-right", iconRight: true, action: "open" }],
-    },
-    {
-      id: "loc_kit",
-      name: "Emergency Kit",
-      room: "Hallway",
-      sub: "Emergency Supplies",
-      type: "emergency_kit",
-      status: "needs_attention",
-      stats: [
-        { icon: "icon-scan", value: 12, label: "Tracked", tone: "blue" },
-        { icon: "icon-clock", value: 2, label: "Expiring soon", tone: "amber" },
-        { icon: "icon-shield-check", value: 1, label: "Missing proof", tone: "violet" },
-      ],
-      note: "3 issues require review",
-      updated: "Updated 32 min ago",
-      assignee: "Alex Kim",
-      actions: [{ label: "Review issues", icon: "icon-chevron-right", iconRight: true, kind: "danger", action: "review" }],
-    },
-    {
-      id: "loc_lab",
-      name: "Lab",
-      room: "Lab Room",
-      sub: "Work Area",
-      type: "lab",
-      status: "not_started",
-      empty: {
-        title: "No scan session started yet",
-        text: "Start a mobile scan to track inventory and monitor this location.",
-      },
-      actions: [{ label: "Start scan", icon: "icon-scan", action: "resume" }],
-    },
-    {
-      id: "loc_storage",
-      name: "Storage",
-      room: "Storage Room",
-      sub: "Supplies",
-      type: "storage",
-      status: "healthy",
-      stats: [
-        { icon: "icon-scan", value: 18, label: "Scanned", tone: "blue" },
-        { icon: "icon-check-circle", value: 17, label: "Confirmed", tone: "green" },
-        { icon: "icon-alert-triangle", value: 1, label: "Low-stock issue", tone: "amber" },
-      ],
-      progress: 94,
-      updated: "25 min ago",
-      assignee: "Hannah Lee",
-      actions: [{ label: "Open board", icon: "icon-chevron-right", iconRight: true, action: "open" }],
-    },
-  ],
-  activity: [
-    { id: 1, text: "Hygiene Cabinet resumed", meta: "2 min ago · Alex Kim", icon: "icon-scan", tone: "blue" },
-    { id: 2, text: "Sterilization completed", meta: "14 min ago · Jamie Lee", icon: "icon-check-circle", tone: "green" },
-    { id: 3, text: "Emergency Kit flagged for review", meta: "32 min ago · System", icon: "icon-alert-triangle", tone: "amber" },
-    { id: 4, text: "Operatory 1 session saved", meta: "1 hr ago · Hannah Lee", icon: "icon-scan", tone: "blue" },
-  ],
-};
-
-function initials(name) {
-  return (name || "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
-}
 
 function Stat({ icon, tint, label, value, meta }) {
   return (
@@ -244,28 +107,23 @@ function LocationCard({ loc, onAction, onOpen }) {
               <Icon name="icon-alert-triangle" />
               {loc.note}
             </div>
-          ) : (
+          ) : loc.progress != null ? (
             <div className={s.progress}>
               <span className={s.progressTrack}>
                 <span className={`${s.progressFill} ${complete ? s.complete : ""}`} style={{ width: `${loc.progress}%` }} />
               </span>
               <span className={s.progressPct}>{loc.progress}%</span>
             </div>
-          )}
+          ) : null}
 
-          <div className={s.cardFoot}>
-            <div className={s.footMeta}>
-              <span className={s.footMetaLabel}><Icon name="icon-clock" />{loc.status === "completed" ? "Verified" : "Last updated"}</span>
-              <span className={s.footMetaValue}>{loc.updatedAt ? `${loc.updated.replace("Verified ", "")} ${loc.updatedAt}` : loc.updated}</span>
-            </div>
-            <div className={s.assignee}>
-              <div className={s.assigneeMeta}>
-                <span className={s.footMetaLabel}>Assigned to</span>
-                <span className={s.footMetaValue}>{loc.assignee}</span>
+          {loc.updated && (
+            <div className={s.cardFoot}>
+              <div className={s.footMeta}>
+                <span className={s.footMetaLabel}><Icon name="icon-clock" />{loc.status === "completed" ? "Last completed" : "Last updated"}</span>
+                <span className={s.footMetaValue}>{loc.updated}</span>
               </div>
-              <span className={`${s.avatar} ${loc.status === "completed" ? s.avatarGreen : ""}`}>{initials(loc.assignee)}</span>
             </div>
-          </div>
+          )}
         </>
       )}
 
@@ -287,39 +145,149 @@ function LocationCard({ loc, onAction, onOpen }) {
   );
 }
 
-export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocation, onOpenLocation, onToast }) {
-  const { stats, locations, activity } = data;
+// Relative "x ago" for session timestamps; "" when absent/unparseable.
+function relativeTime(iso) {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+// Map a real location + its latest scan session into the board card's shape.
+// Scan coverage (scanned/confirmed/needs-*) comes from the session; when a
+// location has never been scanned we show its tracked-item + needs-attention
+// rollups instead. No fabricated assignees or activity — only real numbers.
+function toBoardCard(loc, session) {
+  const c = session?.counts;
+  const scanned = c?.scanned || 0;
+  const meta = typeMeta(loc.type);
+
+  let status;
+  if (session?.status === "active") status = "in_progress";
+  else if (session?.status === "completed") status = "completed";
+  else if ((loc.needs_attention_count || 0) > 0) status = "needs_attention";
+  else if ((loc.item_count || 0) > 0) status = "healthy";
+  else status = "not_started";
+
+  const stats = session
+    ? [
+        { icon: "icon-scan", value: scanned, label: "Scanned", tone: "blue" },
+        { icon: "icon-check-circle", value: c.confirmed || 0, label: "Confirmed", tone: "green" },
+        { icon: "icon-clock", value: c.needs_details || 0, label: "Need details", tone: "amber" },
+        { icon: "icon-alert-triangle", value: c.needs_review || 0, label: "Need review", tone: "red" },
+      ]
+    : [
+        { icon: "icon-package", value: loc.item_count || 0, label: "Tracked", tone: "blue" },
+        { icon: "icon-alert-triangle", value: loc.needs_attention_count || 0, label: "Needs attention", tone: (loc.needs_attention_count || 0) ? "amber" : "slate" },
+      ];
+
+  const resumeLabel = session?.status === "active" ? "Resume scan" : "Start scan";
+  return {
+    id: loc.id,
+    name: loc.name,
+    type: loc.type,
+    room: meta.label,
+    status,
+    stats,
+    progress: session ? (scanned ? Math.round(((c.confirmed || 0) / scanned) * 100) : 0) : null,
+    empty:
+      status === "not_started"
+        ? { title: "No items tracked yet", text: "Start a scan session to capture this location's inventory." }
+        : null,
+    updated: session ? relativeTime(session.updated_at) : "",
+    actions: [
+      { label: resumeLabel, icon: "icon-scan", kind: "primary", action: "resume" },
+      { label: "Open", icon: "icon-chevron-right", iconRight: true, action: "open" },
+    ],
+  };
+}
+
+export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation, onToast }) {
+  const [locations, setLocations] = useState(null);
+  const [sessions, setSessions] = useState([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [roomType, setRoomType] = useState("all");
-  const [assignee, setAssignee] = useState("all");
-  const [sort, setSort] = useState("updated");
+  const [sort, setSort] = useState("attention");
 
-  const assignees = useMemo(
-    () => Array.from(new Set(locations.map((l) => l.assignee).filter(Boolean))),
-    [locations],
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      traceApi.listLocations().catch(() => ({ locations: [] })),
+      traceApi.listSessions().catch(() => ({ sessions: [] })),
+    ]).then(([l, sx]) => {
+      if (!alive) return;
+      setLocations(l.locations || []);
+      setSessions(sx.sessions || []);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  // Latest session per location (the API returns sessions newest-first).
+  const latestByLocation = useMemo(() => {
+    const map = new Map();
+    for (const sess of sessions) if (!map.has(sess.location_id)) map.set(sess.location_id, sess);
+    return map;
+  }, [sessions]);
+
+  const cards = useMemo(
+    () => (locations || []).map((loc) => toBoardCard(loc, latestByLocation.get(loc.id))),
+    [locations, latestByLocation],
   );
+
+  const stats = useMemo(() => {
+    const list = locations || [];
+    const total = list.length || 1;
+    const inProgress = sessions.filter((x) => x.status === "active").length;
+    const completed = sessions.filter((x) => x.status === "completed").length;
+    const needAttention = list.filter((l) => (l.needs_attention_count || 0) > 0).length;
+    return {
+      total: list.length,
+      inProgress,
+      inProgressPct: Math.round((inProgress / total) * 100),
+      needAttention,
+      needAttentionPct: Math.round((needAttention / total) * 100),
+      completed,
+    };
+  }, [locations, sessions]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let rows = locations.filter((l) => {
-      if (q && !(`${l.name} ${l.room} ${l.sub || ""}`.toLowerCase().includes(q))) return false;
+    let rows = cards.filter((l) => {
+      if (q && !l.name.toLowerCase().includes(q)) return false;
       if (status !== "all" && l.status !== status) return false;
       if (roomType !== "all" && l.type !== roomType) return false;
-      if (assignee !== "all" && l.assignee !== assignee) return false;
       return true;
     });
     if (sort === "name") rows = [...rows].sort((a, b) => a.name.localeCompare(b.name));
     if (sort === "attention") rows = [...rows].sort((a, b) => (b.status === "needs_attention" ? 1 : 0) - (a.status === "needs_attention" ? 1 : 0));
     return rows;
-  }, [locations, query, status, roomType, assignee, sort]);
+  }, [cards, query, status, roomType, sort]);
 
-  const tellSoon = () => onToast?.("Scan sessions land in an upcoming phase.");
+  const activity = useMemo(
+    () =>
+      sessions.slice(0, 4).map((sess) => ({
+        id: sess.id,
+        text: `${sess.location_name || "Location"} — ${sess.status === "active" ? "scan in progress" : "scan completed"}`,
+        meta: relativeTime(sess.updated_at),
+        icon: sess.status === "active" ? "icon-scan" : "icon-check-circle",
+        tone: sess.status === "active" ? "blue" : "green",
+      })),
+    [sessions],
+  );
+
+  const lastActive = sessions.find((x) => x.status === "active");
+  const loading = locations === null;
 
   function handleCardAction(action, loc) {
-    if (action === "resume") return (onStartScan ? onStartScan() : tellSoon());
-    if (action === "open" || action === "review") return onOpenLocation?.(loc.id);
-    tellSoon();
+    if (action === "resume") return onStartScan?.(loc.id);
+    return onOpenLocation?.(loc.id);
   }
 
   return (
@@ -327,15 +295,15 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
       <header className={s.head}>
         <h1 className={s.title}>Location Board</h1>
         <p className={s.subtitle}>
-          Track rooms, cabinets, and scan coverage across the office. Resume mobile scan sessions, resolve issues, and monitor location health.
+          Track rooms, cabinets, and scan coverage across the office. Start or resume a scan session, resolve issues, and monitor location health.
         </p>
       </header>
 
       <div className={s.stats}>
-        <Stat icon="icon-map-pin" tint={s.tBlue} label="Total locations" value={stats.total} meta={`Across ${stats.rooms} rooms`} />
-        <Stat icon="icon-clock" tint={s.tBlue} label="In progress" value={stats.inProgress} meta={`${stats.inProgressPct}% of locations`} />
+        <Stat icon="icon-map-pin" tint={s.tBlue} label="Total locations" value={stats.total} />
+        <Stat icon="icon-clock" tint={s.tBlue} label="Scans in progress" value={stats.inProgress} meta={`${stats.inProgressPct}% of locations`} />
         <Stat icon="icon-alert-triangle" tint={s.tAmber} label="Need attention" value={stats.needAttention} meta={`${stats.needAttentionPct}% of locations`} />
-        <Stat icon="icon-check-circle" tint={s.tGreen} label="Completed this week" value={stats.completed} meta={`Across ${stats.completedLocations} locations`} />
+        <Stat icon="icon-check-circle" tint={s.tGreen} label="Sessions completed" value={stats.completed} />
       </div>
 
       <div className={s.toolbar}>
@@ -371,19 +339,12 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
           ]}
         />
         <Select
-          label="Assignee"
-          value={assignee}
-          onChange={setAssignee}
-          options={[{ value: "all", label: "All assignees" }, ...assignees.map((a) => ({ value: a, label: a }))]}
-        />
-        <Select
           label="Sort by"
           value={sort}
           onChange={setSort}
           options={[
-            { value: "updated", label: "Last updated" },
-            { value: "name", label: "Name" },
             { value: "attention", label: "Needs attention" },
+            { value: "name", label: "Name" },
           ]}
         />
         <div className={s.toolbarActions}>
@@ -391,16 +352,20 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
             <Icon name="icon-plus" />
             Add location
           </button>
-          <button type="button" className={s.scanBtn} onClick={() => (onStartScan ? onStartScan() : tellSoon())}>
+          <button type="button" className={s.scanBtn} onClick={() => onStartScan?.(null)}>
             <Icon name="icon-scan" />
-            Start mobile scan
+            Start scan session
           </button>
         </div>
       </div>
 
       <div className={s.layout}>
         <div className={s.cards}>
-          {visible.length === 0 ? (
+          {loading ? (
+            <div className={s.empty}>Loading locations…</div>
+          ) : cards.length === 0 ? (
+            <div className={s.empty}>No locations yet. Add your first location to start tracking inventory.</div>
+          ) : visible.length === 0 ? (
             <div className={s.empty}>No locations match your filters.</div>
           ) : (
             visible.map((loc) => <LocationCard key={loc.id} loc={loc} onAction={handleCardAction} onOpen={onOpenLocation} />)
@@ -408,38 +373,35 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
         </div>
 
         <aside className={s.rail}>
-          <section className={s.railCard}>
-            <h2 className={s.railTitle}>Recent scan activity</h2>
-            {activity.map((ev) => (
-              <div className={s.activityRow} key={ev.id}>
-                <span className={`${s.activityIcon} ${TONE[ev.tone] || s.tSlate}`}><Icon name={ev.icon} /></span>
-                <div className={s.activityBody}>
-                  <div className={s.activityText}>{ev.text}</div>
-                  <div className={s.activityMeta}>{ev.meta}</div>
+          {activity.length > 0 && (
+            <section className={s.railCard}>
+              <h2 className={s.railTitle}>Recent scan activity</h2>
+              {activity.map((ev) => (
+                <div className={s.activityRow} key={ev.id}>
+                  <span className={`${s.activityIcon} ${TONE[ev.tone] || s.tSlate}`}><Icon name={ev.icon} /></span>
+                  <div className={s.activityBody}>
+                    <div className={s.activityText}>{ev.text}</div>
+                    <div className={s.activityMeta}>{ev.meta}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
-            <button type="button" className={s.railLink} onClick={tellSoon}>
-              View all activity
-              <Icon name="icon-arrow-right" />
-            </button>
-          </section>
+              ))}
+            </section>
+          )}
 
           <section className={s.railCard}>
-            <h2 className={s.railTitle}>Mobile scan shortcuts</h2>
-            <button type="button" className={s.shortcut} onClick={() => (onStartScan ? onStartScan() : tellSoon())}>
+            <h2 className={s.railTitle}>Scan shortcuts</h2>
+            <button
+              type="button"
+              className={s.shortcut}
+              onClick={() => (lastActive ? onStartScan?.(lastActive.location_id) : onToast?.("No scan session to resume."))}
+            >
               <span className={s.shortcutIcon}><Icon name="icon-scan" /></span>
-              Resume last session
+              {lastActive ? `Resume ${lastActive.location_name || "last session"}` : "Resume last session"}
               <Icon name="icon-chevron-right" className={s.shortcutChevron} />
             </button>
-            <button type="button" className={s.shortcut} onClick={tellSoon}>
+            <button type="button" className={s.shortcut} onClick={() => onStartScan?.(null)}>
               <span className={s.shortcutIcon}><Icon name="icon-map-pin" /></span>
-              Choose location
-              <Icon name="icon-chevron-right" className={s.shortcutChevron} />
-            </button>
-            <button type="button" className={s.shortcut} onClick={tellSoon}>
-              <span className={s.shortcutIcon}><Icon name="icon-grid" /></span>
-              Print QR labels
+              Choose a location to scan
               <Icon name="icon-chevron-right" className={s.shortcutChevron} />
             </button>
           </section>
@@ -448,11 +410,7 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
             <span className={s.promoIcon}><Icon name="icon-scan" /></span>
             <div>
               <div className={s.promoTitle}>Scan on the go</div>
-              <p className={s.promoText}>Use the TraceDDS mobile app to scan items and sync instantly.</p>
-              <button type="button" className={s.railLink} onClick={tellSoon}>
-                Learn more
-                <Icon name="icon-arrow-right" />
-              </button>
+              <p className={s.promoText}>Open a scan session on your phone to capture lot &amp; expiry off each package.</p>
             </div>
           </section>
         </aside>
@@ -460,11 +418,7 @@ export function LocationsBoardView({ data = BOARD_MOCK, onStartScan, onAddLocati
 
       <div className={s.tip}>
         <Icon name="icon-info" />
-        <span><strong>Tip:</strong> Use mobile scanning to keep your locations accurate and up to date.</span>
-        <button type="button" className={s.tipLink} onClick={tellSoon}>
-          Learn how scanning works
-          <Icon name="icon-arrow-right" />
-        </button>
+        <span><strong>Tip:</strong> A scan session captures lot &amp; expiry that isn&rsquo;t on any invoice — the data recall response and expiry alerts depend on.</span>
       </div>
     </div>
   );
@@ -498,7 +452,7 @@ const ABOUT_ROWS = [
   { icon: "icon-package", tint: s.tSlate, name: "Storage", text: "Store and manage supplies and equipment." },
 ];
 
-export function AddLocationView({ onCancel, onSave, onToast }) {
+export function AddLocationView({ onCancel, onSaved, onToast }) {
   const [name, setName] = useState("");
   const [type, setType] = useState("");
   const [parent, setParent] = useState("");
@@ -506,6 +460,7 @@ export function AddLocationView({ onCancel, onSave, onToast }) {
   const [useFor, setUseFor] = useState({});
   const [parLevel, setParLevel] = useState("");
   const [lowStock, setLowStock] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const typeLabel = TYPE_OPTIONS.find((t) => t.value === type)?.label || "";
   const selectedUse = USE_FOR.filter((u) => useFor[u.key]);
@@ -514,11 +469,20 @@ export function AddLocationView({ onCancel, onSave, onToast }) {
     setUseFor((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  function handleSave() {
+  // Only name / type / notes have backend fields today; the rest of the form
+  // (parent, use-for, par/low-stock, image) is captured visually for later phases.
+  async function handleSave() {
     if (!name.trim()) return onToast?.("Add a location name first.");
     if (!type) return onToast?.("Pick a location type first.");
-    onSave?.({ name: name.trim(), type, parent, notes: description });
-    onToast?.(`Location "${name.trim()}" saved.`);
+    setSaving(true);
+    try {
+      await traceApi.createLocation({ name: name.trim(), type, notes: description.trim() || null });
+      onToast?.(`Location "${name.trim()}" saved.`);
+      onSaved?.();
+    } catch (err) {
+      setSaving(false);
+      onToast?.(traceErrorMessage(err, "Couldn't save the location — please try again."));
+    }
   }
 
   return (
@@ -642,9 +606,9 @@ export function AddLocationView({ onCancel, onSave, onToast }) {
 
           <div className={s.panelFoot}>
             <button type="button" className={s.ghostBtn} onClick={() => onCancel?.()}>Cancel</button>
-            <button type="button" className={s.saveBtn} onClick={handleSave}>
+            <button type="button" className={s.saveBtn} onClick={handleSave} disabled={saving}>
               <Icon name="icon-check" />
-              Save location
+              {saving ? "Saving…" : "Save location"}
             </button>
           </div>
         </div>
@@ -696,227 +660,78 @@ export function AddLocationView({ onCancel, onSave, onToast }) {
 
 // ── Location Detail ───────────────────────────────────────────────────
 
-// Fallback per-location detail. Real catalog products are fetched per location
-// (see productsToItems below) and drive the item table, recent scans, issues,
-// and reorder rail. This shared mock is only used when the catalog backend can't
-// be reached. Evidence (a compliance-program signal, not per-product) stays mock.
-const DETAIL = {
-  items: [
-    { name: "Nitrile Exam Gloves, Medium", sku: "GLV-NTR-M", onHand: "2 boxes", onHandTone: "red", par: "10 boxes", status: { label: "Reorder now", tone: "red" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$11.25" }, scanned: "May 16, 2024 · 9:10 AM", action: "Reorder" },
-    { name: "CaviWipes Disinfectant Wipes", sku: "CW-160", onHand: "1 canister", onHandTone: "red", par: "4 canisters", status: { label: "Needs review", tone: "amber" }, evidence: { label: "Expiration captured", icon: "icon-clock", tone: "amber" }, reorder: { type: "link", value: "Review" }, scanned: "May 15, 2024 · 3:22 PM", action: "Review" },
-    { name: "Procedure Face Masks, Blue", sku: "MASK-BLUE", onHand: "4 boxes", par: "8 boxes", status: { label: "Needs details", tone: "amber" }, evidence: { label: "Missing lot", icon: "icon-alert-triangle", tone: "red" }, reorder: { type: "link", value: "Add details" }, scanned: "May 14, 2024 · 11:05 AM", action: "Add details" },
-    { name: "Sterilization Pouch 3.5\" x 9\"", sku: "DEF-359", onHand: "3 boxes", par: "6 boxes", status: { label: "Healthy", tone: "green" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$6.35" }, scanned: "May 16, 2024 · 8:55 AM", action: "Reorder" },
-    { name: "Patient Bibs, Blue", sku: "BIB-BLUE", onHand: "12 packs", par: "10 packs", status: { label: "Healthy", tone: "green" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$4.80" }, scanned: "May 16, 2024 · 8:48 AM", action: "Reorder" },
-    { name: "Saliva Ejectors, Green", sku: "SE-GRN", onHand: "2 bags", onHandTone: "amber", par: "5 bags", status: { label: "Low stock", tone: "amber" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: { type: "savings", value: "$3.20" }, scanned: "May 15, 2024 · 4:12 PM", action: "Reorder" },
-    { name: "Prophy Angles, Soft", sku: "PA-SOFT", onHand: "6 packs", par: "6 packs", status: { label: "Expiring soon", tone: "amber" }, evidence: { label: "Expiration in 25 days", icon: "icon-clock", tone: "amber" }, reorder: { type: "savings", value: "$5.60" }, scanned: "May 14, 2024 · 10:20 AM", action: "Reorder" },
-  ],
-  scans: [
-    { id: 1, text: "Nitrile Exam Gloves, Medium scanned", sku: "GLV-NTR-M", qty: "2 boxes", who: "Alex Kim", time: "2 min ago", icon: "icon-check-circle", tone: "green" },
-    { id: 2, text: "CaviWipes Disinfectant Wipes flagged for review", sku: "CW-160", qty: "1 canister", who: "Jamie Lee", time: "15 min ago", icon: "icon-alert-triangle", tone: "amber" },
-    { id: 3, text: "Procedure Face Masks, Blue updated", sku: "MASK-BLUE", qty: "4 boxes", who: "Alex Kim", time: "32 min ago", icon: "icon-file-text", tone: "blue" },
-    { id: 4, text: "Sterilization Pouch 3.5\" x 9\" scanned", sku: "DEF-359", qty: "3 boxes", who: "Hannah Lee", time: "45 min ago", icon: "icon-check-circle", tone: "green" },
-    { id: 5, text: "Patient Bibs, Blue scanned", sku: "BIB-BLUE", qty: "12 packs", who: "Hannah Lee", time: "1 hr ago", icon: "icon-check-circle", tone: "green" },
-  ],
-  issues: [
-    { label: "Needs review", value: 2, icon: "icon-alert-triangle", tone: "red" },
-    { label: "Missing details", value: 6, icon: "icon-info", tone: "amber" },
-    { label: "Reorder now", value: 3, icon: "icon-cart", tone: "red" },
-  ],
-  evidence: [
-    { label: "Expiration proof", status: "Verified", tone: "green" },
-    { label: "Lot capture", status: "Partial", tone: "amber" },
-    { label: "SDS linked", status: "Verified", tone: "green" },
-    { label: "IFU linked", status: "Verified", tone: "green" },
-    { label: "Price evidence", status: "Captured", tone: "green" },
-  ],
-  reorder: {
-    estValue: "$84.20",
-    items: [
-      { name: "Nitrile Exam Gloves, Medium", qty: "2 boxes", price: "$22.50" },
-      { name: "Saliva Ejectors, Green", qty: "2 bags", price: "$16.00" },
-      { name: "Prophy Angles, Soft", qty: "6 packs", price: "$13.75" },
-    ],
-  },
-};
-
 const PILL_TONE = { red: s.badgeRed, amber: s.badgeAmber, green: s.badgeGreen, blue: s.badgeBlue, slate: s.badgeSlate };
 
-// Per location-type catalog department to source real products from, so each
-// board shows db-backed products relevant to that room (Hygiene → preventives,
-// Operatory → instruments, …). These match the supplier-named source categories
-// in the catalog (see app/catalogData.js). Unmapped types fall back to Instruments.
-const TYPE_CATEGORY = {
-  cabinet: "Preventives",
-  operatory: "Instruments",
-  sterilization: "Infection Control",
-  lab: "Laboratory Products",
-  storage: "Burs & Diamonds",
-  emergency_kit: "Infection Control",
-  other: "Instruments",
-};
-
-// Representative scan-session state cycled across a location's real products. The
-// products (name / SKU / supplier / price) are real from the catalog; the
-// on-hand / par / status overlay is illustrative until the Phase-1 inventory
-// backend exposes per-item counts.
-const ITEM_STATES = [
-  { onHand: 2, par: 10, onHandTone: "red", status: { label: "Reorder now", tone: "red" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: "savings", action: "Reorder" },
-  { onHand: 1, par: 4, onHandTone: "red", status: { label: "Needs review", tone: "amber" }, evidence: { label: "Expiration captured", icon: "icon-clock", tone: "amber" }, reorder: "review", action: "Review" },
-  { onHand: 4, par: 8, onHandTone: null, status: { label: "Needs details", tone: "amber" }, evidence: { label: "Missing lot", icon: "icon-alert-triangle", tone: "red" }, reorder: "details", action: "Add details" },
-  { onHand: 3, par: 6, onHandTone: null, status: { label: "Healthy", tone: "green" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: "savings", action: "Reorder" },
-  { onHand: 12, par: 10, onHandTone: null, status: { label: "Healthy", tone: "green" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: "savings", action: "Reorder" },
-  { onHand: 2, par: 5, onHandTone: "amber", status: { label: "Low stock", tone: "amber" }, evidence: { label: "Verified", icon: "icon-check-circle", tone: "green" }, reorder: "savings", action: "Reorder" },
-  { onHand: 6, par: 6, onHandTone: null, status: { label: "Expiring soon", tone: "amber" }, evidence: { label: "Expiration in 25 days", icon: "icon-clock", tone: "amber" }, reorder: "savings", action: "Reorder" },
-];
-
-const SCAN_TIMES = ["9:10 AM", "3:22 PM", "11:05 AM", "8:55 AM", "8:48 AM", "4:12 PM", "10:20 AM"];
-const SCAN_AGO = ["2 min ago", "15 min ago", "32 min ago", "45 min ago", "1 hr ago"];
-const SCAN_WHO = ["Alex Kim", "Jamie Lee", "Hannah Lee"];
-const SCAN_VERB = [
-  { verb: "scanned", icon: "icon-check-circle", tone: "green" },
-  { verb: "flagged for review", icon: "icon-alert-triangle", tone: "amber" },
-  { verb: "updated", icon: "icon-file-text", tone: "blue" },
-];
-
-function unitWord(offer) {
-  const basis = String(offer?.pack_basis || "").toLowerCase();
-  if (basis === "box") return "boxes";
-  if (basis === "case") return "cases";
-  if (basis === "pack") return "packs";
-  if (basis === "bag") return "bags";
-  return "units";
-}
-
-function priceText(cents) {
-  return cents != null ? money.format(cents / 100) : null;
-}
-
-// Map real catalog products (from /api/canonical-products) onto the location
-// item-table row shape, cycling the illustrative inventory overlay across them.
-function productsToItems(products) {
-  return products.map((product, i) => {
-    const offer = product.best_offer || {};
-    const st = ITEM_STATES[i % ITEM_STATES.length];
-    const word = unitWord(offer);
-    const price = priceText(offer.price_cents);
-    const reorder =
-      st.reorder === "review"
-        ? { type: "link", value: "Review" }
-        : st.reorder === "details"
-        ? { type: "link", value: "Add details" }
-        : { type: "savings", value: price || "—" };
-    return {
-      id: product.id || offer.sku || `row-${i}`,
-      name: product.name,
-      handle: product.handle || "",
-      image: product.image_url || offer.image_url || "",
-      sku: offer.sku || "—",
-      supplier: offer.supplier_name || "",
-      onHand: `${st.onHand} ${word}`,
-      onHandTone: st.onHandTone,
-      par: `${st.par} ${word}`,
-      status: st.status,
-      evidence: st.evidence,
-      reorder,
-      priceCents: offer.price_cents ?? null,
-      scanned: `May ${16 - (i % 3)} · ${SCAN_TIMES[i % SCAN_TIMES.length]}`,
-      action: st.action,
-      belowPar: st.onHand < st.par,
-    };
-  });
-}
-
-function itemsToScans(items) {
-  return items.slice(0, 5).map((it, i) => {
-    const v = SCAN_VERB[i % SCAN_VERB.length];
-    return { id: i + 1, text: `${it.name} ${v.verb}`, sku: it.sku, qty: it.onHand, who: SCAN_WHO[i % SCAN_WHO.length], time: SCAN_AGO[i % SCAN_AGO.length], icon: v.icon, tone: v.tone };
-  });
-}
-
-function itemsToIssues(items) {
-  const count = (label) => items.filter((it) => it.status.label === label).length;
-  return [
-    { label: "Needs review", value: count("Needs review"), icon: "icon-alert-triangle", tone: "red" },
-    { label: "Missing details", value: count("Needs details"), icon: "icon-info", tone: "amber" },
-    { label: "Reorder now", value: count("Reorder now"), icon: "icon-cart", tone: "red" },
-  ];
-}
-
-function itemsToReorder(items) {
-  const picks = items.filter((it) => it.belowPar).slice(0, 4);
-  const estCents = picks.reduce((sum, it) => sum + (it.priceCents || 0), 0);
-  return {
-    estValue: money.format(estCents / 100),
-    items: picks.map((it) => ({ name: it.name, qty: it.onHand, price: priceText(it.priceCents) || "—" })),
-  };
-}
-
-// Pull the four header stats from the clicked location's mini-stats, falling
-// back to the wireframe defaults for locations with a different stat shape.
-function detailStats(loc) {
-  const find = (re, fallback) => {
-    const hit = (loc.stats || []).find((x) => re.test(x.label));
-    return hit ? hit.value : fallback;
-  };
-  return {
-    tracked: find(/scanned|tracked/i, 37),
-    confirmed: find(/confirmed/i, 29),
-    needDetails: find(/details|missing/i, 6),
-    needReview: find(/review/i, 2),
-  };
+// Honest per-item status, derived from real inventory fields (no fabricated
+// evidence/savings). Expiry first, then par, then missing traceability.
+function itemStatus(it) {
+  const d = daysUntil(it.expiration_date);
+  if (d != null && d <= 0) return { label: "Expired", tone: "red" };
+  if (d != null && d <= 30) return { label: "Expiring soon", tone: "amber" };
+  if (it.par_level != null && (it.quantity_on_hand ?? 0) <= it.par_level) return { label: "Reorder", tone: "red" };
+  if (!it.lot_number || !it.expiration_date) return { label: "Needs details", tone: "amber" };
+  return { label: "OK", tone: "green" };
 }
 
 export function LocationDetailView({ locationId, onBack, onStartScan, onToast, onNavigate }) {
-  const loc = BOARD_MOCK.locations.find((l) => l.id === locationId) || BOARD_MOCK.locations[0];
-  const meta = typeMeta(loc.type);
-  const status = STATUS_META[loc.status] || STATUS_META.not_started;
-  const top = detailStats(loc);
-  const progress = loc.progress ?? 78;
-  const tellSoon = () => onToast?.("Scan sessions land in an upcoming phase.");
-  const scan = () => (onStartScan ? onStartScan() : tellSoon());
-
-  // Real catalog products for this location's department, fetched the same way
-  // the reorder list / catalog pull from the db. Falls back to the wireframe
-  // sample only if the backend can't be reached.
-  const [products, setProducts] = useState(null);
+  const [location, setLocation] = useState(null);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
-    const category = TYPE_CATEGORY[loc.type] || "Instruments";
-    const controller = new AbortController();
+    if (!locationId) return undefined;
+    let alive = true;
     setLoading(true);
-    fetch(`/api/canonical-products?category=${encodeURIComponent(category)}&limit=8`, { signal: controller.signal, cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((body) => setProducts(body.canonical_products || []))
-      .catch((error) => { if (error.name !== "AbortError") setProducts([]); })
-      .finally(() => setLoading(false));
-    return () => controller.abort();
-  }, [locationId, loc.type]);
+    traceApi.getLocation(locationId)
+      .then((data) => { if (!alive) return; setLocation(data.location || null); setItems(data.items || []); setLoading(false); })
+      .catch(() => { if (alive) { setLoading(false); onToast?.("Couldn't load this location."); } });
+    return () => { alive = false; };
+  }, [locationId, onToast]);
 
-  const hasReal = Boolean(products && products.length);
-  const items = useMemo(() => (hasReal ? productsToItems(products) : DETAIL.items), [hasReal, products]);
-  const scans = useMemo(() => (hasReal ? itemsToScans(items) : DETAIL.scans), [hasReal, items]);
-  const issues = useMemo(() => (hasReal ? itemsToIssues(items) : DETAIL.issues), [hasReal, items]);
-  const reorder = useMemo(() => (hasReal ? itemsToReorder(items) : DETAIL.reorder), [hasReal, items]);
+  const top = useMemo(() => {
+    const traced = items.filter((it) => it.lot_number && it.expiration_date).length;
+    const expiring = items.filter((it) => { const d = daysUntil(it.expiration_date); return d != null && d <= 30; }).length;
+    const reorder = items.filter((it) => it.par_level != null && (it.quantity_on_hand ?? 0) <= it.par_level).length;
+    return { tracked: items.length, traced, expiring, reorder };
+  }, [items]);
+
+  const visibleItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? items.filter((it) => (it.name || "").toLowerCase().includes(q)) : items;
+  }, [items, query]);
+
+  const reorderItems = useMemo(
+    () => items.filter((it) => it.par_level != null && (it.quantity_on_hand ?? 0) <= it.par_level),
+    [items],
+  );
+
+  if (loading) return <div className={s.detail}><div className={s.empty}>Loading location…</div></div>;
+  if (!location) return <div className={s.detail}><div className={s.empty}>Location not found.</div></div>;
+
+  const meta = typeMeta(location.type);
+  const attention = location.needs_attention_count ?? top.reorder + top.expiring;
+  const status = attention > 0 ? STATUS_META.needs_attention : items.length ? STATUS_META.healthy : STATUS_META.not_started;
+  const tracePct = items.length ? Math.round((top.traced / items.length) * 100) : 0;
 
   return (
     <div className={s.detail}>
       <nav className={s.crumbs} aria-label="Breadcrumb">
         <button type="button" className={s.crumbLink} onClick={() => onBack?.()}>Locations</button>
         <span className={s.crumbSep}>/</span>
-        <span className={s.crumbCurrent}>{loc.name}</span>
+        <span className={s.crumbCurrent}>{location.name}</span>
       </nav>
 
       <header className={s.head}>
-        <h1 className={s.title}>Location Detail</h1>
-        <p className={s.subtitle}>Track inventory, scan progress, evidence, and reorder needs for this location.</p>
+        <h1 className={s.title}>{location.name}</h1>
+        <p className={s.subtitle}>Inventory, traceability coverage, and reorder needs for this location.</p>
       </header>
 
       <div className={s.stats}>
         <Stat icon="icon-package" tint={s.tBlue} label="Tracked items" value={top.tracked} />
-        <Stat icon="icon-check-circle" tint={s.tGreen} label="Confirmed" value={top.confirmed} />
-        <Stat icon="icon-info" tint={s.tAmber} label="Needs details" value={top.needDetails} />
-        <Stat icon="icon-alert-triangle" tint={s.tRed} label="Needs review" value={top.needReview} />
+        <Stat icon="icon-shield-check" tint={s.tGreen} label="Lot &amp; expiry captured" value={`${tracePct}%`} />
+        <Stat icon="icon-clock" tint={s.tAmber} label="Expiring soon" value={top.expiring} />
+        <Stat icon="icon-alert-triangle" tint={s.tRed} label="At / below par" value={top.reorder} />
       </div>
 
       <section className={s.locHeader}>
@@ -924,180 +739,113 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
           <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
           <div className={s.locHeadBody}>
             <div className={s.cardTitleRow}>
-              <span className={s.locHeadName}>{loc.name}</span>
+              <span className={s.locHeadName}>{location.name}</span>
               <span className={`${s.badge} ${status.badge}`}>{status.label}</span>
             </div>
-            <div className={s.cardSub}>{loc.room}{loc.sub ? ` · ${loc.sub}` : ` · ${meta.label}`}</div>
-          </div>
-        </div>
-
-        <div className={s.locProgress}>
-          <span className={s.locProgressLabel}>Scan progress</span>
-          <div className={s.progress}>
-            <span className={s.progressTrack}>
-              <span className={`${s.progressFill} ${progress >= 100 ? s.complete : ""}`} style={{ width: `${progress}%` }} />
-            </span>
-            <span className={s.progressPct}>{progress}%</span>
-          </div>
-          <div className={s.locMeta}>
-            <span className={s.locMetaItem}><Icon name="icon-clock" /><span><small>Last updated</small>{loc.updated || "2 min ago"}</span></span>
-            <span className={s.locMetaItem}><Icon name="icon-users" /><span><small>Assigned to</small>{loc.assignee || "Alex Kim"}</span></span>
-            <span className={s.locMetaItem}><Icon name="icon-calendar" /><span><small>Last scan today</small>9:15 AM</span></span>
+            <div className={s.cardSub}>{meta.label}{location.qr_code ? ` · ${location.qr_code}` : ""}</div>
           </div>
         </div>
 
         <div className={s.locActions}>
-          <button type="button" className={s.scanBtn} onClick={scan}><Icon name="icon-scan" />Resume mobile scan</button>
-          <button type="button" className={s.btnWide} onClick={tellSoon}>Open scan session<Icon name="icon-chevron-right" /></button>
-          <button type="button" className={s.printLink} onClick={tellSoon}><Icon name="icon-file-text" />Print QR label</button>
+          <button type="button" className={s.scanBtn} onClick={() => onStartScan?.()}><Icon name="icon-scan" />Scan this location</button>
         </div>
-      </section>
-
-      <section className={s.panel}>
-        <h2 className={s.panelTitle}>Items in this location</h2>
-            <div className={s.toolbar}>
-              <label className={s.search}>
-                <Icon name="icon-search" />
-                <input type="search" placeholder="Search items, SKUs, or categories…" aria-label="Search items" />
-              </label>
-              <Select label="Status" value="all" onChange={() => {}} options={[{ value: "all", label: "All status" }]} />
-              <Select label="Category" value="all" onChange={() => {}} options={[{ value: "all", label: "All categories" }]} />
-              <Select label="Reorder state" value="all" onChange={() => {}} options={[{ value: "all", label: "All states" }]} />
-              <button type="button" className={s.filterBtn} onClick={tellSoon}><Icon name="icon-filter" />Filters</button>
-            </div>
-
-            <div className={s.tableWrap}>
-              <table className={s.table}>
-                <thead>
-                  <tr>
-                    <th>Item</th><th>SKU</th><th>On hand</th><th>Par level</th><th>Status</th><th>Evidence</th><th>Reorder</th><th>Last scanned</th><th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && !hasReal ? (
-                    <tr><td colSpan={9} className={s.tMuted}>Loading items…</td></tr>
-                  ) : (
-                    items.map((it) => (
-                    <tr key={it.id || it.sku}>
-                      <td>
-                        <div className={s.tItemCell}>
-                          <ProductThumb image={it.image} alt={it.name} />
-                          {it.handle ? (
-                            <button type="button" className={s.tItemLink} onClick={() => onNavigate?.(`/app/product/${it.handle}`)} title="View this product in the catalog">{it.name}</button>
-                          ) : <span className={s.tItem}>{it.name}</span>}
-                        </div>
-                      </td>
-                      <td className={s.tMuted}>{it.sku}</td>
-                      <td><span className={it.onHandTone === "red" ? s.tdRed : it.onHandTone === "amber" ? s.tdAmber : ""}>{it.onHand}</span></td>
-                      <td className={s.tMuted}>{it.par}</td>
-                      <td><span className={`${s.badge} ${PILL_TONE[it.status.tone]}`}>{it.status.label}</span></td>
-                      <td><span className={`${s.evi} ${TONE_TEXT[it.evidence.tone]}`}><Icon name={it.evidence.icon} />{it.evidence.label}</span></td>
-                      <td>{it.reorder.type === "savings" ? <span className={s.savings}>{it.reorder.value}</span> : <button type="button" className={s.tLink} onClick={tellSoon}>{it.reorder.value}</button>}</td>
-                      <td className={s.tMuted}>{it.scanned}</td>
-                      <td>
-                        <div className={s.tActions}>
-                          <button type="button" className={s.tBtn} onClick={tellSoon}>{it.action}</button>
-                          <button type="button" className={s.kebab} onClick={tellSoon} aria-label="More actions">⋮</button>
-                        </div>
-                      </td>
-                    </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className={s.tableFoot}>
-              <span className={s.tMuted}>{items.length ? `Showing 1 to ${items.length} of ${items.length} items` : "No items yet"}</span>
-              {hasReal ? null : (
-                <div className={s.pager}>
-                  <button type="button" className={s.pageNav} onClick={tellSoon} aria-label="Previous"><Icon name="icon-chevron-left" /></button>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button key={n} type="button" className={`${s.pageNum} ${n === 1 ? s.pageActive : ""}`} onClick={tellSoon}>{n}</button>
-                  ))}
-                  <button type="button" className={s.pageNav} onClick={tellSoon} aria-label="Next"><Icon name="icon-chevron-right" /></button>
-                </div>
-              )}
-            </div>
       </section>
 
       <div className={s.detailGrid}>
         <div className={s.detailMain}>
           <section className={s.panel}>
-            <div className={s.cardHeadRow}>
-              <h2 className={s.panelTitle}>Recent scans</h2>
-              <button type="button" className={s.railLink} onClick={tellSoon}>View all activity<Icon name="icon-arrow-right" /></button>
+            <h2 className={s.panelTitle}>Items in this location</h2>
+            <div className={s.toolbar}>
+              <label className={s.search}>
+                <Icon name="icon-search" />
+                <input type="search" placeholder="Search items…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search items" />
+              </label>
             </div>
-            {scans.map((ev) => (
-              <div className={s.scanRow} key={ev.id}>
-                <span className={`${s.activityIcon} ${TONE[ev.tone] || s.tSlate}`}><Icon name={ev.icon} /></span>
-                <div className={s.scanBody}>
-                  <div className={s.scanText}>{ev.text}</div>
-                  <div className={s.scanMeta}>SKU: {ev.sku} · {ev.qty}</div>
-                </div>
-                <div className={s.scanWho}>
-                  <span className={s.avatar}>{initials(ev.who)}</span>
-                  <span className={s.footMetaValue}>{ev.who}</span>
-                </div>
-                <span className={s.scanTime}>{ev.time}</span>
+
+            {items.length === 0 ? (
+              <div className={s.empty}>No items captured here yet. Start a scan session to build this location&rsquo;s inventory.</div>
+            ) : (
+              <div className={s.tableWrap}>
+                <table className={s.table}>
+                  <thead>
+                    <tr>
+                      <th>Item</th><th>On hand</th><th>Par</th><th>Lot</th><th>Expiration</th><th>Status</th><th>Last counted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleItems.map((it) => {
+                      const st = itemStatus(it);
+                      const below = it.par_level != null && (it.quantity_on_hand ?? 0) <= it.par_level;
+                      return (
+                        <tr key={it.id}>
+                          <td>
+                            <div className={s.tItemCell}>
+                              <ProductThumb image={it.photo_url} alt={it.name} />
+                              {it.canonical_product_id ? (
+                                <button type="button" className={s.tItemLink} onClick={() => onNavigate?.(`/app/product/${it.canonical_product_id}`)} title="View this product in the catalog">{it.name}</button>
+                              ) : <span className={s.tItem}>{it.name}</span>}
+                            </div>
+                          </td>
+                          <td><span className={below ? s.tdRed : ""}>{it.quantity_on_hand ?? 0}</span></td>
+                          <td className={s.tMuted}>{it.par_level ?? "—"}</td>
+                          <td className={s.tMuted}>{it.lot_number || "—"}</td>
+                          <td className={it.expiration_date ? "" : s.tMuted}>{it.expiration_date ? formatTraceDate(it.expiration_date) : "—"}</td>
+                          <td><span className={`${s.badge} ${PILL_TONE[st.tone]}`}>{st.label}</span></td>
+                          <td className={s.tMuted}>{it.last_counted_at ? formatTraceDate(it.last_counted_at) : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            )}
           </section>
         </div>
 
         <aside className={s.detailRail}>
           <section className={s.railCard}>
             <h2 className={s.railTitle}>Issues in this location</h2>
-            {issues.map((iss) => (
-              <div className={s.issueRow} key={iss.label}>
-                <span className={`${s.issueIcon} ${TONE_TEXT[iss.tone]}`}><Icon name={iss.icon} /></span>
-                <span className={s.issueLabel}>{iss.label}</span>
-                <span className={s.issueValue}>{iss.value}</span>
-              </div>
-            ))}
-            <button type="button" className={s.railBtn} onClick={tellSoon}>Review issues<Icon name="icon-chevron-right" /></button>
-          </section>
-
-          <section className={s.railCard}>
-            <h2 className={s.railTitle}>Evidence</h2>
-            {DETAIL.evidence.map((ev) => (
-              <div className={s.evidenceRow} key={ev.label}>
-                <span className={`${s.eviDot} ${TONE_TEXT[ev.tone]}`}><Icon name={ev.tone === "green" ? "icon-check-circle" : "icon-clock"} /></span>
-                <span className={s.eviLabel}>{ev.label}</span>
-                <span className={`${s.eviStatus} ${TONE_TEXT[ev.tone]}`}>{ev.status}</span>
-              </div>
-            ))}
-            <button type="button" className={s.railLink} onClick={tellSoon}>View all evidence<Icon name="icon-arrow-right" /></button>
+            <div className={s.issueRow}>
+              <span className={`${s.issueIcon} ${TONE_TEXT.red}`}><Icon name="icon-alert-triangle" /></span>
+              <span className={s.issueLabel}>Expiring / expired</span>
+              <span className={s.issueValue}>{top.expiring}</span>
+            </div>
+            <div className={s.issueRow}>
+              <span className={`${s.issueIcon} ${TONE_TEXT.amber}`}><Icon name="icon-info" /></span>
+              <span className={s.issueLabel}>Missing lot / expiry</span>
+              <span className={s.issueValue}>{items.length - top.traced}</span>
+            </div>
+            <div className={s.issueRow}>
+              <span className={`${s.issueIcon} ${TONE_TEXT.red}`}><Icon name="icon-package" /></span>
+              <span className={s.issueLabel}>At / below par</span>
+              <span className={s.issueValue}>{top.reorder}</span>
+            </div>
           </section>
 
           <section className={s.railCard}>
             <div className={s.reorderHead}>
               <div>
                 <div className={s.railTitle}>Reorder needs</div>
-                <small className={s.tMuted}>{reorder.items.length} items below par</small>
-              </div>
-              <div className={s.reorderEst}>
-                <small className={s.tMuted}>Est. reorder value</small>
-                <strong className={s.savings}>{reorder.estValue}</strong>
+                <small className={s.tMuted}>{reorderItems.length} item{reorderItems.length === 1 ? "" : "s"} at or below par</small>
               </div>
             </div>
-            {reorder.items.map((it) => (
-              <div className={s.reorderRow} key={it.name}>
-                <span className={s.reorderName}>{it.name}</span>
-                <span className={s.tMuted}>{it.qty}</span>
-                <span className={s.footMetaValue}>{it.price}</span>
-              </div>
-            ))}
-            <button type="button" className={s.railPrimary} onClick={tellSoon}><Icon name="icon-cart" />Create reorder draft</button>
+            {reorderItems.length === 0 ? (
+              <small className={s.tMuted}>Nothing needs reordering here.</small>
+            ) : (
+              reorderItems.slice(0, 6).map((it) => (
+                <div className={s.reorderRow} key={it.id}>
+                  <span className={s.reorderName}>{it.name}</span>
+                  <span className={s.tMuted}>{it.quantity_on_hand ?? 0} / {it.par_level}</span>
+                </div>
+              ))
+            )}
+            <button type="button" className={s.railPrimary} onClick={() => onToast?.("Reorder drafts arrive with Forecasting.")}><Icon name="icon-cart" />Create reorder draft</button>
           </section>
 
           <section className={s.railCard}>
-            <h2 className={s.railTitle}>Mobile scan shortcuts</h2>
-            <button type="button" className={s.shortcut} onClick={scan}>
-              <span className={s.shortcutIcon}><Icon name="icon-scan" /></span>Resume scan<Icon name="icon-chevron-right" className={s.shortcutChevron} />
-            </button>
-            <button type="button" className={s.shortcut} onClick={tellSoon}>
-              <span className={s.shortcutIcon}><Icon name="icon-scan" /></span>Open on mobile<Icon name="icon-chevron-right" className={s.shortcutChevron} />
+            <h2 className={s.railTitle}>Scan shortcuts</h2>
+            <button type="button" className={s.shortcut} onClick={() => onStartScan?.()}>
+              <span className={s.shortcutIcon}><Icon name="icon-scan" /></span>Scan this location<Icon name="icon-chevron-right" className={s.shortcutChevron} />
             </button>
             <button type="button" className={s.shortcut} onClick={() => onBack?.()}>
               <span className={s.shortcutIcon}><Icon name="icon-map-pin" /></span>Choose another location<Icon name="icon-chevron-right" className={s.shortcutChevron} />

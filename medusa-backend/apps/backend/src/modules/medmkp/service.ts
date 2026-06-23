@@ -19,6 +19,8 @@ import SupplierProduct from "./models/supplier-product"
 import CartBuildJob from "./models/cart-build-job"
 import Location from "./models/location"
 import InventoryItem from "./models/inventory-item"
+import ScanSession from "./models/scan-session"
+import ScanSessionLine from "./models/scan-session-line"
 
 class MedMKPModuleService extends MedusaService({
   DentalPractice,
@@ -41,6 +43,8 @@ class MedMKPModuleService extends MedusaService({
   ReorderList,
   Location,
   InventoryItem,
+  ScanSession,
+  ScanSessionLine,
 }) {}
 
 export default MedMKPModuleService

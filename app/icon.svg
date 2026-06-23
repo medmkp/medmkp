@@ -1,15 +1,12 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TraceDDS">
-  <defs><linearGradient id="td-mark" gradientUnits="userSpaceOnUse" x1="13" y1="13" x2="51" y2="51">
-      <stop offset="0" stop-color="#6E97F2"/>
-      <stop offset="1" stop-color="#2F5BD6"/>
+  <defs><linearGradient id="td-mark" gradientUnits="userSpaceOnUse" x1="9" y1="9" x2="55" y2="55">
+      <stop offset="0" stop-color="#4C77E0"/>
+      <stop offset="1" stop-color="#1E3FA8"/>
     </linearGradient></defs>
-  <rect width="64" height="64" rx="12" fill="#ffffff"/>
-  <g transform="translate(7,7) scale(0.78125)">
-  <g fill="none" stroke="url(#td-mark)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M13 28 L13 22 Q13 13 22 13 L28 13"/>
-    <path d="M36 13 L42 13 Q51 13 51 22 L51 28"/>
-    <path d="M13 36 L13 42 Q13 51 22 51 L28 51"/>
+  <g fill="none" stroke="url(#td-mark)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 27 L9 20 Q9 9 20 9 L27 9"/>
+    <path d="M37 9 L44 9 Q55 9 55 20 L55 27"/>
+    <path d="M9 37 L9 44 Q9 55 20 55 L27 55"/>
   </g>
-  <circle cx="46" cy="46" r="6.4" fill="url(#td-mark)"/>
-  </g>
+  <circle cx="49" cy="49" r="8.2" fill="url(#td-mark)"/>
 </svg>
