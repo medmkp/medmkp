@@ -300,6 +300,33 @@ export function IconSprite() {
         <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
         <circle cx="12" cy="18.5" r="1.5" fill="currentColor" stroke="none" />
       </symbol>
+      {/* ── Mobile bottom-nav family — one monoline language (Notion-minimal). ──
+          Accent sub-shapes fill in on the active tab via the inherited
+          --accent-fill custom property (custom properties cross the <use> shadow
+          boundary; the active tab sets --accent-fill: currentColor). */}
+      <symbol id="icon-nav-today" viewBox="0 0 24 24">
+        <rect x="4" y="5" width="16" height="15" rx="2.5" />
+        <path d="M4 9.5h16M8 3.2v3.4M16 3.2v3.4" />
+        <rect x="7.2" y="12.2" width="3.4" height="3.2" rx="0.8" fill="var(--accent-fill, none)" />
+      </symbol>
+      <symbol id="icon-nav-locations" viewBox="0 0 24 24">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+        <circle cx="12" cy="10" r="3" fill="var(--accent-fill, none)" />
+      </symbol>
+      <symbol id="icon-nav-scan" viewBox="0 0 24 24">
+        <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
+        <path d="M4 12h16" />
+      </symbol>
+      <symbol id="icon-nav-reorder" viewBox="0 0 24 24">
+        <path d="M4 5h1.6l1.9 9.5a1.3 1.3 0 0 0 1.3 1h7a1.3 1.3 0 0 0 1.3-1l1.2-6H6.2" />
+        <circle cx="9.5" cy="19" r="1.25" fill="currentColor" stroke="none" />
+        <circle cx="16.5" cy="19" r="1.25" fill="currentColor" stroke="none" />
+      </symbol>
+      <symbol id="icon-nav-more" viewBox="0 0 24 24">
+        <circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      </symbol>
       {/* File-type logos: full-color, self-contained (explicit fill/stroke so they
           ignore the .nav-icon currentColor styling). Color carries the format at
           small sizes; the band label reads on larger renders. */}
