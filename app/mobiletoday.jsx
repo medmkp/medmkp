@@ -16,8 +16,8 @@ export function MobileTodayView({ onResumeSession, onNavigate, onToast }) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      traceApi.sessions().catch(() => ({ sessions: [] })),
-      traceApi.locations().catch(() => ({ locations: [] })),
+      traceApi.listSessions().catch(() => ({ sessions: [] })),
+      traceApi.listLocations().catch(() => ({ locations: [] })),
     ]).then(([sRes, lRes]) => {
       if (cancelled) return;
       setSessions(sRes.sessions || []);
