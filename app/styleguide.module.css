@@ -268,6 +268,285 @@
   box-shadow: 0 0 0 3px var(--blue-2);
 }
 
+/* ---- filter dropdown ----
+   Built against tokens on purpose: this is the reference copy. The Locations /
+   Needs Attention modules hold near-identical local versions that still use the
+   stray #2f5bd6 / #8a97a6 hexes (see "Known drift" in DESIGN.md). */
+.ddDemo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 40px;
+}
+
+.field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 30px 0 12px;
+  min-width: 150px;
+}
+.fieldOpen {
+  border-color: var(--blue);
+}
+/* Label notched into the field's top border; dark + semibold so it titles the
+   field, while the selected value below stays light/normal-weight. */
+.fieldLabel {
+  position: absolute;
+  top: -7px;
+  left: 9px;
+  padding: 0 5px;
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+}
+.fieldSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  width: 100%;
+  padding: 9px 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fieldChevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  /* A module class on <Icon> drops the global .nav-icon stroke defaults, so
+     re-declare them or the chevron path fills into a solid blob. */
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: transform 0.15s ease;
+}
+.fieldOpen .fieldChevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+/* Menu — rendered in the app font instead of the OS popup. */
+.fieldMenu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 260px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-height: 264px;
+  overflow-y: auto;
+}
+.fieldMenu li {
+  margin: 0;
+}
+.fieldOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.fieldOptionLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldOption:hover {
+  background: var(--surface-2);
+}
+.fieldOptionOn {
+  color: var(--blue);
+  font-weight: 600;
+  background: var(--blue-2);
+}
+.fieldCheck {
+  width: 15px;
+  height: 15px;
+  color: var(--blue);
+  flex-shrink: 0;
+  /* Stroke path; without these it fills into a triangle. */
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* Reserve room for the always-open specimen so its absolute menu doesn't
+   overlap the next section. */
+.specimen {
+  position: relative;
+  min-height: 250px;
+}
+
+/* ---- search bar ---- */
+.searchBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  min-width: 280px;
+}
+.searchBar:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-2);
+}
+.searchBar svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.searchBar input {
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  width: 100%;
+  background: none;
+  padding: 9px 0;
+}
+
+/* ---- pagination ---- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+.pageInfo {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.pager {
+  display: inline-flex;
+  gap: 6px;
+}
+.pageBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.pageBtn svg {
+  width: 15px;
+  height: 15px;
+  color: inherit;
+}
+.pageBtn:hover:not(:disabled):not(.pageBtnOn) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.pageBtn:disabled {
+  border-color: transparent;
+  cursor: default;
+  color: color-mix(in srgb, var(--muted) 50%, var(--surface));
+}
+.pageBtnOn {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+/* ---- location / room-type icon family ---- */
+.roleIconGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 14px;
+}
+.roleIconCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 8px;
+  background: var(--surface);
+  text-align: center;
+}
+.roleIconChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.roleIconChip svg {
+  width: 26px;
+  height: 26px;
+  color: inherit;
+}
+.roleIconName {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.roleIconGlyph {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
 .card {
   border: 1px solid var(--line);
   border-radius: 14px;
