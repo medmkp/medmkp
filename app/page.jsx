@@ -38,8 +38,8 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  // Mobile bottom nav tab: "today" | "locations" | "scan" | "reorder" | "more"
-  const [mobileTab, setMobileTab] = useState("today");
+  // Whether the mobile "More" overflow sheet is open (the bottom nav itself is
+  // persistent; its active tab is derived from `view`, not stored).
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -1357,6 +1357,33 @@ export default function Home() {
     ["settings", "icon-settings", "Settings"],
   ];
 
+  // Mobile bottom nav (persistent, per diagrams/mobile-ia.mmd). The bar renders
+  // on every authed mobile view, so the active tab is DERIVED from `view` and
+  // each drill-down keeps its parent tab lit. "More" destinations live in a sheet.
+  const MORE_VIEWS = new Set([
+    "evidence", "evidenceBinder", "savings", "history", "historyDetail",
+    "catalog", "catalogSearch", "catalogSupplier", "catalogCategory",
+    "productDetail", "settings",
+  ]);
+  const activeMobileTab =
+    view === "home" || view === "needsAttention" ? "today"
+    : view === "locations" || view === "locationAdd" || view === "locationDetail" ? "locations"
+    : view === "scanSessions" || view === "scanSession" ? "scan"
+    : view === "reorderList" || view === "plan" || view === "handoff" ? "reorder"
+    : MORE_VIEWS.has(view) ? "more"
+    : null;
+  const onMobileTab = (tab) => {
+    if (tab === "more") { setMoreSheetOpen(true); return; }
+    setMoreSheetOpen(false);
+    if (tab === "today") navigate("/app");
+    else if (tab === "locations") navigate("/app/locations");
+    else if (tab === "scan") navigate("/app/scan-sessions");
+    else if (tab === "reorder") navigate("/app/reorder-list");
+  };
+  // Visible on every mobile app view except the immersive full-screen scan
+  // session and the legacy add-item scan route.
+  const showMobileNav = isMobile && !mobileAddItemRoute && view !== "scanSession";
+
   // The reorder list is the desktop home (`/app`) and, on mobile, a menu
   // destination at `/app/reorder-list`. Defined once and reused in both places.
   const reorderListEl = (
@@ -1618,50 +1645,16 @@ export default function Home() {
                 scanCount={scanCount}
               />
             ) : isMobile ? (
-              // Mobile: bottom-nav IA — Today | Locations | Scan FAB | Reorder | More
-              <>
-                {mobileTab === "today" && (
-                  <MobileTodayView
-                    onResumeSession={(id) => navigate(`/app/scan-sessions/${id}`)}
-                    onNavigate={(dest) => {
-                      if (dest === "needsAttention") navigate("/app/needs-attention");
-                      else navigate(`/app/${dest}`);
-                    }}
-                    onToast={showToast}
-                  />
-                )}
-                {mobileTab === "locations" && (
-                  <LocationsBoardView
-                    onStartScan={startScanSession}
-                    onAddLocation={() => navigate("/app/locations/new")}
-                    onOpenLocation={(id) => navigate(`/app/locations/${id}`)}
-                    onToast={showToast}
-                  />
-                )}
-                {mobileTab === "scan" && (
-                  <ScanSessionsView
-                    onOpenSession={(id) => navigate(`/app/scan-sessions/${id}`)}
-                    onNavigate={navigate}
-                    onToast={showToast}
-                    onLogout={handleLogout}
-                  />
-                )}
-                {mobileTab === "reorder" && reorderListEl}
-                {moreSheetOpen && (
-                  <MobileMoreSheet
-                    onNavigate={(dest) => navigate(`/app/${dest}`)}
-                    onClose={() => setMoreSheetOpen(false)}
-                  />
-                )}
-                <MobileBottomNav
-                  activeTab={mobileTab}
-                  onTab={(tab) => {
-                    if (tab === "more") { setMoreSheetOpen(true); return; }
-                    setMoreSheetOpen(false);
-                    setMobileTab(tab);
-                  }}
-                />
-              </>
+              // Mobile home (`/app`) = the Today tab. Locations / Scan / Reorder
+              // are their own routes, reached via the persistent bottom nav.
+              <MobileTodayView
+                onResumeSession={(id) => navigate(`/app/scan-sessions/${id}`)}
+                onNavigate={(dest) => {
+                  if (dest === "needsAttention") navigate("/app/needs-attention");
+                  else navigate(`/app/${dest}`);
+                }}
+                onToast={showToast}
+              />
             ) : (
               reorderListEl
             )
@@ -1829,6 +1822,17 @@ export default function Home() {
             />
           )}
         </main>
+        {showMobileNav && (
+          <>
+            {moreSheetOpen && (
+              <MobileMoreSheet
+                onNavigate={(dest) => navigate(`/app/${dest}`)}
+                onClose={() => setMoreSheetOpen(false)}
+              />
+            )}
+            <MobileBottomNav activeTab={activeMobileTab} onTab={onMobileTab} />
+          </>
+        )}
         </div>
       </div>
 
