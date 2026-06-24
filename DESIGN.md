@@ -166,7 +166,10 @@ Shared, in `app/ui.jsx` and `app/icons.jsx`. Reach for these first.
 - **Status pill** — `.list-pill` + a `--variant`; fully rounded, 12px/500, a leading `currentColor` dot. Tints map to semantic color (review=blue, ordering=gold, ordered=green).
 - **Card** — surface, `1px var(--line)`, `var(--shadow)`, 10–14px radius. The default container.
 - **Input** — `8px` radius, `1px var(--line)`; focus = `var(--blue)` border + `var(--blue-2)` ring.
-- **Icons** — never hand-roll an SVG inline; add it to the sprite in `app/icons.jsx` and reference by name.
+- **Search bar** — leading `icon-search` in `var(--muted)` + a borderless input in a `var(--surface)` pill (`1px var(--line)`, `10px` radius). Focus lifts the whole pill: `var(--blue)` border + `var(--blue-2)` ring. One bar across Locations, Needs Attention, Evidence.
+- **Filter dropdown** — the canonical filter control on dense toolbars (Locations, Needs Attention). **Not** a native `<select>` (its popup can't be styled): a button trigger plus an in-app `<ul role="listbox">` menu that closes on outside-click / Escape. Notched dark label, light value, chevron rotates `180°` on open, selected row tinted `var(--blue-2)` with a stroked `var(--blue)` check. `10px` radius field, `var(--shadow)` menu. Token-built reference on `/styleguide`; the live copies in `locations.module.css` / `needsattention.module.css` still use stray hexes — extracting a shared `FilterSelect` into `ui.jsx` would be a good cleanup.
+- **Pagination** — `Showing X to Y of Z` count (`var(--muted)`) on the left, pager on the right: `32px` square buttons, `8px` radius, `1px var(--line)`; current page = solid `var(--blue)` / white, hover = blue border + text, disabled prev/next lose their border and fade. Prev/next are chevron-only. Canonical copies in `needsattention.module.css` / `evidence.module.css` — match them, don't invent a new pager.
+- **Icons** — never hand-roll an SVG inline; add it to the sprite in `app/icons.jsx` and reference by name. The **location / room-type family** (`icon-dental-chair` operatory, `icon-cabinet` cabinet, `icon-shield-check` sterilization, `icon-flask` lab, `icon-package` storage, `icon-first-aid` emergency kit) renders in a `52px` tinted circle — the icon color + circle fill are a fixed semantic pair per type (see `/styleguide`). `icon-scan` is the one blue action icon.
 
 ---
 

@@ -167,8 +167,11 @@
   padding: 0 30px 0 12px;
   min-width: 128px;
 }
+.fieldOpen { border-color: var(--blue); }
 
-/* Label notched into the field's top border (outlined-input style). */
+/* Label notched into the field's top border (outlined-input style). Dark +
+   semibold so it reads as the field's title; the selected value below stays
+   light/normal-weight (matches the Needs Attention filters). */
 .fieldLabel {
   position: absolute;
   top: -7px;
@@ -176,26 +179,32 @@
   padding: 0 5px;
   background: #fff;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
-  color: var(--muted);
+  color: var(--ink);
 }
 
 .fieldSelect {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
-  background: transparent;
+  outline: 0;
+  background: none;
   font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--ink);
-  outline: none;
-  cursor: pointer;
-  padding: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  width: 100%;
+  padding: 9px 0;
   margin: 0;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+.fieldOpen .fieldChevron { transform: translateY(-50%) rotate(180deg); }
 .field .fieldChevron {
   position: absolute;
   right: 10px;
@@ -204,7 +213,68 @@
   width: 15px;
   height: 15px;
   color: var(--muted);
+  /* A module class on <Icon> drops the global .nav-icon stroke defaults, so
+     re-declare them or the chevron path fills into a solid blob. */
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   pointer-events: none;
+  transition: transform 0.15s ease;
+}
+
+/* Custom dropdown menu — rendered in the app font instead of the OS popup. */
+.fieldMenu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 260px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(11, 21, 51, 0.14);
+  max-height: 264px;
+  overflow-y: auto;
+}
+.fieldMenu li { margin: 0; }
+.fieldOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.fieldOptionLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fieldOption:hover { background: #f4f6fa; }
+.fieldOptionOn { color: var(--blue); font-weight: 600; background: #f3f7ff; }
+.fieldCheck {
+  width: 15px;
+  height: 15px;
+  color: var(--blue);
+  flex-shrink: 0;
+  /* The check glyph is a stroke path; without these it fills into a triangle. */
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Action buttons stay grouped + right-aligned; wrap together (not singly) when
