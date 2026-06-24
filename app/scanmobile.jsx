@@ -401,6 +401,17 @@ export function MobileScanSession({
           <button type="button" className={s.camCircle} onClick={() => setSheet("help")} aria-label="How scanning works">
             <Icon name="icon-info" />
           </button>
+          {counts.scanned > 0 && (
+            <button
+              type="button"
+              className={s.camReviewBtn}
+              onClick={() => setMode("review")}
+              aria-label={`Review ${counts.scanned} scanned ${counts.scanned === 1 ? "item" : "items"} in ${locName}`}
+            >
+              <Icon name={typeMeta(session.location_type).icon} />
+              <span className={s.camCountBadge}>{counts.scanned > 99 ? "99+" : `+${counts.scanned}`}</span>
+            </button>
+          )}
         </span>
       </div>
 

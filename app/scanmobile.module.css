@@ -366,6 +366,46 @@
 .camBrand svg { width: 24px; height: 24px; color: #2F5BD6; stroke-width: 2.2; }
 .camRight { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
+/* Persistent "what have I collected here" button — the location's own icon with a
+   running +count of scans this session. Taps out of the camera into the review
+   screen, so the buyer can step back and see the location they're building. */
+.camReviewBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 0;
+  background: #fff;
+  color: #14202E;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  animation: reviewBtnIn 0.2s ease;
+}
+.camReviewBtn:active { background: #f1f4f9; }
+.camReviewBtn svg { width: 21px; height: 21px; }
+@keyframes reviewBtnIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.camCountBadge {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #2F5BD6;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 21px;
+  text-align: center;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
 .locPill {
   position: absolute;
   top: calc(64px + env(safe-area-inset-top));
