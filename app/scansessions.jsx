@@ -89,9 +89,10 @@ export function ScanSessionsView({ onOpenSession, onNavigate, onToast, onLogout 
   }, [locations]);
 
   async function startFor(location, captureType) {
-    setStarting(location.id);
+    setStarting(location?.id || "__new__");
     try {
-      const body = { location_id: location.id };
+      const body = {};
+      if (location?.id) body.location_id = location.id;
       if (captureType) body.capture_type = captureType;
       const { session } = await traceApi.startSession(body);
       onOpenSession(session.id);

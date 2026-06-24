@@ -211,6 +211,8 @@ export function MobileScanStart({
             onClick={() => {
               if (scanMode === "reorder_list") {
                 onNavigate?.("/app/reorder-list");
+              } else if (scanMode === "receiving") {
+                onStart(null, scanMode);
               } else {
                 setStep("choose-location");
               }
