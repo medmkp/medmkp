@@ -28,6 +28,10 @@ const ScanSessionLine = model.define("medmkp_scan_session_line", {
   status: model.text().default("needs_review"),
   inventory_item_id: model.text().nullable(),
   scanned_by: model.text().nullable(),
+  // The destination location this lot is being put away to. Carried per line for
+  // RECEIVING, where one delivery fans out to many shelves; null for SHELF AUDIT,
+  // which inherits the session's single audited location.
+  location_id: model.text().nullable(),
   // Receiving-mode extras (capture_type = "receiving")
   supplier_name: model.text().nullable(),
   received_date: model.dateTime().nullable(),

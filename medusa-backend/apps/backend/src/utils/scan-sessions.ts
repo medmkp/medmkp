@@ -102,12 +102,15 @@ function lineMatchesItem(line: any, item: any): boolean {
 export async function syncInventoryFromLine(
   medmkp: MedMKPModuleService,
   line: any,
-  locationId: string,
+  locationId: string | null,
   actor: string | null,
   captureType: string | null = null
 ): Promise<string | null> {
   const identified = Boolean(line.canonical_product_id || line.supplier_product_id)
   if (!identified) return null
+  // No place to file the evidence yet — a receiving line whose destination
+  // hasn't been picked. Promotion happens once a location is set (the sheet save).
+  if (!locationId) return null
 
   const fields = {
     canonical_product_id: line.canonical_product_id ?? null,

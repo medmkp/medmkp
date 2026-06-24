@@ -1,14 +1,16 @@
 import { model } from "@medusajs/framework/utils"
 
-// A stateful, resumable inventory audit at one location: the buyer chooses a
-// location, scans the items on its shelves, and each scan becomes a
-// scan_session_line. One active session per location at a time; completing it
-// freezes the count. The review buckets (confirmed / needs details / needs
-// review) are derived from the lines, not stored — see utils/scan-sessions.ts.
+// A stateful, resumable scan session. SHELF AUDIT sessions are an audit of one
+// location (location_id set; one active session per location, completing freezes
+// the count). RECEIVING sessions log an arriving delivery, which fans out to many
+// shelves — so location_id is null on the session and captured per line instead.
+// The review buckets (confirmed / needs details / needs review) are derived from
+// the lines, not stored — see utils/scan-sessions.ts.
 const ScanSession = model.define("medmkp_scan_session", {
   id: model.id({ prefix: "ssn" }).primaryKey(),
   practice_id: model.text(),
-  location_id: model.text(),
+  // The audited location for shelf audit; null for receiving (per-line location).
+  location_id: model.text().nullable(),
   name: model.text().nullable(),
   // active | completed | abandoned
   status: model.text().default("active"),

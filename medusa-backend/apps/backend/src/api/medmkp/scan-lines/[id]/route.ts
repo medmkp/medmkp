@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { requirePractice } from "../../../../utils/practice"
+import { loadOwnedLocation } from "../../../../utils/inventory"
 import {
   loadOwnedLine,
   deriveLineStatus,
@@ -44,6 +45,7 @@ export async function PATCH(req: AuthenticatedMedusaRequest, res: MedusaResponse
     "supplier_name",
     "received_date",
     "shelf_audit_status",
+    "location_id",
   ]) {
     if (body[f] !== undefined) update[f] = body[f]
   }
@@ -58,10 +60,21 @@ export async function PATCH(req: AuthenticatedMedusaRequest, res: MedusaResponse
 
   const saved = await medmkp.updateScanSessionLines(update)
   const actor = req.auth_context?.actor_id ?? null
+
+  // Receiving lines carry their own destination; shelf-audit lines inherit the
+  // session's location. Validate any client-supplied location is the practice's
+  // before we file evidence under it.
+  let syncLocationId: string | null = session.location_id ?? null
+  if (saved.location_id) {
+    const loc = await loadOwnedLocation(medmkp, saved.location_id, practiceId, res)
+    if (!loc) return
+    syncLocationId = saved.location_id
+  }
+
   const inventoryItemId = await syncInventoryFromLine(
     medmkp,
     saved,
-    session.location_id,
+    syncLocationId,
     actor,
     session.capture_type ?? null
   )
