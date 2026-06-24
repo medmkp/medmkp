@@ -172,7 +172,7 @@ export function MobileScanStart({
   // ── Screen: choose scan mode ────────────────────────────────────────
   if (step === "choose-scan-mode") {
     return (
-      <div className={s.screen}>
+      <div className={`${s.screen} ${s.screenNav}`}>
         <header className={s.topbar}>
           <button type="button" className={s.iconBtn} onClick={() => setStep("home")} aria-label="Back">
             <Icon name="icon-chevron-left" />
@@ -210,10 +210,12 @@ export function MobileScanStart({
             disabled={!scanMode}
             onClick={() => {
               if (scanMode === "reorder_list") {
-                onNavigate?.("/app/reorder-list");
-              } else if (scanMode === "receiving") {
-                onStart(null, scanMode);
+                // Reorder List mode = scan barcodes straight onto the reorder
+                // list. /app/scan is the full-screen barcode scanner that does
+                // exactly that (MobileScanItemView).
+                onNavigate?.("/app/scan");
               } else {
+                // Receiving + Shelf Audit both pick a location next.
                 setStep("choose-location");
               }
             }}
@@ -228,7 +230,7 @@ export function MobileScanStart({
   // ── Screen: choose location ─────────────────────────────────────────
   if (step === "choose-location") {
     return (
-      <div className={s.screen}>
+      <div className={`${s.screen} ${s.screenNav}`}>
         <header className={s.topbar}>
           <button type="button" className={s.iconBtn} onClick={() => setStep("choose-scan-mode")} aria-label="Back">
             <Icon name="icon-chevron-left" />
@@ -315,7 +317,7 @@ export function MobileScanStart({
 
   // ── Screen: home ────────────────────────────────────────────────────
   return (
-    <div className={s.screen}>
+    <div className={`${s.screen} ${s.screenNav}`}>
       <header className={s.topbar}>
         <button type="button" className={s.iconBtn} onClick={() => setMenuOpen(true)} aria-label="Menu" aria-haspopup="menu">
           <Icon name="icon-grid" />
