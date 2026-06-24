@@ -350,20 +350,25 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 0;
-  background: #fff;
-  color: #14202E;
+  background: rgba(255,255,255,0.18);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
   cursor: pointer;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
+.camCircle:active { background: rgba(255,255,255,0.28); }
 .camCircle svg { width: 20px; height: 20px; }
-.camCircleActive { background: #ffd233; color: #1c1402; }
-.camBrand { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 19px; font-weight: 600; color: #fff; letter-spacing: -0.01em; }
-.camBrand svg { width: 24px; height: 24px; color: #2F5BD6; stroke-width: 2.2; }
+.camCircleActive { background: rgba(255,210,51,0.85); color: #1c1402; }
+.camBrand {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+}
+/* BrandMark renders as an <img> — size it for the dark camera top bar */
+.camBrand img { height: 28px; width: auto; filter: brightness(0) invert(1); }
 .camRight { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 /* Persistent "what have I collected here" button — the location's own icon with a
@@ -374,18 +379,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 0;
-  background: #fff;
-  color: #14202E;
+  background: rgba(255,255,255,0.18);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
   cursor: pointer;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   animation: reviewBtnIn 0.2s ease;
 }
-.camReviewBtn:active { background: #f1f4f9; }
+.camReviewBtn:active { background: rgba(255,255,255,0.28); }
 .camReviewBtn svg { width: 21px; height: 21px; }
 @keyframes reviewBtnIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .camCountBadge {
@@ -434,33 +440,33 @@
 
 .camFrame {
   position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -54%);
-  width: 72%;
-  aspect-ratio: 1.4 / 1;
+  top: 30%; left: 50%;
+  transform: translate(-50%, 0);
+  width: 78%;
+  aspect-ratio: 1.6 / 1;
   pointer-events: none;
   z-index: 2;
 }
 .camFrame span {
   position: absolute;
-  width: 34px; height: 34px;
-  border: 3px solid #4f8dff;
+  width: 28px; height: 28px;
+  border: 3px solid #3b82f6;
 }
-.camFrame span:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
-.camFrame span:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 10px 0 0; }
-.camFrame span:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 10px; }
-.camFrame span:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+.camFrame span:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+.camFrame span:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; }
+.camFrame span:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; }
+.camFrame span:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
 .scanCaptured .camFrame span { border-color: #2ee27a; }
 
 .camHint {
   position: absolute;
   left: 0; right: 0;
-  bottom: calc(150px + env(safe-area-inset-bottom));
+  top: 58%;
   text-align: center;
-  color: #fff;
-  font-size: 13.5px;
+  color: rgba(255,255,255,0.75);
+  font-size: 13px;
   font-weight: 500;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
   z-index: 2;
   padding: 0 24px;
 }
@@ -806,3 +812,177 @@
 .menuItemChevron { color: #b6c0cd; flex-shrink: 0; width: 19px; height: 19px; }
 .menuItemDanger .menuItemIcon { background: #fdecec; color: #c0392b; }
 .menuItemDanger .menuItemLabel { color: #c0392b; }
+
+/* ── Mode picker (Screen 1) ─────────────────────────────────────────── */
+.modeCards { display: flex; flex-direction: column; gap: 12px; }
+.modeCard {
+  display: flex; flex-direction: column; gap: 12px;
+  background: #fff; border: 2px solid #e6ebf2; border-radius: 18px;
+  padding: 16px; text-align: left; cursor: pointer; width: 100%;
+  transition: border-color 0.12s, background 0.12s;
+}
+.modeCard:active { background: #f7f9fc; }
+.modeCardSelected { border-color: var(--blue); background: #f5f8ff; }
+/* Radio + title row */
+.modeCardHeader { display: flex; align-items: center; gap: 10px; }
+.modeCardRadio {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid #c8d0db; flex-shrink: 0;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.modeCardRadioSelected {
+  border-color: var(--blue);
+  background: var(--blue);
+  box-shadow: inset 0 0 0 4px #fff;
+}
+.modeCardTitle { font-size: 16px; font-weight: 700; color: var(--ink); }
+/* Illustration + content side-by-side */
+.modeCardBody { display: flex; align-items: flex-start; gap: 14px; }
+.modeCardIllustration {
+  font-size: 50px; line-height: 1;
+  width: 74px; height: 74px; min-width: 74px;
+  display: flex; align-items: center; justify-content: center;
+  background: #f3f5f8; border-radius: 14px;
+}
+.modeCardContent { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.modeCardDesc { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.45; }
+.modeCardPills { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.modeCardPillsLabel { font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; width: 100%; margin-bottom: 1px; }
+.modeCardPill {
+  font-size: 11.5px; font-weight: 500; color: var(--blue);
+  background: #e8efff; border-radius: 999px; padding: 2px 9px;
+}
+.modeCardPillOpt { color: var(--muted); background: #eef1f6; }
+.modeCardStatuses { display: flex; flex-wrap: wrap; gap: 5px; }
+.modeCardStatus {
+  font-size: 11.5px; font-weight: 500; color: #0a8553;
+  background: #e3f6ec; border-radius: 999px; padding: 1px 8px;
+}
+.infoBanner {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: #eef3ff; color: #2f5bd6; border-radius: 12px;
+  padding: 12px 14px; font-size: 13px; line-height: 1.5;
+}
+.infoBanner svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+
+/* ── In-camera mode badge (shows selected mode, not a toggle) ───────── */
+.modeBadgeRow {
+  position: absolute;
+  bottom: 32%;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: none;
+}
+.modeBadge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600;
+  color: #fff;
+  background: rgba(0,0,0,.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+
+/* ── Mode-specific bottom sheets ────────────────────────────────────── */
+.modeSheet {
+  position: absolute; inset: 0; z-index: 80;
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.modeSheetBackdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.45);
+}
+.modeSheetPanel {
+  position: relative; z-index: 1;
+  background: #fff; border-radius: 20px 20px 0 0;
+  padding: 12px 16px 32px;
+  max-height: 88vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.modeSheetGrip {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: #d8dde4; margin: 0 auto 4px;
+}
+.modeSheetProduct {
+  display: flex; align-items: flex-start; gap: 10px;
+  flex-wrap: wrap;
+}
+.modeSheetThumb {
+  width: 44px; height: 44px; border-radius: 10px;
+  background: #f3f5f8; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; overflow: hidden;
+}
+.modeSheetThumb img { width: 100%; height: 100%; object-fit: contain; }
+.modeSheetThumb svg { width: 22px; height: 22px; color: #8d9aab; }
+.modeSheetProductInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.modeSheetProductName { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.modeSheetSku { font-size: 12px; color: var(--muted); }
+.modeSheetFields { display: flex; flex-direction: column; gap: 0; border: 1px solid #e6ebf2; border-radius: 12px; overflow: hidden; }
+.modeSheetRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; border-bottom: 1px solid #f0f2f5;
+}
+.modeSheetRow:last-child { border-bottom: 0; }
+.modeSheetLabel { font-size: 13px; color: var(--muted); flex-shrink: 0; min-width: 120px; }
+.modeSheetControl { flex: 1; min-width: 0; display: flex; justify-content: flex-end; }
+.modeSheetControl .input { text-align: right; }
+.modeSheetLocPill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 500; color: var(--blue);
+  background: #eef3ff; border-radius: 999px; padding: 4px 10px;
+}
+.modeSheetLocPill svg { width: 13px; height: 13px; }
+.modeSheetInfo {
+  display: flex; align-items: flex-start; gap: 7px;
+  font-size: 12.5px; color: var(--muted); line-height: 1.5;
+  background: #f7f9fc; border-radius: 10px; padding: 10px 12px;
+}
+.modeSheetInfo svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+.modeSheetActions {
+  display: flex; gap: 8px;
+}
+.modeSheetActions .btnOutline { flex: 1; }
+.modeSheetActions .btnPrimary { flex: 2; }
+.optionalLabel { font-size: 11.5px; color: var(--muted); font-weight: 400; }
+
+/* ── Shelf audit status picker ──────────────────────────────────────── */
+.auditStatuses { display: flex; flex-direction: column; gap: 8px; }
+.auditStatusesLabel { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 2px; }
+.auditStatusGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.auditStatusBtn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 8px; border: 2px solid #e6ebf2; border-radius: 12px;
+  background: #fff; cursor: pointer; text-align: center;
+}
+.auditStatusBtn svg { width: 20px; height: 20px; color: var(--muted); }
+.auditStatusLabel { font-size: 13px; font-weight: 600; color: var(--ink); }
+.auditStatusDesc { font-size: 11px; color: var(--muted); }
+.auditStatusBtnActive { border-color: var(--blue); background: #f0f4ff; }
+.auditStatusBtnActive svg { color: var(--blue); }
+.auditStatusBtnActive .auditStatusLabel { color: var(--blue); }
+
+/* ── Expired banner ─────────────────────────────────────────────────── */
+.expiredBanner {
+  display: flex; align-items: center; gap: 8px;
+  background: #fdeceb; color: #c5392e; border-radius: 10px;
+  padding: 10px 12px; font-size: 13px; font-weight: 500;
+}
+.expiredBanner svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* ── Reorder quick sheet ────────────────────────────────────────────── */
+.reorderSheetBody { display: flex; flex-direction: column; gap: 10px; }
+.reorderSheetHint { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+.reorderSheetLoc {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; font-weight: 500; color: var(--blue);
+  background: #eef3ff; border-radius: 999px; padding: 5px 11px; align-self: flex-start;
+}
+.reorderSheetLoc svg { width: 13px; height: 13px; }
+
+/* ── Badge variants used in sheets ─────────────────────────────────── */
+.badgeBlue  { color: var(--blue);   background: #e8efff; }
+.badgeTeal  { color: #0d7c7c;       background: #e0f5f5; }
+.badgeSlate { color: var(--muted);  background: #eef1f6; }

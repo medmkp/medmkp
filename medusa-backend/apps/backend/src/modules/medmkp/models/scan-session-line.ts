@@ -28,6 +28,12 @@ const ScanSessionLine = model.define("medmkp_scan_session_line", {
   status: model.text().default("needs_review"),
   inventory_item_id: model.text().nullable(),
   scanned_by: model.text().nullable(),
+  // Receiving-mode extras (capture_type = "receiving")
+  supplier_name: model.text().nullable(),
+  received_date: model.dateTime().nullable(),
+  // Shelf-audit outcome (capture_type = "shelf_audit")
+  // Values: present | moved | not_found | removed
+  shelf_audit_status: model.text().nullable(),
 })
 
 export default ScanSessionLine

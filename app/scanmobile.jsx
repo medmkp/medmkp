@@ -6,10 +6,12 @@ import { formatTraceDate } from "./lib";
 import { ProductSearchResults, useBarcodeScanner, useProductSearch } from "./ui";
 import s from "./scanmobile.module.css";
 
-// Mobile room-inventory scanning flow. Five screens that mirror the way a tech
-// actually walks a cabinet: pick the location, point the camera, glance at what
-// landed, fix the thin ones, and save. Desktop keeps its two-column layout in
-// scansessions.jsx; this module is the phone surface those views hand off to.
+// Mobile scan flow. Three scan modes set intent before the camera opens:
+//   Receiving   — new shipment arrives; captures lot/expiry/supplier/qty/date
+//   Shelf Audit — verify items already on shelves; records presence/status
+//   Reorder List — quick scan to add products to the reorder list
+// Desktop keeps its two-column layout in scansessions.jsx; this module is the
+// phone surface those views hand off to.
 
 const TYPE_META = {
   operatory: { icon: "icon-dental-chair", tint: s.tBlue },
@@ -22,7 +24,40 @@ const TYPE_META = {
 };
 const typeMeta = (type) => TYPE_META[type] || TYPE_META.other;
 
-// Relative "last updated" for the resume card — minute / hour / day buckets.
+const SCAN_MODE_META = {
+  receiving: {
+    label: "Receiving",
+    emoji: "📦",
+    emojiLabel: "Cardboard box",
+    desc: "Use when a new shipment arrives.",
+    records: ["Lot", "Expiry", "Received date", "Location"],
+    optional: ["Qty received", "Supplier"],
+  },
+  shelf_audit: {
+    label: "Shelf Audit",
+    emoji: "📋",
+    emojiLabel: "Clipboard",
+    desc: "Use when verifying items already in the office.",
+    records: ["Lot", "Expiry", "Location", "Status"],
+    statuses: ["Present", "Moved", "Not found", "Removed"],
+  },
+  reorder_list: {
+    label: "Reorder List",
+    emoji: "🛒",
+    emojiLabel: "Shopping cart",
+    desc: "Scan items to add directly to your reorder list.",
+    records: ["Product match"],
+    optional: ["Location"],
+  },
+};
+
+const AUDIT_STATUSES = [
+  { value: "present",   label: "Present",   icon: "icon-check-circle",  desc: "Item is on shelf" },
+  { value: "moved",     label: "Moved",     icon: "icon-arrow-right",   desc: "Location changed" },
+  { value: "not_found", label: "Not found", icon: "icon-search",        desc: "Not on shelf" },
+  { value: "removed",   label: "Removed",   icon: "icon-x-circle",      desc: "Pulled from use" },
+];
+
 function relTime(iso) {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
@@ -36,19 +71,9 @@ function relTime(iso) {
   return `${d} day${d === 1 ? "" : "s"} ago`;
 }
 
-// The pill shown on a result/review row. "Exact match" once we've identified the
-// product (even if lot/expiry are still missing — that's a details gap, not a
-// match gap); "Needs review" when we couldn't identify it at all.
 function matchPill(status) {
   if (status === "needs_review") return { label: "Needs review", cls: s.pillRed, icon: "icon-alert-triangle" };
   return { label: "Exact match", cls: s.pillGreen, icon: "icon-check-circle" };
-}
-
-// Which missing field a "needs details" line is waiting on, for the amber chip.
-function detailChip(line) {
-  if (!line.expiration_date) return "Add expiration";
-  if (!line.lot_number) return "Add lot";
-  return "Add details";
 }
 
 function offerSku(line) {
@@ -62,27 +87,76 @@ function offerPack(line) {
   return "";
 }
 
-// ── Screen 1 + 5: Start scan session / Choose location ────────────────
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-// Destinations reachable from the scan-first home (mobile has no bottom nav, so
-// the low-frequency surfaces live behind a menu on this screen).
+// ── Mode picker card ──────────────────────────────────────────────────
+
+function ModeCard({ value, selected, onSelect, meta }) {
+  return (
+    <button
+      type="button"
+      className={`${s.modeCard} ${selected ? s.modeCardSelected : ""}`}
+      onClick={() => onSelect(value)}
+      aria-pressed={selected}
+    >
+      <div className={s.modeCardHeader}>
+        <span className={`${s.modeCardRadio} ${selected ? s.modeCardRadioSelected : ""}`} aria-hidden="true" />
+        <span className={s.modeCardTitle}>{meta.label}</span>
+      </div>
+      <div className={s.modeCardBody}>
+        <span className={s.modeCardIllustration} role="img" aria-label={meta.emojiLabel}>
+          {meta.emoji}
+        </span>
+        <div className={s.modeCardContent}>
+          <p className={s.modeCardDesc}>{meta.desc}</p>
+          <div className={s.modeCardPills}>
+            <span className={s.modeCardPillsLabel}>Records</span>
+            {meta.records.map((r) => (
+              <span key={r} className={s.modeCardPill}>{r}</span>
+            ))}
+            {meta.optional?.map((r) => (
+              <span key={r} className={`${s.modeCardPill} ${s.modeCardPillOpt}`}>{r}</span>
+            ))}
+          </div>
+          {meta.statuses && (
+            <div className={s.modeCardStatuses}>
+              {meta.statuses.map((st) => (
+                <span key={st} className={s.modeCardStatus}>{st}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── Screens 1 + 2: Start scan / Choose mode / Choose location ────────
+
 const MENU_ITEMS = [
-  { label: "Reorder list", icon: "icon-cart", path: "/app/reorder-list" },
-  { label: "Locations", icon: "icon-map-pin", path: "/app/locations" },
-  { label: "History", icon: "icon-clock", path: "/app/history" },
-  { label: "Settings", icon: "icon-settings", path: "/app/settings" },
+  { label: "Reorder list", icon: "icon-cart",      path: "/app/reorder-list" },
+  { label: "Locations",    icon: "icon-map-pin",   path: "/app/locations" },
+  { label: "History",      icon: "icon-clock",     path: "/app/history" },
+  { label: "Settings",     icon: "icon-settings",  path: "/app/settings" },
 ];
 
-export function MobileScanStart({ loading, sessions, locations, starting, needsAttention, onOpenSession, onStart, onNavigate, onLogout }) {
-  const [mode, setMode] = useState("home");
+export function MobileScanStart({
+  loading, sessions, locations, starting, needsAttention,
+  onOpenSession, onStart, onNavigate, onLogout,
+}) {
+  // "home" | "choose-scan-mode" | "choose-location"
+  const [step, setStep] = useState("home");
+  const [scanMode, setScanMode] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
   const attnItems = needsAttention?.items || 0;
-  const attnLocs = needsAttention?.locations || 0;
+  const attnLocs  = needsAttention?.locations || 0;
 
   const active = useMemo(() => sessions.filter((x) => x.status === "active"), [sessions]);
   const resume = active[0] || null;
 
-  // "Last used" = the most recent session's location; recents = the last few.
   const recentIds = useMemo(() => {
     const seen = [];
     for (const sess of sessions) {
@@ -95,11 +169,68 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
   const others = locations.filter((l) => l.id !== lastUsed?.id);
   const recentNames = recentIds.slice(0, 3).map((id) => byId.get(id)?.name).filter(Boolean);
 
-  if (mode === "choose") {
+  // ── Screen: choose scan mode ────────────────────────────────────────
+  if (step === "choose-scan-mode") {
     return (
       <div className={s.screen}>
         <header className={s.topbar}>
-          <button type="button" className={s.iconBtn} onClick={() => setMode("home")} aria-label="Back">
+          <button type="button" className={s.iconBtn} onClick={() => setStep("home")} aria-label="Back">
+            <Icon name="icon-chevron-left" />
+          </button>
+          <span className={s.brand}><BrandMark /></span>
+          <span className={s.topSpacer} />
+        </header>
+        <div className={s.body}>
+          <div className={s.intro}>
+            <h1 className={s.h1}>Scan mode</h1>
+            <p className={s.sub}>Choose how this scan should be recorded.</p>
+          </div>
+
+          <div className={s.modeCards}>
+            {Object.entries(SCAN_MODE_META).map(([value, meta]) => (
+              <ModeCard
+                key={value}
+                value={value}
+                selected={scanMode === value}
+                onSelect={setScanMode}
+                meta={meta}
+              />
+            ))}
+          </div>
+
+          <div className={s.infoBanner}>
+            <Icon name="icon-info" />
+            Same scanner, different record type. Choose what matters most right now.
+          </div>
+        </div>
+        <div className={s.footer}>
+          <button
+            type="button"
+            className={s.btnPrimary}
+            disabled={!scanMode}
+            onClick={() => {
+              if (scanMode === "reorder_list") {
+                onNavigate?.("/app/reorder-list");
+              } else if (scanMode === "receiving") {
+                onStart(null, scanMode);
+              } else {
+                setStep("choose-location");
+              }
+            }}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Screen: choose location ─────────────────────────────────────────
+  if (step === "choose-location") {
+    return (
+      <div className={s.screen}>
+        <header className={s.topbar}>
+          <button type="button" className={s.iconBtn} onClick={() => setStep("choose-scan-mode")} aria-label="Back">
             <Icon name="icon-chevron-left" />
           </button>
           <span className={s.brand}><BrandMark /></span>
@@ -120,8 +251,15 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
               {lastUsed && (
                 <>
                   <div className={s.sectionLabel}>Last used</div>
-                  <button type="button" className={s.lastUsed} disabled={Boolean(starting)} onClick={() => onStart(lastUsed)}>
-                    <span className={`${s.lastUsedIcon} ${typeMeta(lastUsed.type).tint}`}><Icon name={typeMeta(lastUsed.type).icon} /></span>
+                  <button
+                    type="button"
+                    className={s.lastUsed}
+                    disabled={Boolean(starting)}
+                    onClick={() => onStart(lastUsed, scanMode)}
+                  >
+                    <span className={`${s.lastUsedIcon} ${typeMeta(lastUsed.type).tint}`}>
+                      <Icon name={typeMeta(lastUsed.type).icon} />
+                    </span>
                     <span className={s.lastUsedBody}>
                       <span className={s.lastUsedName}>{lastUsed.name}</span>
                       <span className={s.lastUsedSub}>{starting === lastUsed.id ? "Starting…" : "Last used recently"}</span>
@@ -136,7 +274,13 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
                   <div className={s.sectionLabel}>Other locations</div>
                   <div className={s.locList}>
                     {others.map((loc) => (
-                      <button key={loc.id} type="button" className={s.locRow} disabled={Boolean(starting)} onClick={() => onStart(loc)}>
+                      <button
+                        key={loc.id}
+                        type="button"
+                        className={s.locRow}
+                        disabled={Boolean(starting)}
+                        onClick={() => onStart(loc, scanMode)}
+                      >
                         <span className={s.locRowIcon}><Icon name={typeMeta(loc.type).icon} /></span>
                         <span className={s.locRowName}>{loc.name}</span>
                         <span className={s.locRowChevron}><Icon name="icon-chevron-right" /></span>
@@ -147,7 +291,7 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
               )}
 
               {recentNames.length > 0 && (
-                <button type="button" className={s.recent} onClick={() => lastUsed && onStart(lastUsed)}>
+                <button type="button" className={s.recent} onClick={() => lastUsed && onStart(lastUsed, scanMode)}>
                   <span className={s.recentIcon}><Icon name="icon-clock" /></span>
                   <span className={s.recentBody}>
                     <span className={s.recentTitle}>Recent locations</span>
@@ -160,13 +304,16 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
 
           <div className={s.manage}>
             <span className={s.manageHint}>Don&rsquo;t see what you need?</span>
-            <button type="button" className={s.manageLink} onClick={() => onNavigate?.("/app/locations")}>Manage locations</button>
+            <button type="button" className={s.manageLink} onClick={() => onNavigate?.("/app/locations")}>
+              Manage locations
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
+  // ── Screen: home ────────────────────────────────────────────────────
   return (
     <div className={s.screen}>
       <header className={s.topbar}>
@@ -199,7 +346,12 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
           <>
             {resume && (
               <div className={s.resumeCard}>
-                <button type="button" className={s.resumeTop} onClick={() => onOpenSession(resume.id)} style={{ border: 0, background: "none", padding: 0, textAlign: "left", cursor: "pointer", width: "100%" }}>
+                <button
+                  type="button"
+                  className={s.resumeTop}
+                  onClick={() => onOpenSession(resume.id)}
+                  style={{ border: 0, background: "none", padding: 0, textAlign: "left", cursor: "pointer", width: "100%" }}
+                >
                   <span className={s.resumeIcon}><Icon name="icon-refresh" /></span>
                   <span className={s.resumeBody}>
                     <span className={s.resumeKicker}>IN PROGRESS</span>
@@ -214,27 +366,11 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
             )}
 
             <div className={s.actionList}>
-              <button type="button" className={s.actionRow} onClick={() => setMode("choose")}>
+              <button type="button" className={s.actionRow} onClick={() => { setScanMode(null); setStep("choose-scan-mode"); }}>
                 <span className={s.actionIcon}><Icon name="icon-plus" /></span>
                 <span className={s.actionText}>
                   <span className={s.actionTitle}>Start new scan session</span>
-                  <span className={s.actionSub}>Begin scanning at a new location</span>
-                </span>
-                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
-              </button>
-              <button type="button" className={s.actionRow} onClick={() => setMode("choose")}>
-                <span className={s.actionIcon}><Icon name="icon-map-pin" /></span>
-                <span className={s.actionText}>
-                  <span className={s.actionTitle}>Choose location</span>
-                  <span className={s.actionSub}>Select a saved location</span>
-                </span>
-                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
-              </button>
-              <button type="button" className={s.actionRow} onClick={() => setMode("choose")}>
-                <span className={s.actionIcon}><Icon name="icon-edit" /></span>
-                <span className={s.actionText}>
-                  <span className={s.actionTitle}>Manual add</span>
-                  <span className={s.actionSub}>Add items without scanning</span>
+                  <span className={s.actionSub}>Choose scan mode then pick a location</span>
                 </span>
                 <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
               </button>
@@ -261,7 +397,11 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
             <ul className={s.menuList}>
               {MENU_ITEMS.map((item) => (
                 <li key={item.path}>
-                  <button type="button" className={s.menuItem} onClick={() => { setMenuOpen(false); onNavigate?.(item.path); }}>
+                  <button
+                    type="button"
+                    className={s.menuItem}
+                    onClick={() => { setMenuOpen(false); onNavigate?.(item.path); }}
+                  >
                     <span className={s.menuItemIcon}><Icon name={item.icon} /></span>
                     <span className={s.menuItemLabel}>{item.label}</span>
                     <Icon name="icon-chevron-right" className={s.menuItemChevron} />
@@ -270,7 +410,11 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
               ))}
               {onLogout && (
                 <li>
-                  <button type="button" className={`${s.menuItem} ${s.menuItemDanger}`} onClick={() => { setMenuOpen(false); onLogout(); }}>
+                  <button
+                    type="button"
+                    className={`${s.menuItem} ${s.menuItemDanger}`}
+                    onClick={() => { setMenuOpen(false); onLogout(); }}
+                  >
                     <span className={s.menuItemIcon}><Icon name="icon-logout" /></span>
                     <span className={s.menuItemLabel}>Sign out</span>
                   </button>
@@ -284,23 +428,25 @@ export function MobileScanStart({ loading, sessions, locations, starting, needsA
   );
 }
 
-// ── Screens 2–4: active session (camera / shelf details / review) ─────
+// ── Camera + mode-specific bottom sheets ──────────────────────────────
 
 export function MobileScanSession({
-  session, lines, counts, active, flash,
-  onScan, onAddProduct, onPatchLine, onRemoveLine, onComplete, onBack, onClearFlash,
+  session, lines, counts, active,
+  pendingLine, captureType,
+  onScan, onAddProduct, onPatchLine, onRemoveLine, onComplete, onBack, onClearPending,
   locations, onSwitchLocation, onNavigate,
 }) {
-  const [mode, setMode] = useState("scan"); // scan | review
-  const [detail, setDetail] = useState(null); // line being shelf-detailed
-  const [link, setLink] = useState(null); // unidentified line being linked
+  const [viewMode, setViewMode] = useState("scan"); // scan | review
+  const [detail, setDetail] = useState(null);
+  const [link, setLink]   = useState(null);
   const [sheet, setSheet] = useState(null); // manual | search | help | location
-  const [captured, setCaptured] = useState(false);
+  const [localMode, setLocalMode] = useState(captureType || "shelf_audit");
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const pulseTimer = useRef();
+  const [captured, setCaptured] = useState(false);
 
-  const cameraActive = active && mode === "scan" && !detail && !link;
+  const cameraActive = active && viewMode === "scan" && !detail && !link && !pendingLine;
 
   const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
     active: cameraActive,
@@ -312,12 +458,10 @@ export function MobileScanSession({
     },
   });
 
-  // Torch is only exposed on hardware that reports the capability (most Android
-  // rear cameras; iOS Safari does not), so the flash button only appears there.
   useEffect(() => {
     if (cameraStatus !== "ready") { setTorchSupported(false); setTorchOn(false); return; }
     const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
-    const caps = track?.getCapabilities?.();
+    const caps  = track?.getCapabilities?.();
     setTorchSupported(Boolean(caps && "torch" in caps && caps.torch));
   }, [cameraStatus, videoRef]);
 
@@ -328,29 +472,34 @@ export function MobileScanSession({
     track.applyConstraints({ advanced: [{ torch: next }] }).then(() => setTorchOn(next)).catch(() => {});
   }
 
+  function switchMode(m) {
+    setLocalMode(m);
+    if (pendingLine) onClearPending?.();
+  }
+
   const locName = session.location_name || "Location";
 
-  // ----- Shelf details (Screen 3) -----
+  // ----- Shelf details (deep edit) -----
   if (detail) {
     return (
       <ShelfDetails
         line={detail}
         locName={locName}
         onCancel={() => setDetail(null)}
-        onSave={(body, scanNext) => { onPatchLine(detail.id, body); setDetail(null); if (scanNext) setMode("scan"); }}
+        onSave={(body, scanNext) => { onPatchLine(detail.id, body); setDetail(null); if (scanNext) setViewMode("scan"); }}
       />
     );
   }
 
-  // ----- Review (Screen 4) -----
-  if (mode === "review") {
+  // ----- Review -----
+  if (viewMode === "review") {
     return (
       <ReviewSession
         session={session}
         lines={lines}
         counts={counts}
-        onBack={() => setMode("scan")}
-        onScanMore={() => setMode("scan")}
+        onBack={() => setViewMode("scan")}
+        onScanMore={() => setViewMode("scan")}
         onSave={onComplete}
         onDetail={(line) => setDetail(line)}
         onLink={(line) => setLink(line)}
@@ -361,7 +510,7 @@ export function MobileScanSession({
     );
   }
 
-  // ----- Camera (Screen 2) -----
+  // ----- Camera -----
   return (
     <div className={`${s.camera} ${captured ? s.scanCaptured : ""}`} aria-label="Scan items">
       <video ref={videoRef} className={s.cameraVideo} playsInline muted autoPlay aria-label="Live camera preview" />
@@ -389,24 +538,30 @@ export function MobileScanSession({
           onClick={() => (session.location_id ? onNavigate?.(`/app/locations/${session.location_id}`) : onBack?.())}
           aria-label="Exit scanner"
         >
-          <Icon name="icon-x" />
+          <Icon name="icon-chevron-left" />
         </button>
-        <span className={s.camBrand}><BrandLogoMark /> TraceDDS</span>
+        <span className={s.camBrand}><BrandMark /></span>
         <span className={s.camRight}>
           {torchSupported && (
-            <button type="button" className={`${s.camCircle} ${torchOn ? s.camCircleActive : ""}`} onClick={toggleTorch} aria-label="Toggle flash" aria-pressed={torchOn}>
+            <button
+              type="button"
+              className={`${s.camCircle} ${torchOn ? s.camCircleActive : ""}`}
+              onClick={toggleTorch}
+              aria-label="Toggle flash"
+              aria-pressed={torchOn}
+            >
               <Icon name="icon-bolt" />
             </button>
           )}
           <button type="button" className={s.camCircle} onClick={() => setSheet("help")} aria-label="How scanning works">
-            <Icon name="icon-info" />
+            <Icon name="icon-help-circle" />
           </button>
           {counts.scanned > 0 && (
             <button
               type="button"
               className={s.camReviewBtn}
-              onClick={() => setMode("review")}
-              aria-label={`Review ${counts.scanned} scanned ${counts.scanned === 1 ? "item" : "items"} in ${locName}`}
+              onClick={() => setViewMode("review")}
+              aria-label={`Review ${counts.scanned} scanned items`}
             >
               <Icon name={typeMeta(session.location_type).icon} />
               <span className={s.camCountBadge}>{counts.scanned > 99 ? "99+" : `+${counts.scanned}`}</span>
@@ -415,46 +570,60 @@ export function MobileScanSession({
         </span>
       </div>
 
-      <button type="button" className={s.locPill} onClick={() => setSheet("location")}>
-        <Icon name="icon-package" />
-        <span className={s.locPillName}>{locName}</span>
-        <span className={s.locPillCaret}><Icon name="icon-chevron-down" /></span>
-      </button>
-
-      <div className={s.camFrame} aria-hidden="true"><span /><span /><span /><span /></div>
-      {!flash && cameraStatus === "ready" && (
-        <div className={s.camHint}>{autoDetect ? "Point at a barcode" : "Tap Enter SKU to key in a code"}</div>
+      {/* Location pill — shelf audit only */}
+      {localMode === "shelf_audit" && (
+        <button type="button" className={s.locPill} onClick={() => setSheet("location")}>
+          <Icon name="icon-map-pin" />
+          <span className={s.locPillName}>{locName}</span>
+          <span className={s.locPillCaret}><Icon name="icon-chevron-down" /></span>
+        </button>
       )}
 
-      {flash && (
-        <ResultCard
-          line={flash}
-          onUndo={() => { onRemoveLine(flash.id); onClearFlash(); }}
-          onEdit={() => { setDetail(flash); onClearFlash(); }}
-          onReview={() => { onClearFlash(); setMode("review"); }}
-        />
-      )}
-
-      <div className={s.camBottom}>
-        <button type="button" className={s.camPillBtn} onClick={() => setSheet("manual")}>
-          <Icon name="icon-scan" /> Enter SKU
-        </button>
-        <button type="button" className={s.camPillBtn} onClick={() => setSheet("search")}>
-          <Icon name="icon-search" /> Search product
-        </button>
+      {/* Current mode badge — single pill, not a toggle */}
+      <div className={s.modeBadgeRow}>
+        <span className={s.modeBadge}>
+          {SCAN_MODE_META[localMode]?.emoji} {SCAN_MODE_META[localMode]?.label}
+        </span>
       </div>
 
-      {sheet === "manual" && (
-        <ManualSheet onClose={() => setSheet(null)} onSubmit={(code) => { onScan(code); setSheet(null); }} />
+      <div className={s.camFrame} aria-hidden="true"><span /><span /><span /><span /></div>
+      {!pendingLine && cameraStatus === "ready" && (
+        <div className={s.camHint}>Point at a barcode</div>
       )}
-      {sheet === "search" && (
-        <SearchSheet
-          title="Search product"
-          onClose={() => setSheet(null)}
-          onPick={(product) => { onAddProduct(product); setSheet(null); }}
+
+      {/* Mode-specific bottom sheets after a scan */}
+      {pendingLine && localMode === "receiving" && (
+        <ReceivingSheet
+          line={pendingLine}
+          locName={locName}
+          onClose={onClearPending}
+          onSave={(body) => { onPatchLine(pendingLine.id, body); onClearPending?.(); }}
+          onUndo={() => { onRemoveLine(pendingLine.id); onClearPending?.(); }}
         />
       )}
-      {sheet === "help" && <HelpSheet onClose={() => setSheet(null)} />}
+      {pendingLine && localMode === "shelf_audit" && (
+        <ShelfAuditSheet
+          line={pendingLine}
+          locName={locName}
+          onClose={onClearPending}
+          onSave={(body) => { onPatchLine(pendingLine.id, body); onClearPending?.(); }}
+          onUndo={() => { onRemoveLine(pendingLine.id); onClearPending?.(); }}
+        />
+      )}
+      {pendingLine && localMode === "reorder_list" && (
+        <ReorderQuickSheet
+          line={pendingLine}
+          locName={locName}
+          locations={locations}
+          onClose={onClearPending}
+          onUndo={() => { onRemoveLine(pendingLine.id); onClearPending?.(); }}
+          onNavigate={onNavigate}
+        />
+      )}
+
+      {sheet === "manual"   && <ManualSheet onClose={() => setSheet(null)} onSubmit={(code) => { onScan(code); setSheet(null); }} />}
+      {sheet === "search"   && <SearchSheet title="Search product" onClose={() => setSheet(null)} onPick={(p) => { onAddProduct(p); setSheet(null); }} />}
+      {sheet === "help"     && <HelpSheet onClose={() => setSheet(null)} />}
       {sheet === "location" && (
         <LocationSheet
           locations={locations}
@@ -472,11 +641,11 @@ export function MobileScanSession({
           onClose={() => setLink(null)}
           onPick={(product) => {
             const best = product.best_offer || product.offers?.[0] || null;
-            const id = product.id || "";
+            const id   = product.id || "";
             onPatchLine(link.id, {
               canonical_product_id: id.startsWith("mcp") ? id : null,
-              supplier_product_id: best?.supplier_product_id || (id.startsWith("msp") ? id : null),
-              name: product.name,
+              supplier_product_id:  best?.supplier_product_id || (id.startsWith("msp") ? id : null),
+              name:      product.name,
               image_url: product.image_url || best?.image_url || "",
             });
             setLink(null);
@@ -487,61 +656,222 @@ export function MobileScanSession({
   );
 }
 
-// ── Result card (after a scan) ────────────────────────────────────────
+// ── Receiving bottom sheet ────────────────────────────────────────────
 
-function ResultCard({ line, onUndo, onEdit, onReview }) {
-  const pill = matchPill(line.status);
-  const sku = offerSku(line);
-  const qty = line.quantity || 1;
+function ReceivingSheet({ line, locName, onClose, onSave, onUndo }) {
+  const [lot,          setLot]          = useState(line.lot_number || "");
+  const [exp,          setExp]          = useState(line.expiration_date ? String(line.expiration_date).slice(0, 10) : "");
+  const [qty,          setQty]          = useState(1);
+  const [supplier,     setSupplier]     = useState("");
+  const [receivedDate, setReceivedDate] = useState(todayIso());
+
+  function save() {
+    onSave({
+      lot_number:      lot.trim() || null,
+      expiration_date: exp || null,
+      quantity:        qty,
+      supplier_name:   supplier.trim() || null,
+      received_date:   receivedDate || null,
+    });
+  }
+
   return (
-    <div className={s.resultCard} role="status" aria-live="polite">
-      <div className={s.resultMain}>
-        <span className={s.resultThumb}>
-          {line.image_url ? <img src={line.image_url} alt="" /> : <Icon name="icon-package" />}
-        </span>
-        <div className={s.resultBody}>
-          <div className={s.resultName}>
-            <Icon name="icon-check-circle" className={s.txGreen} />
-            <span>{line.name} added</span>
-          </div>
-          <div className={s.resultSkuRow}>
-            {sku && <span className={s.resultSku}>SKU: <strong>{sku}</strong></span>}
-            <span className={`${s.resultPill} ${pill.cls}`}><Icon name={pill.icon} /> {pill.label}</span>
-          </div>
-          <span className={s.resultQty}>{qty} added</span>
+    <div className={s.modeSheet}>
+      <div className={s.modeSheetBackdrop} onClick={onClose} />
+      <div className={s.modeSheetPanel}>
+        <div className={s.modeSheetGrip} aria-hidden="true" />
+        <ModeSheetProductHeader line={line} modeBadge="Receiving" modeBadgeCls={s.badgeBlue} />
+
+        <div className={s.modeSheetFields}>
+          <ModeSheetRow label="Lot number">
+            <input className={s.input} value={lot} onChange={(e) => setLot(e.target.value)} placeholder="e.g. A219" />
+          </ModeSheetRow>
+          <ModeSheetRow label="Expiration date">
+            <input className={s.input} type="date" value={exp} onChange={(e) => setExp(e.target.value)} />
+          </ModeSheetRow>
+          <ModeSheetRow label={<>Qty received <span className={s.optionalLabel}>(optional)</span></>}>
+            <div className={s.stepper}>
+              <button type="button" className={s.stepBtn} onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
+              <span className={s.stepVal}>{qty}</span>
+              <button type="button" className={s.stepBtn} onClick={() => setQty((q) => q + 1)}>+</button>
+            </div>
+          </ModeSheetRow>
+          <ModeSheetRow label={<>Supplier <span className={s.optionalLabel}>(optional)</span></>}>
+            <input className={s.input} value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Henry Schein" />
+          </ModeSheetRow>
+          <ModeSheetRow label="Received date">
+            <input className={s.input} type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+          </ModeSheetRow>
+          <ModeSheetRow label="Location">
+            <span className={s.modeSheetLocPill}><Icon name="icon-map-pin" /> {locName}</span>
+          </ModeSheetRow>
         </div>
-        <span className={s.resultDelta}>+{qty}</span>
-      </div>
-      <div className={s.resultActions}>
-        <button type="button" className={s.resultBtn} onClick={onUndo}><Icon name="icon-refresh" /> Undo</button>
-        <button type="button" className={`${s.resultBtn} ${s.resultBtnDivider}`} onClick={onEdit}><Icon name="icon-edit" /> Edit</button>
-        <button type="button" className={`${s.resultBtn} ${s.resultBtnDivider}`} onClick={onReview}><Icon name="icon-list" /> Review session</button>
+
+        <div className={s.modeSheetInfo}>
+          <Icon name="icon-info" /> This receiving scan creates compliance evidence and contributes to reorder history.
+        </div>
+
+        <div className={s.modeSheetActions}>
+          <button type="button" className={s.btnOutline} onClick={onUndo}>Undo scan</button>
+          <button type="button" className={s.btnPrimary} onClick={save}>Save receiving record</button>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Screen 3: Add shelf details ───────────────────────────────────────
+// ── Shelf audit bottom sheet ──────────────────────────────────────────
+
+function ShelfAuditSheet({ line, locName, onClose, onSave, onUndo }) {
+  const [status,  setStatus]  = useState("present");
+  const [lot,     setLot]     = useState(line.lot_number || "");
+  const [exp,     setExp]     = useState(line.expiration_date ? String(line.expiration_date).slice(0, 10) : "");
+
+  const isExpired = exp && new Date(exp) <= new Date();
+
+  function save() {
+    onSave({
+      lot_number:         lot.trim() || null,
+      expiration_date:    exp || null,
+      shelf_audit_status: status,
+    });
+  }
+
+  return (
+    <div className={s.modeSheet}>
+      <div className={s.modeSheetBackdrop} onClick={onClose} />
+      <div className={s.modeSheetPanel}>
+        <div className={s.modeSheetGrip} aria-hidden="true" />
+        <ModeSheetProductHeader line={line} modeBadge="Shelf audit" modeBadgeCls={s.badgeTeal} />
+
+        {isExpired && (
+          <div className={s.expiredBanner}>
+            <Icon name="icon-alert-triangle" />
+            Expired — verify removal or replacement before saving.
+          </div>
+        )}
+
+        <div className={s.auditStatuses}>
+          <p className={s.auditStatusesLabel}>Verify status</p>
+          <div className={s.auditStatusGrid}>
+            {AUDIT_STATUSES.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`${s.auditStatusBtn} ${status === opt.value ? s.auditStatusBtnActive : ""}`}
+                onClick={() => setStatus(opt.value)}
+              >
+                <Icon name={opt.icon} />
+                <span className={s.auditStatusLabel}>{opt.label}</span>
+                <span className={s.auditStatusDesc}>{opt.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={s.modeSheetFields}>
+          <ModeSheetRow label="Lot number">
+            <input className={s.input} value={lot} onChange={(e) => setLot(e.target.value)} placeholder="e.g. A219" />
+          </ModeSheetRow>
+          <ModeSheetRow label="Expiration date">
+            <input className={s.input} type="date" value={exp} onChange={(e) => setExp(e.target.value)} />
+          </ModeSheetRow>
+          <ModeSheetRow label="Location">
+            <span className={s.modeSheetLocPill}><Icon name="icon-map-pin" /> {locName}</span>
+          </ModeSheetRow>
+        </div>
+
+        <div className={s.modeSheetActions}>
+          <button type="button" className={s.btnOutline} onClick={onUndo}>Undo scan</button>
+          <button type="button" className={s.btnPrimary} onClick={save}>Save verification</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reorder quick-add sheet ───────────────────────────────────────────
+
+function ReorderQuickSheet({ line, locName, onClose, onUndo, onNavigate }) {
+  const pill = matchPill(line.status);
+  return (
+    <div className={s.modeSheet}>
+      <div className={s.modeSheetBackdrop} onClick={onClose} />
+      <div className={s.modeSheetPanel}>
+        <div className={s.modeSheetGrip} aria-hidden="true" />
+        <ModeSheetProductHeader line={line} modeBadge="Reorder list" modeBadgeCls={s.badgeSlate} />
+
+        <div className={s.reorderSheetBody}>
+          <p className={s.reorderSheetHint}>
+            To add this item to your reorder list, go to the Reorder List and use its scan feature there.
+            You can also manage your list from the menu.
+          </p>
+          <div className={s.reorderSheetLoc}>
+            <Icon name="icon-map-pin" /> {locName}
+          </div>
+        </div>
+
+        <div className={s.modeSheetActions}>
+          <button type="button" className={s.btnOutline} onClick={onUndo}>Undo scan</button>
+          <button type="button" className={s.btnPrimary} onClick={() => onNavigate?.("/app/reorder-list")}>
+            Go to reorder list
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared sheet sub-components ───────────────────────────────────────
+
+function ModeSheetProductHeader({ line, modeBadge, modeBadgeCls }) {
+  return (
+    <div className={s.modeSheetProduct}>
+      <span className={s.modeSheetThumb}>
+        {line.image_url ? <img src={line.image_url} alt="" /> : <Icon name="icon-package" />}
+      </span>
+      <div className={s.modeSheetProductInfo}>
+        <span className={s.modeSheetProductName}>{line.name}</span>
+        {offerSku(line) && <span className={s.modeSheetSku}>SKU: {offerSku(line)}</span>}
+      </div>
+      <span className={`${s.badge} ${s.badgeGreen}`}>
+        <Icon name="icon-check-circle" /> Exact match
+      </span>
+      <span className={`${s.badge} ${modeBadgeCls}`}>{modeBadge}</span>
+    </div>
+  );
+}
+
+function ModeSheetRow({ label, children }) {
+  return (
+    <div className={s.modeSheetRow}>
+      <span className={s.modeSheetLabel}>{label}</span>
+      <div className={s.modeSheetControl}>{children}</div>
+    </div>
+  );
+}
+
+// ── Deep-edit: Shelf details (full screen) ────────────────────────────
 
 function ShelfDetails({ line, locName, onCancel, onSave }) {
-  const [qty, setQty] = useState(line.quantity || 1);
-  const [shelf, setShelf] = useState(line.shelf_area || "");
-  const [exp, setExp] = useState(line.expiration_date ? String(line.expiration_date).slice(0, 10) : "");
-  const [lot, setLot] = useState(line.lot_number || "");
+  const [qty,       setQty]       = useState(line.quantity || 1);
+  const [shelf,     setShelf]     = useState(line.shelf_area || "");
+  const [exp,       setExp]       = useState(line.expiration_date ? String(line.expiration_date).slice(0, 10) : "");
+  const [lot,       setLot]       = useState(line.lot_number || "");
   const [condition, setCondition] = useState(line.package_condition || "good");
 
   function body() {
     return {
-      quantity: Number(qty) || 1,
-      shelf_area: shelf.trim() || null,
-      expiration_date: exp || null,
-      lot_number: lot.trim() || null,
+      quantity:          Number(qty) || 1,
+      shelf_area:        shelf.trim() || null,
+      expiration_date:   exp || null,
+      lot_number:        lot.trim() || null,
       package_condition: condition,
     };
   }
 
-  const sku = offerSku(line);
-  const pack = offerPack(line);
+  const sku   = offerSku(line);
+  const pack  = offerPack(line);
   const brand = line?._offer?.brand;
 
   return (
@@ -553,7 +883,7 @@ function ShelfDetails({ line, locName, onCancel, onSave }) {
       </header>
       <div className={s.body}>
         <div className={s.intro}>
-          <h1 className={s.h1} style={{ textAlign: "center" }}>Add shelf details</h1>
+          <h1 className={s.h1} style={{ textAlign: "center" }}>Edit details</h1>
           <p className={s.sub} style={{ textAlign: "center" }}>Review item details before saving.</p>
         </div>
 
@@ -567,7 +897,7 @@ function ShelfDetails({ line, locName, onCancel, onSave }) {
           </div>
           {(sku || pack) && (
             <div className={s.prodSpecs}>
-              {sku && <div className={s.prodSpec}><span className={s.prodSpecLabel}>SKU / MPN</span><span className={s.prodSpecVal}>{sku}</span></div>}
+              {sku  && <div className={s.prodSpec}><span className={s.prodSpecLabel}>SKU / MPN</span><span className={s.prodSpecVal}>{sku}</span></div>}
               {pack && <div className={s.prodSpec}><span className={s.prodSpecLabel}>Package</span><span className={s.prodSpecVal}>{pack}</span></div>}
             </div>
           )}
@@ -575,7 +905,7 @@ function ShelfDetails({ line, locName, onCancel, onSave }) {
         </div>
 
         <div className={s.formCard}>
-          <div className={s.formHead}><Icon name="icon-list" /> 1. Shelf details</div>
+          <div className={s.formHead}><Icon name="icon-list" /> Shelf details</div>
           <div className={s.formRow}>
             <span className={s.formLabel}>Location</span>
             <div className={s.input} style={{ color: "#6a7889" }}>{locName}</div>
@@ -598,7 +928,7 @@ function ShelfDetails({ line, locName, onCancel, onSave }) {
         </div>
 
         <div className={s.formCard}>
-          <div className={s.formHead}><Icon name="icon-shield-check" /> 2. Traceability</div>
+          <div className={s.formHead}><Icon name="icon-shield-check" /> Traceability</div>
           <div className={s.formRow}>
             <span className={s.formLabel}>Expiration date</span>
             <input className={s.input} type="date" value={exp} onChange={(e) => setExp(e.target.value)} />
@@ -625,20 +955,20 @@ function ShelfDetails({ line, locName, onCancel, onSave }) {
   );
 }
 
-// ── Screen 4: Review session ──────────────────────────────────────────
+// ── Review session ────────────────────────────────────────────────────
 
 function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onDetail, onLink, linkSheet, onCloseLink, onPatchLine }) {
-  const review = lines.filter((l) => l.status === "needs_review");
-  const details = lines.filter((l) => l.status === "needs_details");
+  const review    = lines.filter((l) => l.status === "needs_review");
+  const details   = lines.filter((l) => l.status === "needs_details");
   const confirmed = lines.filter((l) => l.status === "confirmed");
 
-  const [openReview, setOpenReview] = useState(true);
-  const [openDetails, setOpenDetails] = useState(true);
+  const [openReview,    setOpenReview]    = useState(true);
+  const [openDetails,   setOpenDetails]   = useState(true);
   const [openConfirmed, setOpenConfirmed] = useState(false);
-  const [showAllDetails, setShowAllDetails] = useState(false);
+  const [showAllDetails,   setShowAllDetails]   = useState(false);
   const [showAllConfirmed, setShowAllConfirmed] = useState(false);
 
-  const detailsShown = showAllDetails ? details : details.slice(0, 4);
+  const detailsShown   = showAllDetails   ? details   : details.slice(0, 4);
   const confirmedShown = showAllConfirmed ? confirmed : confirmed.slice(0, 2);
 
   return (
@@ -703,8 +1033,10 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
                       <span className={s.revMeta}>{offerSku(line) ? `SKU: ${offerSku(line)}` : ""}</span>
                     </div>
                     <div className={s.revRight}>
-                      <span className={`${s.resultPill} ${s.pillAmber}`}>{detailChip(line)}</span>
-                      <button type="button" className={s.revBtn} onClick={() => onDetail(line)}>Add details</button>
+                      <span className={`${s.resultPill} ${s.pillAmber}`}>
+                        {!line.expiration_date ? "Add expiration" : !line.lot_number ? "Add lot" : "Add details"}
+                      </span>
+                      <button type="button" className={s.revBtn} onClick={() => onDetail(line)}>Edit</button>
                     </div>
                   </div>
                 ))}
@@ -764,11 +1096,11 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
           onClose={onCloseLink}
           onPick={(product) => {
             const best = product.best_offer || product.offers?.[0] || null;
-            const id = product.id || "";
+            const id   = product.id || "";
             onPatchLine(linkSheet.id, {
               canonical_product_id: id.startsWith("mcp") ? id : null,
-              supplier_product_id: best?.supplier_product_id || (id.startsWith("msp") ? id : null),
-              name: product.name,
+              supplier_product_id:  best?.supplier_product_id || (id.startsWith("msp") ? id : null),
+              name:      product.name,
               image_url: product.image_url || best?.image_url || "",
             });
             onCloseLink();
@@ -779,7 +1111,7 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
   );
 }
 
-// ── Bottom sheets ─────────────────────────────────────────────────────
+// ── Generic bottom sheet shell ────────────────────────────────────────
 
 function SheetShell({ title, onClose, children }) {
   return (
@@ -839,7 +1171,7 @@ function HelpSheet({ onClose }) {
     <SheetShell title="How scanning works" onClose={onClose}>
       <ul className={s.helpList}>
         <li><span className={`${s.helpDot} ${s.txGreen}`}><Icon name="icon-check-circle" /></span> Point the camera at a barcode — exact matches add to this location automatically.</li>
-        <li><span className={`${s.helpDot} ${s.txAmber}`}><Icon name="icon-clock" /></span> Lot &amp; expiry are read off the package when the code carries them; tap Edit to fill any gaps.</li>
+        <li><span className={`${s.helpDot} ${s.txAmber}`}><Icon name="icon-clock" /></span> Lot &amp; expiry are read off the package when the code carries them; fill in any gaps in the form.</li>
         <li><span className={`${s.helpDot} ${s.txRed}`}><Icon name="icon-alert-triangle" /></span> Anything we can&rsquo;t identify waits in Review, where you can link the right product.</li>
       </ul>
       <p className={s.sheetHint}>Use Enter SKU when a code won&rsquo;t scan, or Search product to add an item by name.</p>

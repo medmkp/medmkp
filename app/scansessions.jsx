@@ -88,10 +88,13 @@ export function ScanSessionsView({ onOpenSession, onNavigate, onToast, onLogout 
     return { items, locations: locs };
   }, [locations]);
 
-  async function startFor(location) {
-    setStarting(location.id);
+  async function startFor(location, captureType) {
+    setStarting(location?.id || "__new__");
     try {
-      const { session } = await traceApi.startSession({ location_id: location.id });
+      const body = {};
+      if (location?.id) body.location_id = location.id;
+      if (captureType) body.capture_type = captureType;
+      const { session } = await traceApi.startSession(body);
       onOpenSession(session.id);
     } catch (err) {
       onToast?.(traceErrorMessage(err, "Couldn't start a scan session — please try again."));
@@ -264,7 +267,7 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
   const [filter, setFilter] = useState("all");
   const [isMobile, setIsMobile] = useState(false);
   const [manual, setManual] = useState("");
-  const [flash, setFlash] = useState(null);
+  const [pendingLine, setPendingLine] = useState(null);
   const flashTimer = useRef();
 
   useEffect(() => { setIsMobile(window.matchMedia("(max-width: 900px)").matches); }, []);
@@ -293,7 +296,7 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       const merged = { ...line, _offer: product?.best_offer || product?.offers?.[0] || null };
       setLines((prev) => [merged, ...prev]);
       setSession((prev) => (prev ? { ...prev, counts } : prev));
-      setFlash(merged);
+      setPendingLine(merged);
       // Tell the buyer why an unmatched scan landed in review (marketing QR,
       // uncarried barcode, non-product code) rather than leaving it unexplained;
       // and flag a case/pack-barcode match so they can confirm the pack size.
@@ -303,7 +306,7 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       // Undo / Edit / Review actions stay reachable until the next scan.
       if (!isMobile) {
         window.clearTimeout(flashTimer.current);
-        flashTimer.current = window.setTimeout(() => setFlash(null), 2600);
+        flashTimer.current = window.setTimeout(() => setPendingLine(null), 2600);
       }
       if (navigator.vibrate) navigator.vibrate(40);
     } catch {
@@ -320,7 +323,7 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       const merged = { ...line, _offer: product?.best_offer || product?.offers?.[0] || null };
       setLines((prev) => [merged, ...prev]);
       setSession((prev) => (prev ? { ...prev, counts } : prev));
-      setFlash(merged);
+      setPendingLine(merged);
     } catch {
       onToast?.("Couldn't add that item.");
     }
@@ -398,14 +401,15 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
         lines={lines}
         counts={counts}
         active={active}
-        flash={flash}
+        pendingLine={pendingLine}
+        captureType={session.capture_type || "shelf_audit"}
         onScan={handleScan}
         onAddProduct={addProduct}
         onPatchLine={patchLine}
         onRemoveLine={removeLine}
         onComplete={complete}
         onBack={onBack}
-        onClearFlash={() => setFlash(null)}
+        onClearPending={() => setPendingLine(null)}
         locations={locations}
         onSwitchLocation={switchLocation}
         onNavigate={onNavigate}

@@ -41,6 +41,9 @@ export async function PATCH(req: AuthenticatedMedusaRequest, res: MedusaResponse
     "expiration_date",
     "production_date",
     "package_condition",
+    "supplier_name",
+    "received_date",
+    "shelf_audit_status",
   ]) {
     if (body[f] !== undefined) update[f] = body[f]
   }
