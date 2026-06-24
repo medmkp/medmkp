@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { initials } from "./lib";
 import s from "./needsattention.module.css";
@@ -106,15 +106,59 @@ function StatCard({ icon, label, value, sub, tint }) {
   );
 }
 
+// Custom dropdown: the native <select> popup is rendered by the OS and can't be
+// styled, so we render our own trigger + menu in the app font. Closes on
+// outside-click or Escape, matching the topbar menus elsewhere in the app.
 function Select({ label, value, onChange, options }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKeyDown = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value) || options[0];
+
   return (
-    <label className={s.filter}>
+    <div className={`${s.filter} ${open ? s.filterOpen : ""}`} ref={wrapRef}>
       <span className={s.filterLabel}>{label}</span>
-      <select className={s.filterSelect} value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      <button
+        type="button"
+        className={s.filterSelect}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {selected?.label}
+      </button>
       <Icon name="icon-chevron-down" className={s.filterChevron} />
-    </label>
+      {open && (
+        <ul className={s.filterMenu} role="listbox">
+          {options.map((o) => (
+            <li key={o.value} role="option" aria-selected={o.value === value}>
+              <button
+                type="button"
+                className={`${s.filterOption} ${o.value === value ? s.filterOptionOn : ""}`}
+                onClick={() => { onChange(o.value); setOpen(false); }}
+              >
+                <span className={s.filterOptionLabel}>{o.label}</span>
+                {o.value === value && <Icon name="icon-check" className={s.filterCheck} />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
