@@ -9220,30 +9220,14 @@ th {
 .m-iconbtn .button-icon { width: 18px; height: 18px; }
 .m-iconbtn span { font-size: 20px; line-height: 1; }
 
-.m-brandbar { display: flex; align-items: center; justify-content: space-between; }
+.m-scan-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--blue); color: #fff; font-size: 14px; font-weight: 600; }
+.m-scan-btn .button-icon { width: 18px; height: 18px; color: currentColor; }
 .m-search { display: flex; align-items: center; gap: 9px; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); }
 .m-search:focus-within { border-color: var(--blue); background: var(--surface); }
 .m-search .button-icon { width: 18px; height: 18px; color: var(--muted); flex: 0 0 auto; }
 .m-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; font: inherit; font-size: 15px; color: var(--ink); }
 .m-search-wrap { position: relative; }
 .m-search-wrap .search-results { position: absolute; top: calc(100% + 8px); left: 0; right: 0; width: auto; max-width: none; z-index: 30; }
-.m-brandbar .brand-mark { width: 139px; }
-.m-iconbtn .m-brand-badge { position: absolute; top: -5px; right: -5px; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 2px solid var(--surface); border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 600; line-height: 1; }
-
-/* Account avatar sits to the right of the alerts bell in the mobile top bar:
-   tap to open a menu with Settings + Sign out, mirroring the desktop topbar. */
-.m-brand-actions { display: flex; align-items: center; gap: 10px; }
-.m-brand-account { position: relative; }
-.m-brand-avatar-btn { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 999px; background: var(--blue); color: #fff; font-size: 13px; font-weight: 600; line-height: 1; }
-.m-brand-avatar-btn.active { box-shadow: 0 0 0 3px rgba(15, 98, 255, 0.28); }
-.m-brand-menu-backdrop { position: fixed; inset: 0; z-index: 30; }
-.m-brand-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 31; display: grid; gap: 2px; min-width: 220px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 16px 42px rgba(23, 44, 92, 0.18); }
-.m-brand-menu-head { display: grid; gap: 2px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
-.m-brand-menu-head strong { color: var(--ink); font-size: 14px; }
-.m-brand-menu-head small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.m-brand-menu button { display: flex; flex-direction: row; align-items: center; gap: 12px; width: 100%; padding: 12px 10px; border: 0; border-radius: 8px; background: none; color: var(--ink); font-size: 15px; font-weight: 500; text-align: left; }
-.m-brand-menu button .button-icon { width: 18px; height: 18px; color: var(--muted); }
-
 .m-tabs { display: flex; gap: 18px; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .m-tabs button { padding: 8px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap; }
 .m-tabs button.active { color: var(--blue); border-bottom-color: var(--blue); }

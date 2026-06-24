@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
-import { BrandMark, Icon } from "./icons";
+import { Icon } from "./icons";
 import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc } from "./lib";
 import { BuyingPreferencesCard, CandidateName, CandidateStock, ListStatusPill, MatchSupplier, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
@@ -563,59 +563,11 @@ export function MobileReorderCard({ row, onOpen, onRemove }) {
 // Mobile card list for the current reorder list (replaces the desktop table on
 // phones). Stats band + status tabs + tappable product cards.
 
-export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, onRemoveItem, onRefresh, searchTerm = "", onSearchTerm, searchResults = [], searchLoading, onNavigate, buyerName = "", practiceName = "", buyerInitials = "", email = "", onLogout }) {
+export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, onRemoveItem, onRefresh, searchTerm = "", onSearchTerm, searchResults = [], searchLoading, onNavigate }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   return (
     <div className="m-list">
-      <div className="m-brandbar">
-        <BrandMark />
-        <div className="m-brand-actions">
-          <button className="m-iconbtn" type="button" aria-label="Alerts">
-            <Icon name="icon-bell" className="button-icon" />
-            <span className="m-brand-badge">3</span>
-          </button>
-          {onLogout && (
-            <div className="m-brand-account">
-              <button
-                className={`m-brand-avatar-btn ${accountOpen ? "active" : ""}`}
-                type="button"
-                aria-label="Account"
-                aria-haspopup="menu"
-                aria-expanded={accountOpen}
-                onClick={() => setAccountOpen((open) => !open)}
-              >
-                {buyerInitials || "··"}
-              </button>
-              {accountOpen && (
-                <>
-                  <div className="m-brand-menu-backdrop" onClick={() => setAccountOpen(false)} />
-                  <div className="m-brand-menu" role="menu">
-                    <div className="m-brand-menu-head">
-                      <strong>{buyerName || "Your account"}</strong>
-                      <small>{email || practiceName || "Buyer"}</small>
-                    </div>
-                    <button role="menuitem" type="button" onClick={() => { setAccountOpen(false); onNavigate?.(pathForView("history")); }}>
-                      <Icon name="icon-clock" className="button-icon" />
-                      History
-                    </button>
-                    <button role="menuitem" type="button" onClick={() => { setAccountOpen(false); onNavigate?.(pathForView("settings")); }}>
-                      <Icon name="icon-settings" className="button-icon" />
-                      Settings
-                    </button>
-                    <button role="menuitem" type="button" onClick={() => { setAccountOpen(false); onLogout?.(); }}>
-                      <Icon name="icon-logout" className="button-icon" />
-                      Sign out
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
       <div className="m-search-wrap">
         <label className="m-search">
           <Icon name="icon-search" className="button-icon" />
@@ -651,6 +603,15 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
       <header className="m-topbar">
         <h1>{title}</h1>
         <div className="m-topbar-actions">
+          <button
+            className="m-scan-btn"
+            type="button"
+            aria-label="Scan items"
+            onClick={() => onNavigate?.("/app/scan")}
+          >
+            <Icon name="icon-scan" className="button-icon" />
+            Scan
+          </button>
           {onRefresh && (
             <button
               className={`m-iconbtn ${refreshing ? "spinning" : ""}`}
@@ -699,7 +660,7 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
             {totalItems === 0 ? (
               <>
                 <strong>Your reorder list is empty</strong>
-                <p>Tap the scan button below to scan a barcode, or upload an invoice to start building your list.</p>
+                <p>Tap Scan to add an item by barcode, or upload an invoice to start building your list.</p>
               </>
             ) : (
               <>
@@ -1020,9 +981,6 @@ export function CurrentReorderList({
   onRenameList,
   buyerName = "",
   practiceName = "",
-  buyerInitials = "",
-  email = "",
-  onLogout,
   addMode,
   onAddMode,
   lastUpload,
@@ -1221,11 +1179,6 @@ export function CurrentReorderList({
           searchResults={searchResults}
           searchLoading={searchLoading}
           onNavigate={onNavigate}
-          buyerName={buyerName}
-          practiceName={practiceName}
-          buyerInitials={buyerInitials}
-          email={email}
-          onLogout={onLogout}
         />
         {detail && (
           <MobileItemDetail

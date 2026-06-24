@@ -399,7 +399,9 @@ export default function Home() {
     if (authed === false && isLoggedIn) {
       navigate("/login");
     } else if (authed === true && view === "publicScan") {
-      navigate("/app");
+      // A signed-in visitor to /scan (the QR target) lands straight in the
+      // scanner on a phone; desktop keeps going to the reorder-list home.
+      navigate(isMobile ? "/app/scan" : "/app");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, isLoggedIn, view]);
@@ -1396,9 +1398,6 @@ export default function Home() {
       onRenameList={setListName}
       buyerName={buyerName}
       practiceName={practiceName}
-      buyerInitials={buyerInitials}
-      email={me?.customer?.email}
-      onLogout={handleLogout}
       addMode={addMode}
       onAddMode={setAddMode}
       lastUpload={lastUpload}
@@ -1638,7 +1637,8 @@ export default function Home() {
           {view === "home" && (
             mobileAddItemRoute ? (
               <MobileScanItemView
-                onBack={() => { setScanResult(null); setMobileAddItemRoute(false); }}
+                onBack={() => { setScanResult(null); navigate("/app"); }}
+                onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
                 onScan={handleScanComplete}
                 scanResult={scanResult}
                 onClearScanResult={() => setScanResult(null)}
