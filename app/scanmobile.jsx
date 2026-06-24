@@ -135,21 +135,13 @@ function ModeCard({ value, selected, onSelect, meta }) {
 
 // ── Screens 1 + 2: Start scan / Choose mode / Choose location ────────
 
-const MENU_ITEMS = [
-  { label: "Reorder list", icon: "icon-cart",      path: "/app/reorder-list" },
-  { label: "Locations",    icon: "icon-map-pin",   path: "/app/locations" },
-  { label: "History",      icon: "icon-clock",     path: "/app/history" },
-  { label: "Settings",     icon: "icon-settings",  path: "/app/settings" },
-];
-
 export function MobileScanStart({
   loading, sessions, locations, starting, needsAttention,
-  onOpenSession, onStart, onNavigate, onLogout,
+  onOpenSession, onStart, onNavigate,
 }) {
   // "home" | "choose-scan-mode" | "choose-location"
   const [step, setStep] = useState("home");
   const [scanMode, setScanMode] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const attnItems = needsAttention?.items || 0;
   const attnLocs  = needsAttention?.locations || 0;
@@ -177,12 +169,10 @@ export function MobileScanStart({
           <button type="button" className={s.iconBtn} onClick={() => setStep("home")} aria-label="Back">
             <Icon name="icon-chevron-left" />
           </button>
-          <span className={s.brand}><BrandMark /></span>
-          <span className={s.topSpacer} />
+          <span className={s.barTitle}>Scan mode</span>
         </header>
         <div className={s.body}>
           <div className={s.intro}>
-            <h1 className={s.h1}>Scan mode</h1>
             <p className={s.sub}>Choose how this scan should be recorded.</p>
           </div>
 
@@ -235,12 +225,10 @@ export function MobileScanStart({
           <button type="button" className={s.iconBtn} onClick={() => setStep("choose-scan-mode")} aria-label="Back">
             <Icon name="icon-chevron-left" />
           </button>
-          <span className={s.brand}><BrandMark /></span>
-          <span className={s.topSpacer} />
+          <span className={s.barTitle}>Choose location</span>
         </header>
         <div className={s.body}>
           <div className={s.intro}>
-            <h1 className={s.h1}>Choose location</h1>
             <p className={s.sub}>Select where you&rsquo;re scanning so items stay organized.</p>
           </div>
 
@@ -316,16 +304,11 @@ export function MobileScanStart({
   }
 
   // ── Screen: home ────────────────────────────────────────────────────
+  // No top bar: this is a primary tab destination, so the H1 is the title and
+  // the persistent bottom nav carries identity + navigation.
   return (
     <div className={`${s.screen} ${s.screenNav}`}>
-      <header className={s.topbar}>
-        <button type="button" className={s.iconBtn} onClick={() => setMenuOpen(true)} aria-label="Menu" aria-haspopup="menu">
-          <Icon name="icon-grid" />
-        </button>
-        <span className={s.brand}><BrandMark /></span>
-        <span className={s.topSpacer} />
-      </header>
-      <div className={s.body}>
+      <div className={`${s.body} ${s.bodyTop}`}>
         <div className={s.intro}>
           <h1 className={s.h1}>Start scan session</h1>
           <p className={s.sub}>Pick up where you left off or start a new location.</p>
@@ -385,47 +368,6 @@ export function MobileScanStart({
           </>
         )}
       </div>
-
-      {menuOpen && (
-        <div className={s.menuRoot} role="dialog" aria-modal="true" aria-label="Menu">
-          <div className={s.menuBackdrop} onClick={() => setMenuOpen(false)} />
-          <div className={s.menuSheet}>
-            <header className={s.menuHead}>
-              <strong>Menu</strong>
-              <button type="button" className={s.menuClose} aria-label="Close" onClick={() => setMenuOpen(false)}>
-                <Icon name="icon-x" />
-              </button>
-            </header>
-            <ul className={s.menuList}>
-              {MENU_ITEMS.map((item) => (
-                <li key={item.path}>
-                  <button
-                    type="button"
-                    className={s.menuItem}
-                    onClick={() => { setMenuOpen(false); onNavigate?.(item.path); }}
-                  >
-                    <span className={s.menuItemIcon}><Icon name={item.icon} /></span>
-                    <span className={s.menuItemLabel}>{item.label}</span>
-                    <Icon name="icon-chevron-right" className={s.menuItemChevron} />
-                  </button>
-                </li>
-              ))}
-              {onLogout && (
-                <li>
-                  <button
-                    type="button"
-                    className={`${s.menuItem} ${s.menuItemDanger}`}
-                    onClick={() => { setMenuOpen(false); onLogout(); }}
-                  >
-                    <span className={s.menuItemIcon}><Icon name="icon-logout" /></span>
-                    <span className={s.menuItemLabel}>Sign out</span>
-                  </button>
-                </li>
-              )}
-            </ul>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -880,13 +822,11 @@ function ShelfDetails({ line, locName, onCancel, onSave }) {
     <div className={s.screen}>
       <header className={s.topbar}>
         <button type="button" className={s.iconBtn} onClick={onCancel} aria-label="Back"><Icon name="icon-chevron-left" /></button>
-        <span className={s.brand}><BrandMark /></span>
-        <span className={s.topSpacer} />
+        <span className={s.barTitle}>Edit details</span>
       </header>
       <div className={s.body}>
         <div className={s.intro}>
-          <h1 className={s.h1} style={{ textAlign: "center" }}>Edit details</h1>
-          <p className={s.sub} style={{ textAlign: "center" }}>Review item details before saving.</p>
+          <p className={s.sub}>Review item details before saving.</p>
         </div>
 
         <div className={s.prodCard}>
@@ -977,12 +917,10 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
     <div className={s.screen}>
       <header className={s.topbar}>
         <button type="button" className={s.iconBtn} onClick={onBack} aria-label="Back"><Icon name="icon-chevron-left" /></button>
-        <span className={s.brand}><BrandMark /></span>
-        <span className={s.topSpacer} />
+        <span className={s.barTitle}>Review {session.location_name || "location"}</span>
       </header>
       <div className={s.body}>
         <div className={s.reviewTitle}>
-          <h1 className={s.reviewH1}>Review {session.location_name || "location"}</h1>
           <span className={s.reviewSub}>Scan session review</span>
         </div>
 

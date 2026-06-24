@@ -1696,7 +1696,6 @@ export default function Home() {
               onOpenSession={(id) => navigate(`/app/scan-sessions/${id}`)}
               onNavigate={navigate}
               onToast={showToast}
-              onLogout={handleLogout}
             />
           )}
 
@@ -1828,6 +1827,7 @@ export default function Home() {
               <MobileMoreSheet
                 onNavigate={(dest) => navigate(`/app/${dest}`)}
                 onClose={() => setMoreSheetOpen(false)}
+                onLogout={handleLogout}
               />
             )}
             <MobileBottomNav activeTab={activeMobileTab} onTab={onMobileTab} />

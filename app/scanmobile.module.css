@@ -72,9 +72,18 @@
 }
 .iconBtn:active { background: #f1f4f9; }
 .iconBtn svg { width: 19px; height: 19px; }
-.brand { display: flex; align-items: center; justify-content: center; flex: 1; }
-.brand :global(.brand-mark) { width: 132px; }
-.topSpacer { width: 38px; flex-shrink: 0; }
+/* Contextual title for pushed (back-bar) screens — tells you where you are. */
+.barTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: #14202E;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .body {
   flex: 1;
@@ -85,6 +94,9 @@
   gap: 16px;
   -webkit-overflow-scrolling: touch;
 }
+/* Home screen drops the top bar entirely, so the body absorbs the safe-area
+   inset to keep the title clear of the status bar / notch. */
+.bodyTop { padding-top: calc(20px + env(safe-area-inset-top)); }
 
 .intro { display: flex; flex-direction: column; gap: 4px; }
 .h1 { font-size: 26px; font-weight: 600; color: #14202E; margin: 0; line-height: 1.12; letter-spacing: -0.01em; }
@@ -620,8 +632,7 @@
 .formSuffix { font-size: 14px; color: #6a7889; flex-shrink: 0; }
 
 /* ── Screen 4: Review ──────────────────────────────────────────────── */
-.reviewTitle { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
-.reviewH1 { font-size: 22px; font-weight: 600; color: #14202E; margin: 0; }
+.reviewTitle { display: flex; flex-direction: column; gap: 2px; }
 .reviewSub { font-size: 14px; color: #6a7889; }
 
 .statGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -761,63 +772,6 @@
 .attnSub { font-size: 13px; color: #8a7a5f; line-height: 1.35; }
 .attnChevron { color: #cbb487; flex-shrink: 0; }
 .attnChevron svg { width: 20px; height: 20px; }
-
-/* ── Home menu sheet (replaces the mobile bottom nav) ──────────────── */
-.menuRoot { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; justify-content: flex-end; }
-.menuBackdrop { position: absolute; inset: 0; background: rgba(20, 32, 46, 0.45); }
-.menuSheet {
-  position: relative;
-  background: #fff;
-  border-radius: 20px 20px 0 0;
-  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
-  box-shadow: 0 -8px 30px rgba(20, 32, 46, 0.18);
-}
-.menuHead { display: flex; align-items: center; justify-content: space-between; padding: 10px 4px 6px; }
-.menuHead strong { font-size: 17px; font-weight: 600; color: #14202E; }
-.menuClose {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid #e7ecf3;
-  background: #fff;
-  color: #46566a;
-  cursor: pointer;
-}
-.menuClose svg { width: 18px; height: 18px; }
-.menuList { list-style: none; margin: 0; padding: 4px 0 0; display: flex; flex-direction: column; }
-.menuItem {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 4px;
-  border: 0;
-  border-bottom: 1px solid #eef1f6;
-  background: none;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-}
-.menuList li:last-child .menuItem { border-bottom: 0; }
-.menuItem:active { background: #f7f9fc; }
-.menuItemIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  background: #eef3ff;
-  color: #2F5BD6;
-  flex-shrink: 0;
-}
-.menuItemIcon svg { width: 20px; height: 20px; }
-.menuItemLabel { flex: 1; min-width: 0; font-size: 16px; font-weight: 500; color: #14202E; }
-.menuItemChevron { color: #b6c0cd; flex-shrink: 0; width: 19px; height: 19px; }
-.menuItemDanger .menuItemIcon { background: #fdecec; color: #c0392b; }
-.menuItemDanger .menuItemLabel { color: #c0392b; }
 
 /* ── Mode picker (Screen 1) ─────────────────────────────────────────── */
 .modeCards { display: flex; flex-direction: column; gap: 12px; }

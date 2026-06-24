@@ -61,7 +61,7 @@ export function MobileBottomNav({ activeTab, onTab, needsAttentionCount = 0 }) {
 }
 
 // "More" bottom sheet — secondary destinations off the main nav
-export function MobileMoreSheet({ onNavigate, onClose }) {
+export function MobileMoreSheet({ onNavigate, onClose, onLogout }) {
   const items = [
     { icon: "icon-shield-check", label: "Evidence & compliance", view: "evidence" },
     { icon: "icon-dollar-circle", label: "Savings",              view: "savings" },
@@ -87,6 +87,16 @@ export function MobileMoreSheet({ onNavigate, onClose }) {
               <Icon name="icon-chevron-right" className={`nav-icon ${s.moreChevron}`} />
             </button>
           ))}
+          {onLogout && (
+            <button
+              type="button"
+              className={`${s.moreRow} ${s.moreRowDanger}`}
+              onClick={() => { onClose(); onLogout(); }}
+            >
+              <span className={s.moreIcon}><Icon name="icon-logout" /></span>
+              <span className={s.moreLabel}>Sign out</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

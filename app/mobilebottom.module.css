@@ -163,6 +163,11 @@
 .moreRow:last-child { border-bottom: none; }
 .moreRow:active { background: var(--hover); }
 
+/* Sign out — destructive, so paint the icon + label red. */
+.moreRowDanger .moreIcon,
+.moreRowDanger .moreIcon :global(.nav-icon) { color: var(--red); }
+.moreRowDanger .moreLabel { color: var(--red); }
+
 .moreIcon {
   width: 22px; height: 22px;
   display: flex; align-items: center; justify-content: center;
