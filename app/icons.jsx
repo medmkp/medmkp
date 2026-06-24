@@ -221,11 +221,10 @@ export function IconSprite() {
         <rect x="13" y="13" width="7" height="7" rx="1.4" />
       </symbol>
       <symbol id="icon-dental-chair" viewBox="0 0 24 24">
-        <circle cx="18.5" cy="4.8" r="1.6" />
-        <path d="M17.2 5.7 13.6 8.2" />
-        <path d="M4.2 12.5 5 8.9a2 2 0 0 1 2.4-1.5l5 1a2 2 0 0 1 1.6 2.2l-.4 2.9" />
-        <path d="M4.2 12.5h9a2 2 0 0 1 0 4H7.4" />
-        <path d="M9 16.5V19.5M6.4 19.5h5.4" />
+        {/* Operatory = a clean exam/dental chair: arched backrest, seat, pedestal. */}
+        <path d="M6 11V6.4A1.9 1.9 0 0 1 7.9 4.5 1.9 1.9 0 0 1 9.8 6.4V11" />
+        <path d="M6 11h6.7a1.9 1.9 0 0 1 0 3.8H8.1" />
+        <path d="M8.1 14.8V18.8M5.5 18.8h6.6" />
       </symbol>
       <symbol id="icon-flask" viewBox="0 0 24 24">
         <path d="M14 3v6a2 2 0 0 0 .24.96l5.51 9.58A2 2 0 0 1 18 22.5H6a2 2 0 0 1-1.75-2.96L9.76 9.96A2 2 0 0 0 10 9V3" />

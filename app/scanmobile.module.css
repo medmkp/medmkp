@@ -41,6 +41,12 @@
   color: #14202E;
   -webkit-font-smoothing: antialiased;
 }
+/* Navigation-level scan screens (mode picker, location picker, scan home) sit
+   ABOVE the persistent bottom nav rather than covering it — leave its height
+   clear. The immersive camera/review keep plain .screen (full-bleed). */
+.screenNav {
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+}
 
 .topbar {
   display: flex;
