@@ -556,7 +556,7 @@ export function MobileScanSession({
             </button>
           )}
           <button type="button" className={s.camCircle} onClick={() => setSheet("help")} aria-label="How scanning works">
-            <Icon name="icon-help-circle" />
+            <Icon name="icon-info" />
           </button>
           {counts.scanned > 0 && (
             <button
