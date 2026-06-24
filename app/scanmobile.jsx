@@ -372,7 +372,7 @@ export function MobileScanSession({
   // Receiving captures a destination per item; this remembers the last one picked
   // so consecutive items in a delivery default to it — one tap only when the
   // destination changes.
-  const [receivingLocId, setReceivingLocId] = useState(null);
+  const [receivingLocId, setReceivingLocId] = useState(session.location_id || null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const pulseTimer = useRef();
@@ -614,7 +614,11 @@ function ReceivingSheet({ line, locations, defaultLocationId, supplierOptions = 
   const [qty,          setQty]          = useState(1);
   const [supplier,     setSupplier]     = useState("");
   const [receivedDate, setReceivedDate] = useState(todayIso());
-  const [locId,        setLocId]        = useState(line.location_id || defaultLocationId || "");
+  // Always default to a location so Save is never blocked: the line's own, else
+  // the sticky/session default, else the first location. A receiving scan with no
+  // location files no lot-at-location evidence, so we default rather than allow
+  // a location-less save.
+  const [locId,        setLocId]        = useState(line.location_id || defaultLocationId || locations[0]?.id || "");
 
   function save() {
     if (!locId) return;
@@ -668,7 +672,6 @@ function ReceivingSheet({ line, locations, defaultLocationId, supplierOptions = 
             ) : (
               <>
                 <select className={s.fieldSelect} value={locId} onChange={(e) => setLocId(e.target.value)} aria-label="Location">
-                  <option value="">Choose location…</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
@@ -772,7 +775,8 @@ function ModeSheetProductHeader({ line, modeBadge, modeBadgeCls }) {
       </span>
       <div className={s.modeSheetProductInfo}>
         <span className={s.modeSheetProductName}>
-          <Icon name="icon-check-circle" /> {line.name}
+          <Icon name="icon-check-circle" />
+          <span className={s.modeSheetProductNameText}>{line.name}</span>
         </span>
         {offerSku(line) && <span className={s.modeSheetSku}>SKU: {offerSku(line)}</span>}
         <span className={`${s.badge} ${s.badgeGreen}`}>Exact match</span>
