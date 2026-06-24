@@ -389,6 +389,15 @@ export function MobileScanSession({
   const [torchSupported, setTorchSupported] = useState(false);
   const pulseTimer = useRef();
   const [captured, setCaptured] = useState(false);
+  const [supplierOptions, setSupplierOptions] = useState([]);
+
+  // Supplier names for the Receiving sheet's supplier picker.
+  useEffect(() => {
+    fetch("/api/suppliers")
+      .then((r) => r.json())
+      .then(({ suppliers }) => setSupplierOptions((suppliers || []).map((sup) => sup.name).filter(Boolean)))
+      .catch(() => {});
+  }, []);
 
   const cameraActive = active && viewMode === "scan" && !detail && !link && !pendingLine;
 
@@ -545,6 +554,10 @@ export function MobileScanSession({
         <ReceivingSheet
           line={pendingLine}
           locName={locName}
+          locations={locations}
+          locationId={session.location_id}
+          onPickLocation={(id) => { const loc = (locations || []).find((l) => l.id === id); if (loc && loc.id !== session.location_id) onSwitchLocation?.(loc); }}
+          supplierOptions={supplierOptions}
           onClose={onClearPending}
           onSave={(body) => { onPatchLine(pendingLine.id, body); onClearPending?.(); }}
           onUndo={() => { onRemoveLine(pendingLine.id); onClearPending?.(); }}
@@ -607,12 +620,14 @@ export function MobileScanSession({
 
 // ── Receiving bottom sheet ────────────────────────────────────────────
 
-function ReceivingSheet({ line, locName, onClose, onSave, onUndo }) {
+function ReceivingSheet({ line, locName, locations, locationId, onPickLocation, supplierOptions = [], onClose, onSave, onUndo }) {
   const [lot,          setLot]          = useState(line.lot_number || "");
   const [exp,          setExp]          = useState(line.expiration_date ? String(line.expiration_date).slice(0, 10) : "");
   const [qty,          setQty]          = useState(1);
   const [supplier,     setSupplier]     = useState("");
   const [receivedDate, setReceivedDate] = useState(todayIso());
+
+  const locOpts = locations && locations.length ? locations : [{ id: locationId, name: locName }];
 
   function save() {
     onSave({
@@ -634,9 +649,10 @@ function ReceivingSheet({ line, locName, onClose, onSave, onUndo }) {
         <div className={s.modeSheetFields}>
           <ModeSheetRow label="Lot number">
             <input className={s.input} value={lot} onChange={(e) => setLot(e.target.value)} placeholder="e.g. A219" />
+            <Icon name="icon-scan" className={s.fieldIcon} />
           </ModeSheetRow>
           <ModeSheetRow label="Expiration date">
-            <input className={s.input} type="date" value={exp} onChange={(e) => setExp(e.target.value)} />
+            <DateField value={exp} display={exp || "Select date"} onChange={setExp} />
           </ModeSheetRow>
           <ModeSheetRow label={<>Qty received <span className={s.optionalLabel}>(optional)</span></>}>
             <div className={s.stepper}>
@@ -646,13 +662,20 @@ function ReceivingSheet({ line, locName, onClose, onSave, onUndo }) {
             </div>
           </ModeSheetRow>
           <ModeSheetRow label={<>Supplier <span className={s.optionalLabel}>(optional)</span></>}>
-            <input className={s.input} value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Henry Schein" />
+            <select className={s.fieldSelect} value={supplier} onChange={(e) => setSupplier(e.target.value)}>
+              <option value="">Select supplier</option>
+              {supplierOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <Icon name="icon-chevron-down" className={s.fieldIcon} />
           </ModeSheetRow>
           <ModeSheetRow label="Received date">
-            <input className={s.input} type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+            <DateField value={receivedDate} display={formatLongDate(receivedDate)} onChange={setReceivedDate} />
           </ModeSheetRow>
           <ModeSheetRow label="Location">
-            <span className={s.modeSheetLocPill}><Icon name="icon-map-pin" /> {locName}</span>
+            <select className={s.fieldSelect} value={locationId || ""} onChange={(e) => onPickLocation?.(e.target.value)}>
+              {locOpts.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+            </select>
+            <Icon name="icon-chevron-down" className={s.fieldIcon} />
           </ModeSheetRow>
         </div>
 
@@ -662,7 +685,7 @@ function ReceivingSheet({ line, locName, onClose, onSave, onUndo }) {
 
         <div className={s.modeSheetActions}>
           <button type="button" className={s.btnOutline} onClick={onUndo}>Undo scan</button>
-          <button type="button" className={s.btnPrimary} onClick={save}>Save receiving record</button>
+          <button type="button" className={s.btnPrimary} onClick={save}>Save receiving scan</button>
         </div>
       </div>
     </div>
@@ -780,13 +803,13 @@ function ModeSheetProductHeader({ line, modeBadge, modeBadgeCls }) {
         {line.image_url ? <img src={line.image_url} alt="" /> : <Icon name="icon-package" />}
       </span>
       <div className={s.modeSheetProductInfo}>
-        <span className={s.modeSheetProductName}>{line.name}</span>
+        <span className={s.modeSheetProductName}>
+          <Icon name="icon-check-circle" /> {line.name}
+        </span>
         {offerSku(line) && <span className={s.modeSheetSku}>SKU: {offerSku(line)}</span>}
+        <span className={`${s.badge} ${s.badgeGreen}`}>Exact match</span>
       </div>
-      <span className={`${s.badge} ${s.badgeGreen}`}>
-        <Icon name="icon-check-circle" /> Exact match
-      </span>
-      <span className={`${s.badge} ${modeBadgeCls}`}>{modeBadge}</span>
+      {modeBadge && <span className={`${s.badge} ${modeBadgeCls}`}>{modeBadge}</span>}
     </div>
   );
 }
@@ -798,6 +821,34 @@ function ModeSheetRow({ label, children }) {
       <div className={s.modeSheetControl}>{children}</div>
     </div>
   );
+}
+
+// A date row that shows the value in a fixed display format (the native picker
+// can't be told to format its own text) while a transparent native date input
+// overlays the field so a tap still opens the platform date picker.
+function DateField({ value, display, onChange }) {
+  return (
+    <span className={s.dateField}>
+      <span className={s.fieldText}>{display}</span>
+      <Icon name="icon-calendar" className={s.fieldIcon} />
+      <input
+        type="date"
+        className={s.dateOverlay}
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Select date"
+      />
+    </span>
+  );
+}
+
+// "2026-06-03" -> "June 3, 2026". Built from parts so a YYYY-MM-DD string is
+// read as a local date (new Date("YYYY-MM-DD") parses as UTC and can shift a day).
+function formatLongDate(iso) {
+  if (!iso) return "Select date";
+  const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return String(iso);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 // ── Deep-edit: Shelf details (full screen) ────────────────────────────
