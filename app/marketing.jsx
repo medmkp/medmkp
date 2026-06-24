@@ -6,7 +6,7 @@ import { DEFAULT_BUYING_PREFS } from "./lib";
 import { CurrentReorderList } from "./reorder";
 import { ScanHandoffQr, ScanResultCard, useBarcodeScanner } from "./ui";
 
-export function MobileScanItemView({ onBack, onScan, scanResult, onClearScanResult, scanCount }) {
+export function MobileScanItemView({ onBack, onReview, onScan, scanResult, onClearScanResult, scanCount }) {
   const [isMobile, setIsMobile] = useState(false);
   const [mode, setMode] = useState("scan");
   const [captured, setCaptured] = useState(false);
@@ -86,7 +86,7 @@ export function MobileScanItemView({ onBack, onScan, scanResult, onClearScanResu
       <button
         className="scan-fs-review"
         type="button"
-        onClick={onBack}
+        onClick={onReview}
         aria-label={scanCount ? `Review ${scanCount} scanned item${scanCount === 1 ? "" : "s"}` : "Review reorder list"}
       >
         <Icon name="icon-scan" className="scan-fs-review-icon" />
