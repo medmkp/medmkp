@@ -606,6 +606,234 @@ export function MobileScanSession({
   );
 }
 
+// ── /app/scan — quick scan into the reorder list (rich camera overlay) ─────
+// Reuses the Receiving/Shelf-Audit camera shell + bottom drawer, but its only
+// output is the reorder list: no scan session, no evidence log. Each scan opens
+// a drawer to capture lot / expiry / location / qty on the item (kept on the
+// reorder line), minus the shelf-audit status step. The top-right button is the
+// scan glyph with a running count that taps through to the reorder list.
+
+export function MobileReorderScan({
+  active = true, scanResult, scanCount = 0,
+  onScan, onClearScanResult, onApplyDetails, onRemoveItem, onReview, onBack,
+}) {
+  const [sheet, setSheet] = useState(null); // manual | location
+  const [locations, setLocations] = useState([]);
+  const [stickyLocId, setStickyLocId] = useState("");
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [captured, setCaptured] = useState(false);
+  const pulseTimer = useRef();
+
+  useEffect(() => {
+    fetch("/api/locations")
+      .then((r) => r.json())
+      .then(({ locations: locs }) => {
+        const list = locs || [];
+        setLocations(list);
+        setStickyLocId((cur) => cur || list[0]?.id || "");
+      })
+      .catch(() => {});
+  }, []);
+
+  const drawerOpen = Boolean(scanResult);
+  const cameraActive = active && !drawerOpen && sheet !== "manual";
+
+  const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
+    active: cameraActive,
+    onScan: (code) => {
+      onScan?.(code);
+      setCaptured(true);
+      window.clearTimeout(pulseTimer.current);
+      pulseTimer.current = window.setTimeout(() => setCaptured(false), 700);
+    },
+  });
+
+  useEffect(() => {
+    if (cameraStatus !== "ready") { setTorchSupported(false); setTorchOn(false); return; }
+    const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+    const caps = track?.getCapabilities?.();
+    setTorchSupported(Boolean(caps && "torch" in caps && caps.torch));
+  }, [cameraStatus, videoRef]);
+
+  function toggleTorch() {
+    const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+    if (!track) return;
+    const next = !torchOn;
+    track.applyConstraints({ advanced: [{ torch: next }] }).then(() => setTorchOn(next)).catch(() => {});
+  }
+
+  const stickyLoc = locations.find((l) => l.id === stickyLocId);
+
+  return (
+    <div className={`${s.camera} ${captured ? s.scanCaptured : ""}`} aria-label="Scan items">
+      <video ref={videoRef} className={s.cameraVideo} playsInline muted autoPlay aria-label="Live camera preview" />
+      <div className={s.cameraScrim} aria-hidden="true" />
+
+      {cameraStatus !== "ready" && (
+        <div className={s.camPermission}>
+          <Icon name="icon-scan" />
+          <strong>{cameraStatus === "requesting" ? "Camera access needed" : "Camera unavailable"}</strong>
+          <p>{cameraStatus === "requesting" ? "Allow camera access to scan item barcodes." : "Tap Try again, or use Enter code to key it in."}</p>
+          {cameraStatus !== "requesting" && (
+            <button type="button" className={s.camRetry} onClick={retry}><Icon name="icon-refresh" /> Try again</button>
+          )}
+        </div>
+      )}
+
+      <div className={s.camTop}>
+        <button type="button" className={s.camCircle} onClick={onBack} aria-label="Exit scanner">
+          <Icon name="icon-chevron-left" />
+        </button>
+        <span className={s.camBrand}>
+          <BrandLogoMark className={s.camBrandMark} />
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+        </span>
+        <span className={s.camRight}>
+          {torchSupported && (
+            <button type="button" className={`${s.camCircle} ${torchOn ? s.camCircleActive : ""}`} onClick={toggleTorch} aria-label="Toggle flash" aria-pressed={torchOn}>
+              <Icon name="icon-bolt" />
+            </button>
+          )}
+          <button
+            type="button"
+            className={s.camReviewBtn}
+            onClick={onReview}
+            aria-label={scanCount ? `Review ${scanCount} scanned item${scanCount === 1 ? "" : "s"}` : "Go to reorder list"}
+          >
+            <Icon name="icon-scan" />
+            {scanCount > 0 && <span className={s.camCountBadge}>{scanCount > 99 ? "99+" : `+${scanCount}`}</span>}
+          </button>
+        </span>
+      </div>
+
+      <div className={s.contextStrip}>
+        <button type="button" className={s.locPill} onClick={() => setSheet("location")}>
+          <Icon name="icon-map-pin" />
+          <span className={s.locPillName}>{stickyLoc?.name || "Set location"}</span>
+          <span className={s.locPillCaret}><Icon name="icon-chevron-down" /></span>
+        </button>
+      </div>
+
+      <div className={s.camFrame} aria-hidden="true"><span /><span /><span /><span /></div>
+      {!drawerOpen && cameraStatus === "ready" && (
+        <div className={s.camHint}>{autoDetect ? "Point at a barcode" : "Tap Enter code to type it in"}</div>
+      )}
+
+      {!drawerOpen && (
+        <button type="button" className={s.camManualBtn} onClick={() => setSheet("manual")}>
+          <Icon name="icon-plus-circle" /> Enter code
+        </button>
+      )}
+
+      {drawerOpen && (
+        <ReorderScanSheet
+          result={scanResult}
+          locations={locations}
+          defaultLocationId={stickyLocId}
+          onClose={onClearScanResult}
+          onSave={(body) => {
+            if (body.location_id) setStickyLocId(body.location_id);
+            onApplyDetails?.(scanResult.item?.id, body);
+            onClearScanResult?.();
+          }}
+          onUndo={() => { if (scanResult.item?.id) onRemoveItem?.(scanResult.item.id); onClearScanResult?.(); }}
+        />
+      )}
+
+      {sheet === "manual" && <ManualSheet onClose={() => setSheet(null)} onSubmit={(code) => { onScan?.(code); setSheet(null); }} />}
+      {sheet === "location" && (
+        <LocationSheet
+          locations={locations}
+          currentId={stickyLocId}
+          onClose={() => setSheet(null)}
+          onPick={(loc) => { setStickyLocId(loc.id); setSheet(null); }}
+          onManage={() => setSheet(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Post-scan drawer for /app/scan: product card + lot/expiry/qty/location, no
+// status step. "Add to reorder list" patches the captured details onto the
+// already-added line; "Undo scan" removes it.
+function ReorderScanSheet({ result, locations, defaultLocationId, onClose, onSave, onUndo }) {
+  const item = result.item || {};
+  const matched = result.status !== "Not found";
+  const [lot, setLot] = useState(item.lot || "");
+  const [exp, setExp] = useState(item.expirationDate ? String(item.expirationDate).slice(0, 10) : "");
+  const [qty, setQty] = useState(item.draftQty || result.qty || 1);
+  const [locId, setLocId] = useState(item.locationId || defaultLocationId || locations[0]?.id || "");
+
+  function save() {
+    onSave({
+      lot: lot.trim() || null,
+      expirationDate: exp || null,
+      qty,
+      location_id: locId || null,
+    });
+  }
+
+  const name = item.product || item.canonicalName || item.extractedFrom || item.sku || "Unidentified item";
+
+  return (
+    <div className={s.modeSheet}>
+      <div className={s.modeSheetBackdrop} onClick={onClose} />
+      <div className={s.modeSheetPanel}>
+        <div className={s.modeSheetGrip} aria-hidden="true" />
+        <div className={s.modeSheetProduct}>
+          <span className={s.modeSheetThumb}>
+            {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <Icon name="icon-package" />}
+          </span>
+          <div className={s.modeSheetProductInfo}>
+            <span className={s.modeSheetProductName}>
+              {matched && <Icon name="icon-check-circle" />}
+              <span className={s.modeSheetProductNameText}>{name}</span>
+            </span>
+            {item.sku && <span className={s.modeSheetSku}>SKU: {item.sku}</span>}
+            <span className={`${s.badge} ${matched ? s.badgeGreen : s.badgeAmber}`}>{matched ? "Matched" : "Needs review"}</span>
+          </div>
+        </div>
+
+        <div className={s.modeSheetFields}>
+          <ModeSheetRow label="Lot number">
+            <input className={s.input} value={lot} onChange={(e) => setLot(e.target.value)} placeholder="e.g. A219" />
+            <Icon name="icon-scan" className={s.fieldIcon} />
+          </ModeSheetRow>
+          <ModeSheetRow label="Expiration date">
+            <DateField value={exp} display={exp ? formatLongDate(exp) : "Select date"} onChange={setExp} />
+          </ModeSheetRow>
+          <ModeSheetRow label="Qty">
+            <div className={s.stepper}>
+              <button type="button" className={s.stepBtn} onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
+              <span className={s.stepVal}>{qty}</span>
+              <button type="button" className={s.stepBtn} onClick={() => setQty((q) => q + 1)}>+</button>
+            </div>
+          </ModeSheetRow>
+          <ModeSheetRow label="Location">
+            {locations.length === 0 ? (
+              <span className={s.modeSheetLocPill}><Icon name="icon-map-pin" /> No locations yet</span>
+            ) : (
+              <>
+                <select className={s.fieldSelect} value={locId} onChange={(e) => setLocId(e.target.value)} aria-label="Location">
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+                <Icon name="icon-chevron-down" className={s.fieldIcon} />
+              </>
+            )}
+          </ModeSheetRow>
+        </div>
+
+        <div className={s.modeSheetActions}>
+          <button type="button" className={s.btnOutline} onClick={onUndo}>Undo scan</button>
+          <button type="button" className={s.btnPrimary} onClick={save}>Add to reorder list</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Receiving bottom sheet ────────────────────────────────────────────
 
 function ReceivingSheet({ line, locations, defaultLocationId, supplierOptions = [], onClose, onSave, onUndo, onNavigate }) {

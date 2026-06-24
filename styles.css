@@ -7010,6 +7010,11 @@ th {
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* The reorder list is a focused page in the scan loop — no bottom nav, so
+     reclaim the space the nav would have reserved. */
+  .mobile-reorder-shell .app-body { padding-bottom: 0; }
+  .mobile-reorder-shell .app-main { padding-bottom: 24px; }
+
   .mobile-add-item-shell {
     display: block;
     min-height: 100dvh;
@@ -9215,7 +9220,7 @@ th {
 .m-menu-wrap { position: relative; }
 .m-actions-menu { left: auto; right: 0; }
 .m-iconbtn .crl-kebab-dots { width: 20px; height: 20px; color: var(--ink); }
-.m-topbar h1 { font-size: 20px; font-weight: 600; color: var(--ink); }
+.m-topbar h1 { font-size: 24px; font-weight: 700; color: var(--ink); }
 .m-iconbtn { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
 .m-iconbtn .button-icon { width: 18px; height: 18px; }
 .m-iconbtn span { font-size: 20px; line-height: 1; }

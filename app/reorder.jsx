@@ -563,43 +563,10 @@ export function MobileReorderCard({ row, onOpen, onRemove }) {
 // Mobile card list for the current reorder list (replaces the desktop table on
 // phones). Stats band + status tabs + tappable product cards.
 
-export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, onRemoveItem, onRefresh, searchTerm = "", onSearchTerm, searchResults = [], searchLoading, onNavigate }) {
+export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, onOpenRow, onToast, onArchiveList, onClearList, onRemoveItem, onNavigate }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   return (
     <div className="m-list">
-      <div className="m-search-wrap">
-        <label className="m-search">
-          <Icon name="icon-search" className="button-icon" />
-          <input
-            type="search"
-            placeholder="Search products, suppliers…"
-            aria-label="Search"
-            value={searchTerm}
-            onChange={(event) => onSearchTerm?.(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") { onSearchTerm?.(""); event.currentTarget.blur(); }
-              else if (event.key === "Enter" && searchTerm.trim()) {
-                event.preventDefault();
-                event.currentTarget.blur();
-                onNavigate?.(`/app/catalog/search?q=${encodeURIComponent(searchTerm.trim())}`);
-              }
-            }}
-          />
-        </label>
-        {searchTerm.trim() && (
-          <>
-            <div className="topbar-search-backdrop" onClick={() => onSearchTerm?.("")} />
-            <SearchResults
-              results={searchResults}
-              loading={searchLoading}
-              query={searchTerm.trim()}
-              onNavigate={onNavigate}
-            />
-          </>
-        )}
-      </div>
-
       <header className="m-topbar">
         <h1>{title}</h1>
         <div className="m-topbar-actions">
@@ -612,18 +579,6 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
             <Icon name="icon-scan" className="button-icon" />
             Scan
           </button>
-          {onRefresh && (
-            <button
-              className={`m-iconbtn ${refreshing ? "spinning" : ""}`}
-              type="button"
-              aria-label="Refresh list"
-              title="Refresh list"
-              disabled={refreshing}
-              onClick={async () => { setRefreshing(true); try { await onRefresh(); onToast?.("List refreshed"); } finally { setRefreshing(false); } }}
-            >
-              <Icon name="icon-refresh" className="button-icon" />
-            </button>
-          )}
           <div className="m-menu-wrap">
             <button className="m-iconbtn" type="button" aria-label="List actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
               <svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
@@ -1173,11 +1128,6 @@ export function CurrentReorderList({
           onArchiveList={onArchiveList}
           onClearList={onClearList}
           onRemoveItem={onRemoveItem}
-          onRefresh={onRefresh}
-          searchTerm={searchTerm}
-          onSearchTerm={onSearchTerm}
-          searchResults={searchResults}
-          searchLoading={searchLoading}
           onNavigate={onNavigate}
         />
         {detail && (

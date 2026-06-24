@@ -6,16 +6,101 @@ import { BrandMark, Icon, IconSprite } from "./icons";
 import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, lookupScannedProduct, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { ScanSessionsView, ScanSessionView } from "./scansessions";
+import { MobileReorderScan } from "./scanmobile";
 import { MobileBottomNav, MobileMoreSheet } from "./mobilebottom";
 import { MobileTodayView } from "./mobiletoday";
 import { EvidenceView, EvidenceBinderView } from "./evidence";
 import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
-import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, MobileScanItemView, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
+import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, SavingsView } from "./reorder";
 import { SettingsView } from "./settings";
 import StyleGuide from "./styleguide";
 import { ConfirmModal } from "./ui";
+
+// --- Scan feedback (audio + haptic) ----------------------------------------
+// A chime when a scan resolves to a product, a buzz when it doesn't. The chime
+// is a real bell struck off the brand intro sting (public/sounds/match-chime.mp3),
+// decoded once into an AudioBuffer; a synthesized two-note chime is the fallback
+// if the asset can't load. The shared AudioContext is unlocked + the clip
+// preloaded on the first user tap (iOS needs a gesture before WebAudio makes
+// sound). Vibration uses the Web Vibration API — works on Android; iOS Safari
+// has never implemented it, so the buzz is a silent no-op there.
+const MATCH_CHIME_URL = "/sounds/match-chime.mp3";
+let scanAudioCtx = null;
+let matchChimeBuffer = null;   // decoded clip, cached after first load
+let matchChimeLoading = false;
+
+function getScanAudioCtx() {
+  if (typeof window === "undefined") return null;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!scanAudioCtx) {
+    try { scanAudioCtx = new Ctx(); } catch { return null; }
+  }
+  return scanAudioCtx;
+}
+
+// Fetch + decode the chime once. Safe to call repeatedly; no-ops once cached or
+// in flight. decodeAudioData needs a context, so this runs after one exists.
+function loadMatchChime(ctx) {
+  if (matchChimeBuffer || matchChimeLoading || !ctx || typeof fetch === "undefined") return;
+  matchChimeLoading = true;
+  fetch(MATCH_CHIME_URL)
+    .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((buf) => ctx.decodeAudioData(buf))
+    .then((decoded) => { matchChimeBuffer = decoded; })
+    .catch(() => {})            // asset missing/undecodable — synth fallback covers it
+    .finally(() => { matchChimeLoading = false; });
+}
+
+function playSynthChime(ctx) {
+  const t0 = ctx.currentTime;
+  // Quick rising "ding-dong" (B5 → E6) that reads as a positive confirmation.
+  for (const [freq, offset] of [[988, 0], [1319, 0.11]]) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    const start = t0 + offset;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.25, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.24);
+  }
+}
+
+function playMatchChime() {
+  const ctx = getScanAudioCtx();
+  if (!ctx) return;
+  try {
+    if (ctx.state === "suspended") ctx.resume();
+    if (matchChimeBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = matchChimeBuffer;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.9;
+      src.connect(gain).connect(ctx.destination);
+      src.start();
+      return;
+    }
+    // Not decoded yet — start loading for next time, sound the synth for now.
+    loadMatchChime(ctx);
+    playSynthChime(ctx);
+  } catch {
+    // audio unavailable — stay silent
+  }
+}
+
+function vibrateNoMatch() {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([90, 60, 90]);
+  } catch {
+    // Web Vibration API unsupported (e.g. iOS Safari) — no-op
+  }
+}
 
 export default function Home() {
   const uploadFormRef = useRef(null);
@@ -173,6 +258,29 @@ export default function Home() {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
+
+  // Prime the audio context on the first user gesture so the match chime can
+  // sound even when later scans arrive from the camera (which is not itself a
+  // tap). iOS requires a gesture before WebAudio will play.
+  useEffect(() => {
+    const unlock = () => {
+      const ctx = getScanAudioCtx();
+      if (!ctx) return;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      loadMatchChime(ctx);   // decode the bell now so the first match plays it
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  // Per-scan feedback: a chime when the scan matched a product, a buzz when it
+  // didn't. Fires once per result (setScanResult is only set non-null by a
+  // scan; clears pass null and are ignored).
+  useEffect(() => {
+    if (!scanResult) return;
+    if (scanResult.status === "Not found") vibrateNoMatch();
+    else playMatchChime();
+  }, [scanResult]);
 
   // Persist the sidebar collapse preference per-device.
   useEffect(() => {
@@ -1048,6 +1156,24 @@ export default function Home() {
     }));
   }
 
+  // Attach scan-captured details (lot / expiry / location / qty) to a reorder
+  // item. The /app/scan drawer captures these; they ride along on the reorder
+  // line but are NOT written to the compliance evidence log.
+  function applyScanDetails(itemId, patch = {}) {
+    if (!itemId) return;
+    setListTouched(true);
+    setDraftItems((items) => items.map((item) => {
+      if (item.id !== itemId) return item;
+      const next = { ...item };
+      if (patch.lot !== undefined) next.lot = patch.lot;
+      if (patch.expirationDate !== undefined) next.expirationDate = patch.expirationDate;
+      if (patch.qty !== undefined) next.draftQty = patch.qty;
+      if (patch.location_id !== undefined) next.locationId = patch.location_id;
+      next.updatedAt = Date.now();
+      return next;
+    }));
+  }
+
   // Apply the landed-cost-optimized plan: set each line's selected offer to the
   // optimizer's choice. Reuses the per-line override mechanism, so the buyer can
   // still re-pick any line afterward.
@@ -1384,7 +1510,7 @@ export default function Home() {
   };
   // Visible on every mobile app view except the immersive full-screen scan
   // session and the legacy add-item scan route.
-  const showMobileNav = isMobile && !mobileAddItemRoute && view !== "scanSession";
+  const showMobileNav = isMobile && !mobileAddItemRoute && view !== "scanSession" && view !== "reorderList";
 
   // The reorder list is the desktop home (`/app`) and, on mobile, a menu
   // destination at `/app/reorder-list`. Defined once and reused in both places.
@@ -1474,7 +1600,7 @@ export default function Home() {
 
   return (
     <>
-      <div className={`app-shell ${menuOpen ? "menu-open" : ""} ${navCollapsed ? "nav-collapsed" : ""} ${mobileAddItemRoute ? "mobile-add-item-shell" : ""}`}>
+      <div className={`app-shell ${menuOpen ? "menu-open" : ""} ${navCollapsed ? "nav-collapsed" : ""} ${mobileAddItemRoute ? "mobile-add-item-shell" : ""} ${view === "reorderList" ? "mobile-reorder-shell" : ""}`}>
         <header className="topbar">
           <button className="topbar-brand" type="button" onClick={() => setView("home")} aria-label="TraceDDS home">
             <BrandMark />
@@ -1636,13 +1762,16 @@ export default function Home() {
         <main className="app-main">
           {view === "home" && (
             mobileAddItemRoute ? (
-              <MobileScanItemView
-                onBack={() => { setScanResult(null); navigate("/app"); }}
-                onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
-                onScan={handleScanComplete}
+              <MobileReorderScan
+                active
                 scanResult={scanResult}
-                onClearScanResult={() => setScanResult(null)}
                 scanCount={scanCount}
+                onScan={handleScanComplete}
+                onClearScanResult={() => setScanResult(null)}
+                onApplyDetails={applyScanDetails}
+                onRemoveItem={removeDraftItem}
+                onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
+                onBack={() => { setScanResult(null); navigate("/app"); }}
               />
             ) : isMobile ? (
               // Mobile home (`/app`) = the Today tab. Locations / Scan / Reorder
