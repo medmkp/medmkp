@@ -8,6 +8,7 @@ import {
   sessionCounts,
   syncInventoryFromLine,
   isPackageCondition,
+  lineMatchesLine,
 } from "../../../../../utils/scan-sessions"
 
 // POST /medmkp/scan-sessions/:id/lines — record one scanned item. The client
@@ -47,8 +48,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
   }
   const actor = req.auth_context?.actor_id ?? null
 
-  const created = await medmkp.createScanSessionLines({
-    session_id: session.id,
+  const fields = {
     barcode: barcode || null,
     canonical_product_id: draft.canonical_product_id,
     supplier_product_id: draft.supplier_product_id,
@@ -62,7 +62,44 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     package_condition: body.package_condition ?? null,
     status: deriveLineStatus(draft),
     scanned_by: actor,
-  })
+  }
+
+  // A shelf audit verifies what's present on one shelf, so re-scanning the same
+  // (item, lot) is the same evidence — refresh the existing line instead of
+  // stacking a duplicate review row (the same way inventory refreshes the lot,
+  // not a second record). Receiving logs an arriving delivery, where repeating an
+  // item is real, so it keeps one line per scan. On merge we coalesce — a later
+  // scan can fill in an identity or expiry the first read missed, but never wipes
+  // one the line already had.
+  let created
+  if (session.capture_type === "shelf_audit") {
+    const existing = (await medmkp.listScanSessionLines({ session_id: session.id })) as any[]
+    const dup = existing.find((l) => lineMatchesLine(l, fields))
+    if (dup) {
+      const merged = {
+        barcode: fields.barcode ?? dup.barcode,
+        canonical_product_id: fields.canonical_product_id ?? dup.canonical_product_id,
+        supplier_product_id: fields.supplier_product_id ?? dup.supplier_product_id,
+        name: fields.name ?? dup.name,
+        image_url: fields.image_url ?? dup.image_url,
+        quantity: fields.quantity,
+        shelf_area: fields.shelf_area ?? dup.shelf_area,
+        lot_number: fields.lot_number ?? dup.lot_number,
+        expiration_date: fields.expiration_date ?? dup.expiration_date,
+        production_date: fields.production_date ?? dup.production_date,
+        package_condition: fields.package_condition ?? dup.package_condition,
+        scanned_by: actor,
+      }
+      created = await medmkp.updateScanSessionLines({
+        id: dup.id,
+        ...merged,
+        status: deriveLineStatus(merged),
+      })
+    }
+  }
+  if (!created) {
+    created = await medmkp.createScanSessionLines({ session_id: session.id, ...fields })
+  }
 
   const inventoryItemId = await syncInventoryFromLine(
     medmkp,

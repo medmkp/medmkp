@@ -304,7 +304,10 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       const payload = scanLinePayload(code, product, scanned);
       const { line, counts } = await traceApi.addLine(sessionId, payload);
       const merged = { ...line, _offer: product?.best_offer || product?.offers?.[0] || null };
-      setLines((prev) => [merged, ...prev]);
+      // A shelf-audit re-scan returns the existing line (the backend dedups the
+      // same item+lot), so replace it in place and float it to the top rather
+      // than stacking a duplicate row; a fresh item just prepends.
+      setLines((prev) => [merged, ...prev.filter((l) => l.id !== merged.id)]);
       setSession((prev) => (prev ? { ...prev, counts } : prev));
       setPendingLine(merged);
       // Tell the buyer why an unmatched scan landed in review (marketing QR,
@@ -334,7 +337,7 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       const payload = scanLinePayload(null, product, null);
       const { line, counts } = await traceApi.addLine(sessionId, payload);
       const merged = { ...line, _offer: product?.best_offer || product?.offers?.[0] || null };
-      setLines((prev) => [merged, ...prev]);
+      setLines((prev) => [merged, ...prev.filter((l) => l.id !== merged.id)]);
       setSession((prev) => (prev ? { ...prev, counts } : prev));
       setPendingLine(merged);
     } catch {

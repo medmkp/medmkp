@@ -90,6 +90,23 @@ function lineMatchesItem(line: any, item: any): boolean {
   return false
 }
 
+// Do two scan lines refer to the same physical evidence? Mirrors lineMatchesItem
+// at the scan-line grain: lot must match, then any shared identity — canonical
+// product, supplier product, or (for scans we couldn't identify) the raw barcode.
+// Matching is symmetric on whichever identity each side carries, so a unit-barcode
+// scan and a case/GS1 scan of the same product collapse, and an unidentified
+// re-scan collapses onto an identified line that shares its barcode. A shelf audit
+// uses this to dedup re-scans the same way inventory dedups lots-at-location.
+export function lineMatchesLine(a: any, b: any): boolean {
+  if ((a.lot_number ?? null) !== (b.lot_number ?? null)) return false
+  const ac = a.canonical_product_id ?? null, bc = b.canonical_product_id ?? null
+  if (ac && bc) return ac === bc
+  const as = a.supplier_product_id ?? null, bs = b.supplier_product_id ?? null
+  if (as && bs) return as === bs
+  const ab = a.barcode ?? null, bb = b.barcode ?? null
+  return Boolean(ab && bb && ab === bb)
+}
+
 // Upsert the lot-at-location evidence record for an identified line. The grain is
 // one record per (item, lot, location): re-scanning the same lot refreshes the
 // existing record (no duplicate), while a different lot of the same product
