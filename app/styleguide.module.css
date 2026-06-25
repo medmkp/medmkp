@@ -226,18 +226,22 @@
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  border-radius: 999px;
+  /* Rounded RECTANGLE — buttons are not pills. 999px is reserved for status
+     badges/chips. See DESIGN.md §4. */
+  border-radius: 11px;
   padding: 10px 18px;
   border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
 }
 
 .btnPrimary {
   background: var(--blue);
   color: #fff;
 }
+.btnPrimary svg { color: #fff; }
 
 .btnGhost {
   background: var(--surface);
@@ -245,10 +249,50 @@
   border-color: var(--line);
 }
 
+/* The common drawer/card secondary: ghost shell, blue text + icon. */
+.btnGhostBlue {
+  background: var(--surface);
+  color: var(--blue);
+  border-color: var(--line);
+}
+.btnGhostBlue:hover { border-color: var(--blue); }
+
 .btnDanger {
   background: var(--surface);
   color: var(--red);
   border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+}
+
+/* Tertiary / link — bare blue text + trailing chevron. */
+.btnLink {
+  background: none;
+  border: 0;
+  color: var(--blue);
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btnLink svg { width: 15px; height: 15px; }
+
+/* Icon-only — close, kebab, print. */
+.btnIcon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--line);
+}
+.btnIcon:hover { background: var(--surface-2); color: var(--ink); }
+.btnIcon svg { width: 17px; height: 17px; }
+
+/* Dense — in-table row actions. */
+.btnSm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
 }
 
 .input {
@@ -616,4 +660,420 @@
 .componentList code {
   color: var(--ink);
   font-weight: 600;
+}
+
+/* ============================================================================
+   Patterns added from the desktop + mobile wireframes (wireframes/).
+   Everything below is built against the tokens — the reference for how the
+   Phase 2/3 module copies SHOULD be authored (they still use stray hex). */
+
+/* ---- badges & status pills (§8) ----
+   Fully rounded (999px); semantic foreground on a color-mix tint of the same
+   hue. Optional leading icon or dot. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.badge svg { width: 13px; height: 13px; }
+.badgeGreen { color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--surface)); }
+.badgeGold  { color: var(--gold);  background: color-mix(in srgb, var(--gold) 15%, var(--surface)); }
+.badgeRed   { color: var(--red);   background: color-mix(in srgb, var(--red) 11%, var(--surface)); }
+.badgeBlue  { color: var(--blue);  background: var(--blue-2); }
+.badgeSlate { color: var(--muted); background: var(--surface-2); }
+/* Outline pill — drawer-hero confirmation (✓ Present, ✓ Exact match). */
+.badgeOutline {
+  color: var(--green);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--green) 45%, var(--line));
+}
+.badgeDot::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+/* ---- KPI stat cards (§9.1) ---- */
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+.kpiCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.kpiIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.kpiIcon svg { width: 22px; height: 22px; color: inherit; }
+.kpiBlue  { color: var(--blue);  background: var(--blue-2); }
+.kpiGreen { color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--surface)); }
+.kpiGold  { color: var(--gold);  background: color-mix(in srgb, var(--gold) 15%, var(--surface)); }
+.kpiRed   { color: var(--red);   background: color-mix(in srgb, var(--red) 11%, var(--surface)); }
+.kpiBody { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpiLabel { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.kpiValue { font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.kpiValueMoney { color: var(--green); }
+.kpiSub { font-size: 12px; color: var(--muted); }
+
+/* ---- severity / alert tiles (§9.2) ---- */
+.sevRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.sevTile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sevTileHead { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+.sevTileHead svg { width: 15px; height: 15px; }
+.sevCount { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.sevSub { font-size: 11.5px; color: var(--muted); }
+.sevRedT   { border-left-color: var(--red); }
+.sevRedT   .sevTileHead { color: var(--red); }
+.sevGoldT  { border-left-color: var(--gold); }
+.sevGoldT  .sevTileHead { color: var(--gold); }
+.sevBlueT  { border-left-color: var(--blue); }
+.sevBlueT  .sevTileHead { color: var(--blue); }
+
+/* ---- coverage / progress bars (§9.4) ---- */
+.covList { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.covRow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 12px; }
+.covLabel { font-size: 13px; color: var(--ink); display: inline-flex; align-items: center; gap: 7px; }
+.covLabel svg { width: 15px; height: 15px; }
+.covCount { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.covTrack {
+  grid-column: 1 / -1;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.covFill { height: 100%; border-radius: 999px; }
+.covFillGreen { background: var(--green); }
+.covFillGold { background: var(--gold); }
+
+/* ---- callouts (§11.3) ---- */
+.infoCallout {
+  display: flex;
+  gap: 10px;
+  background: var(--blue-2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  max-width: 560px;
+}
+.infoCallout svg { width: 17px; height: 17px; color: var(--blue); flex-shrink: 0; margin-top: 1px; }
+.infoCalloutLink { display: inline-block; margin-top: 4px; color: var(--blue); font-weight: 600; }
+
+.highlightCallout {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  background: color-mix(in srgb, var(--gold) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--gold) 25%, var(--line));
+  border-radius: 12px;
+  padding: 14px 16px;
+  max-width: 560px;
+}
+.highlightIcon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  color: var(--gold); background: color-mix(in srgb, var(--gold) 16%, var(--surface));
+}
+.highlightIcon svg { width: 20px; height: 20px; }
+.highlightBody { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.highlightHead { font-size: 16px; font-weight: 600; color: var(--gold); }
+.highlightSub { font-size: 12.5px; color: var(--muted); }
+
+/* ---- lifecycle stepper (§11.3) ---- */
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  max-width: 620px;
+  position: relative;
+}
+.step { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; position: relative; }
+/* dashed connector between steps */
+.step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 17px;
+  left: calc(50% + 22px);
+  right: calc(-50% + 22px);
+  border-top: 1.5px dashed var(--line);
+}
+.stepDot {
+  width: 34px; height: 34px;
+  border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  z-index: 1;
+}
+.stepDot svg { width: 17px; height: 17px; }
+.stepActive .stepDot { color: #fff; }
+.stepActiveGreen .stepDot { background: var(--green); border-color: var(--green); }
+.stepActiveGold .stepDot { background: var(--gold); border-color: var(--gold); }
+.stepActiveRed .stepDot { background: var(--red); border-color: var(--red); }
+.stepTitle { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.stepActive .stepTitle.dim { color: var(--ink); }
+.step .stepTitle.dim { color: var(--muted); }
+.stepSub { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
+/* ---- reorder-basis option cards (§11.3) ---- */
+.basisList { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
+.basisCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+  background: var(--surface);
+}
+.basisCardOn { border-color: var(--blue); background: var(--blue-2); }
+.basisRadio {
+  width: 18px; height: 18px; border-radius: 999px;
+  border: 2px solid var(--line); flex-shrink: 0; margin-top: 1px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.basisCardOn .basisRadio { border-color: var(--blue); }
+.basisCardOn .basisRadio::after {
+  content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--blue);
+}
+.basisIcon { color: var(--blue); flex-shrink: 0; margin-top: 1px; }
+.basisIcon svg { width: 18px; height: 18px; }
+.basisBody { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.basisTitle { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.basisSub { font-size: 12px; color: var(--muted); }
+.basisPill { align-self: flex-start; margin-top: 2px; }
+
+/* ---- drawer anatomy specimen (§11) ----
+   Rendered inline (not a fixed overlay) so the whole anatomy is visible at rest. */
+.drawerSpec {
+  width: min(440px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.dsHead {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.dsHead h3 { font-size: 16px; font-weight: 600; margin: 0; flex: 1; }
+.dsBody { padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+.dsHero { display: flex; gap: 12px; align-items: flex-start; }
+.dsThumb {
+  width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
+  background: var(--surface-2); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center; color: var(--muted);
+}
+.dsThumb svg { width: 24px; height: 24px; }
+.dsHeroBody { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.dsHeroName { font-size: 15px; font-weight: 600; color: var(--ink); }
+.dsHeroSub { font-size: 12.5px; color: var(--muted); }
+.dsHeroBadges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.dsSectionH { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 8px; }
+.dsMeta { display: flex; flex-direction: column; }
+.dsMeta > div { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-top: 1px solid var(--surface-2); }
+.dsMeta > div:first-child { border-top: 0; }
+.dsMeta dt { font-size: 12.5px; color: var(--muted); }
+.dsMeta dd { font-size: 13px; color: var(--ink); font-weight: 500; margin: 0; text-align: right; }
+.dsMeta .alert { color: var(--red); }
+.dsFoot {
+  border-top: 1px solid var(--line);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.dsFootRow { display: flex; gap: 10px; }
+.dsFootRow > * { flex: 1; justify-content: center; }
+.specNote { font-size: 11.5px; color: var(--muted); margin: 0 0 10px; }
+
+/* ---- mobile specimens (§16) ---- */
+.phoneRow { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.phone {
+  width: 300px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.phoneBar {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.phoneBar svg { width: 18px; height: 18px; color: var(--blue); }
+.phoneTitle { font-size: 18px; font-weight: 700; color: var(--ink); }
+.phoneLede { font-size: 12.5px; color: var(--muted); margin-top: -8px; }
+
+/* segmented mode toggle */
+.segToggle {
+  display: inline-flex;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 3px;
+}
+.segBtn {
+  border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  padding: 7px 16px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.segBtn svg { width: 14px; height: 14px; }
+.segBtnOn { background: var(--blue); color: #fff; }
+
+/* mode-select card */
+.modeCard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.modeCardOn { border-color: var(--blue); }
+.modeHead { display: flex; align-items: center; gap: 10px; }
+.modeIcon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--blue); background: var(--blue-2);
+}
+.modeIcon svg { width: 19px; height: 19px; }
+.modeName { font-size: 15px; font-weight: 600; color: var(--ink); }
+.modeDesc { font-size: 12px; color: var(--muted); }
+.modeRecords { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.chipRow { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* captured-field card */
+.captCard {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.captIcon { color: var(--muted); flex-shrink: 0; }
+.captIcon svg { width: 16px; height: 16px; }
+.captBody { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.captLabel { font-size: 11px; color: var(--muted); }
+.captValue { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.captCheck { color: var(--green); flex-shrink: 0; }
+.captCheck svg { width: 17px; height: 17px; }
+
+/* green success banner */
+.successBanner {
+  display: flex; align-items: center; gap: 9px;
+  background: color-mix(in srgb, var(--green) 11%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.successBanner svg { width: 18px; height: 18px; color: var(--green); flex-shrink: 0; }
+.successBody { display: flex; flex-direction: column; }
+.successTitle { font-size: 13px; font-weight: 600; color: var(--ink); }
+.successSub { font-size: 11.5px; color: var(--muted); }
+
+/* shelf-audit status buttons */
+.statusBtnRow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.statusBtn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 11px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer;
+  text-align: center;
+}
+.statusBtn svg { width: 18px; height: 18px; }
+.statusBtnLabel { font-size: 13px; font-weight: 600; color: var(--ink); }
+.statusBtnSub { font-size: 10.5px; color: var(--muted); }
+.statusBtnGreen { color: var(--green); }
+.statusBtnGreen .statusBtnLabel { color: var(--green); }
+.statusBtnGold { color: var(--gold); }
+.statusBtnGold .statusBtnLabel { color: var(--gold); }
+
+/* full-width mobile primary */
+.mobileBtn {
+  width: 100%;
+  border: 0;
+  border-radius: 13px;
+  background: var(--blue);
+  color: #fff;
+  font: inherit; font-size: 14px; font-weight: 600;
+  padding: 13px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer;
+}
+.mobileBtn svg { width: 17px; height: 17px; }
+
+/* camera mock + reticle + location pill */
+.cameraMock {
+  position: relative;
+  height: 180px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #2a3346, #0b1220);
+  display: flex; align-items: center; justify-content: center;
+}
+.locPill {
+  position: absolute; top: 10px; left: 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(11, 18, 32, 0.72);
+  color: #fff; font-size: 12px; font-weight: 600;
+  padding: 6px 12px; border-radius: 999px;
+}
+.locPill svg { width: 14px; height: 14px; }
+.reticle {
+  width: 150px; height: 70px;
+  border-radius: 8px;
+  position: relative;
+}
+.reticle span {
+  position: absolute; width: 18px; height: 18px;
+  border: 2.5px solid var(--blue);
+}
+.reticle span:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+.reticle span:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+.reticle span:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 6px; }
+.reticle span:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 6px; }
+.cameraCaption {
+  position: absolute; bottom: 10px; left: 0; right: 0;
+  text-align: center; color: #fff; font-size: 11.5px; opacity: 0.9;
 }

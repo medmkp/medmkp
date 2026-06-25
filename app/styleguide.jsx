@@ -44,11 +44,11 @@ const WEIGHTS = [
 ];
 
 const RADII = [
-  { px: 8, label: "8 — inputs, chips" },
-  { px: 10, label: "10 — small cards" },
-  { px: 12, label: "12 — cards" },
-  { px: 14, label: "14 — panels" },
-  { px: 999, label: "999 — pills, buttons" },
+  { px: 8, label: "8 — inputs, pager" },
+  { px: 11, label: "11 — buttons" },
+  { px: 12, label: "12 — small cards" },
+  { px: 14, label: "14 — cards, panels" },
+  { px: 999, label: "999 — pills, badges" },
 ];
 
 const SPACING = [4, 6, 8, 12, 16, 24, 30];
@@ -274,7 +274,12 @@ export default function StyleGuide() {
       {/* Radius */}
       <section className={styles.section}>
         <h2>Radius</h2>
-        <p className={styles.sectionNote}>Pills and buttons are fully rounded (999px). Cards and panels use 10–14px.</p>
+        <p className={styles.sectionNote}>
+          <strong>Buttons are rounded rectangles (11px), not pills.</strong> Cards
+          and panels use 12–14px; inputs 8px. 999px is reserved for status
+          pills, badges, chips, and avatars. (Correction from earlier guidance —
+          the product moved off stadium buttons.)
+        </p>
         <div className={styles.scaleRow}>
           {RADII.map((r) => (
             <div className={styles.radiusItem} key={r.px}>
@@ -303,28 +308,416 @@ export default function StyleGuide() {
       <section className={styles.section}>
         <h2>Buttons</h2>
         <p className={styles.sectionNote}>
-          Pill-shaped. Primary = solid blue. Secondary = ghost (surface + line).
-          Destructive = red text on surface. There is no shared button class yet —
-          the canonical pattern lives here and in DESIGN.md.
+          Rounded rectangles (11px), not pills. One blue, used sparingly — one
+          primary per view/drawer/sheet. <code>Ghost-blue</code> is the common
+          secondary inside drawers and cards. Destructive = red text on surface,
+          never a solid-red fill in a table. There is no shared button class
+          yet — the canonical recipe lives here and in DESIGN.md §7.
         </p>
         <div className={styles.demoRow}>
           <button className={`${styles.btn} ${styles.btnPrimary}`}>
             <Icon name="icon-plus" className="nav-icon" /> Primary action
           </button>
           <button className={`${styles.btn} ${styles.btnGhost}`}>Secondary</button>
+          <button className={`${styles.btn} ${styles.btnGhostBlue}`}>
+            <Icon name="icon-eye" className="nav-icon" /> Ghost-blue
+          </button>
           <button className={`${styles.btn} ${styles.btnDanger}`}>
-            <Icon name="icon-trash" className="nav-icon" /> Delete
+            <Icon name="icon-trash" className="nav-icon" /> Confirm removal
+          </button>
+        </div>
+        <div className={styles.demoRow} style={{ marginTop: 14 }}>
+          <button className={`${styles.btn} ${styles.btnLink}`}>
+            View all evidence <Icon name="icon-chevron-right" className="nav-icon" />
+          </button>
+          <button className={`${styles.btn} ${styles.btnGhostBlue} ${styles.btnSm}`}>Verify removal</button>
+          <button className={`${styles.btn} ${styles.btnIcon}`} aria-label="More">
+            <Icon name="icon-more-vertical" className="nav-icon" />
+          </button>
+          <button className={`${styles.btn} ${styles.btnIcon}`} aria-label="Close">
+            <Icon name="icon-x" className="nav-icon" />
           </button>
         </div>
       </section>
 
       <section className={styles.section}>
-        <h2>Status pills</h2>
-        <p className={styles.sectionNote}>Reorder-list lifecycle. Rendered live from the shared <code>ListStatusPill</code> component.</p>
+        <h2>Badges &amp; status pills</h2>
+        <p className={styles.sectionNote}>
+          Fully rounded (999px), <strong>11.5px / 600</strong>, semantic
+          foreground on a <code>color-mix</code> tint of the same hue. Optional
+          leading status icon or <code>currentColor</code> dot. Map every new
+          state to one of the four semantics — green good, gold attention, red
+          urgent, blue label — never a fifth hue (DESIGN.md §8).
+        </p>
+        <div className={styles.demoRow}>
+          <span className={`${styles.badge} ${styles.badgeGreen}`}><Icon name="icon-check-circle" className="nav-icon" /> In stock</span>
+          <span className={`${styles.badge} ${styles.badgeGreen}`}>Verified</span>
+          <span className={`${styles.badge} ${styles.badgeGold}`}>Low stock</span>
+          <span className={`${styles.badge} ${styles.badgeGold}`}>Due soon</span>
+          <span className={`${styles.badge} ${styles.badgeRed}`}><Icon name="icon-alert-triangle" className="nav-icon" /> Expired</span>
+          <span className={`${styles.badge} ${styles.badgeRed}`}>Recall match</span>
+          <span className={`${styles.badge} ${styles.badgeBlue}`}>Preferred</span>
+          <span className={`${styles.badge} ${styles.badgeBlue}`}>SDS</span>
+          <span className={`${styles.badge} ${styles.badgeSlate}`}>Not started</span>
+        </div>
+        <div className={styles.demoRow} style={{ marginTop: 14 }}>
+          <span className={`${styles.badge} ${styles.badgeOutline}`}><Icon name="icon-check-circle" className="nav-icon" /> Present</span>
+          <span className={`${styles.badge} ${styles.badgeOutline}`}><Icon name="icon-check-circle" className="nav-icon" /> Exact match</span>
+          <span className={`${styles.badge} ${styles.badgeDot} ${styles.badgeGreen}`}>In progress · dot</span>
+          <span className={styles.specNote} style={{ alignSelf: "center" }}>
+            ← outline pills are the drawer-hero confirmation; dot pills are list lifecycle
+          </span>
+        </div>
+        <p className={styles.sectionNote} style={{ marginTop: 22, marginBottom: 12 }}>
+          The reorder-list lifecycle is the shared <code>ListStatusPill</code>
+          component (leading <code>currentColor</code> dot):
+        </p>
         <div className={styles.demoRow}>
           {["draft", "review", "ordering", "ordered", "handoff"].map((s) => (
             <ListStatusPill key={s} status={s} />
           ))}
+        </div>
+      </section>
+
+      {/* KPI cards */}
+      <section className={styles.section}>
+        <h2>KPI cards &amp; metric tiles</h2>
+        <p className={styles.sectionNote}>
+          The header band of every dashboard. A row of four <strong>stat
+          cards</strong> — a tinted icon chip + label + big 700 value + caption.
+          The chip carries the semantic tint; the value stays ink, except money,
+          which goes green. JSX reference: <code>StatCard</code> in evidence.jsx.
+        </p>
+        <div className={styles.kpiRow}>
+          <div className={styles.kpiCard}>
+            <span className={`${styles.kpiIcon} ${styles.kpiBlue}`}><Icon name="icon-package" className="nav-icon" /></span>
+            <div className={styles.kpiBody}>
+              <span className={styles.kpiLabel}>Total tracked items</span>
+              <span className={styles.kpiValue}>512</span>
+              <span className={styles.kpiSub}>Across 5 locations</span>
+            </div>
+          </div>
+          <div className={styles.kpiCard}>
+            <span className={`${styles.kpiIcon} ${styles.kpiGold}`}><Icon name="icon-alert-triangle" className="nav-icon" /></span>
+            <div className={styles.kpiBody}>
+              <span className={styles.kpiLabel}>Low stock</span>
+              <span className={styles.kpiValue}>37</span>
+              <span className={styles.kpiSub}>7% of items</span>
+            </div>
+          </div>
+          <div className={styles.kpiCard}>
+            <span className={`${styles.kpiIcon} ${styles.kpiRed}`}><Icon name="icon-cart" className="nav-icon" /></span>
+            <div className={styles.kpiBody}>
+              <span className={styles.kpiLabel}>Needs reorder</span>
+              <span className={styles.kpiValue}>24</span>
+              <span className={styles.kpiSub}>$6,842.20 est. value</span>
+            </div>
+          </div>
+          <div className={styles.kpiCard}>
+            <span className={`${styles.kpiIcon} ${styles.kpiGreen}`}><Icon name="icon-dollar-circle" className="nav-icon" /></span>
+            <div className={styles.kpiBody}>
+              <span className={styles.kpiLabel}>Est. savings this month</span>
+              <span className={`${styles.kpiValue} ${styles.kpiValueMoney}`}>$1,248</span>
+              <span className={styles.kpiSub}>From exact matches</span>
+            </div>
+          </div>
+        </div>
+
+        <p className={styles.sectionNote} style={{ marginTop: 26 }}>
+          <strong>Severity / alert tiles</strong> (Needs Attention) rank work by
+          urgency with a colored left accent — compliance (red) outranks reorder
+          (blue/slate), so red leads and reorder stays quiet.
+        </p>
+        <div className={styles.sevRow}>
+          <div className={`${styles.sevTile} ${styles.sevRedT}`}>
+            <span className={styles.sevTileHead}><Icon name="icon-alert-triangle" className="nav-icon" /> Expired</span>
+            <span className={styles.sevCount}>8</span>
+            <span className={styles.sevSub}>Past expiration</span>
+          </div>
+          <div className={`${styles.sevTile} ${styles.sevRedT}`}>
+            <span className={styles.sevTileHead}><Icon name="icon-x-circle" className="nav-icon" /> Recall match</span>
+            <span className={styles.sevCount}>3</span>
+            <span className={styles.sevSub}>Active recalls</span>
+          </div>
+          <div className={`${styles.sevTile} ${styles.sevGoldT}`}>
+            <span className={styles.sevTileHead}><Icon name="icon-file-text" className="nav-icon" /> Missing SDS</span>
+            <span className={styles.sevCount}>12</span>
+            <span className={styles.sevSub}>No SDS linked</span>
+          </div>
+          <div className={`${styles.sevTile} ${styles.sevBlueT}`}>
+            <span className={styles.sevTileHead}><Icon name="icon-cart" className="nav-icon" /> Reorder due</span>
+            <span className={styles.sevCount}>21</span>
+            <span className={styles.sevSub}>Likely within 3 weeks</span>
+          </div>
+        </div>
+
+        <p className={styles.sectionNote} style={{ marginTop: 26 }}>
+          <strong>Coverage / progress bars</strong> — label + count + a thin
+          track; fill is green at/above target, gold when partial. Used for
+          coverage snapshots, data quality, and the location scan-progress bar.
+        </p>
+        <div className={styles.covList}>
+          {[
+            { label: "SDS linked", n: 46, d: 52, ok: true },
+            { label: "IFUs linked", n: 38, d: 41, ok: true },
+            { label: "Expiration proof", n: 57, d: 70, ok: false },
+          ].map((c) => (
+            <div className={styles.covRow} key={c.label}>
+              <span className={styles.covLabel}><Icon name="icon-shield-check" className="nav-icon" /> {c.label}</span>
+              <span className={styles.covCount}>{c.n} / {c.d}</span>
+              <div className={styles.covTrack}>
+                <div
+                  className={`${styles.covFill} ${c.ok ? styles.covFillGreen : styles.covFillGold}`}
+                  style={{ width: `${Math.round((c.n / c.d) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Callouts */}
+      <section className={styles.section}>
+        <h2>Callouts</h2>
+        <p className={styles.sectionNote}>
+          The <strong>info callout</strong> (blue tint) is a drawer&rsquo;s
+          honesty rail — it states what a record is and isn&rsquo;t. The{" "}
+          <strong>highlight callout</strong> carries the single most important
+          takeaway in its state color, with a pill.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className={styles.infoCallout}>
+            <Icon name="icon-info" className="nav-icon" />
+            <div>
+              This is an evidence record for one lot at one location. It does not
+              represent exact inventory counts.
+              <a className={styles.infoCalloutLink} href="#" onClick={(e) => e.preventDefault()}>View calculation ⌄</a>
+            </div>
+          </div>
+          <div className={styles.highlightCallout}>
+            <span className={styles.highlightIcon}><Icon name="icon-calendar" className="nav-icon" /></span>
+            <div className={styles.highlightBody}>
+              <span className={styles.highlightHead}>Likely reorder in 3 weeks</span>
+              <span className={styles.highlightSub}>Estimate only, not exact on-hand quantity.</span>
+            </div>
+            <span className={`${styles.badge} ${styles.badgeGold}`}>Due soon</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Lifecycle stepper */}
+      <section className={styles.section}>
+        <h2>Lifecycle stepper</h2>
+        <p className={styles.sectionNote}>
+          Shows the current state of one lot at one location — Present →
+          Expiring soon → Expired unresolved → Removed. The active state fills in
+          its semantic color; the rest stay muted. This visualizes lifecycle, it
+          is <em>not</em> a progress bar.
+        </p>
+        <div className={styles.stepper}>
+          <div className={`${styles.step} ${styles.stepActive} ${styles.stepActiveGreen}`}>
+            <span className={styles.stepDot}><Icon name="icon-check" className="nav-icon" /></span>
+            <span className={`${styles.stepTitle} ${styles.dim}`}>Present</span>
+            <span className={styles.stepSub}>Active · since Jun 24</span>
+          </div>
+          <div className={styles.step}>
+            <span className={styles.stepDot}><Icon name="icon-clock" className="nav-icon" /></span>
+            <span className={`${styles.stepTitle} ${styles.dim}`}>Expiring soon</span>
+            <span className={styles.stepSub}>90 days before expiry</span>
+          </div>
+          <div className={styles.step}>
+            <span className={styles.stepDot}><Icon name="icon-alert-triangle" className="nav-icon" /></span>
+            <span className={`${styles.stepTitle} ${styles.dim}`}>Expired unresolved</span>
+            <span className={styles.stepSub}>Past expiration</span>
+          </div>
+          <div className={styles.step}>
+            <span className={styles.stepDot}><Icon name="icon-x-circle" className="nav-icon" /></span>
+            <span className={`${styles.stepTitle} ${styles.dim}`}>Removed</span>
+            <span className={styles.stepSub}>No longer here</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Reorder-basis option cards */}
+      <section className={styles.section}>
+        <h2>Option cards (reorder basis)</h2>
+        <p className={styles.sectionNote}>
+          A selectable list — radio + icon + title + example lines + optional
+          pill. The selected card gets a <code>var(--blue)</code> border +{" "}
+          <code>var(--blue-2)</code> tint. Used to pick a reorder basis; it shows
+          the <strong>basis and the math, never a confidence %</strong>.
+        </p>
+        <div className={styles.basisList}>
+          <div className={`${styles.basisCard} ${styles.basisCardOn}`}>
+            <span className={styles.basisRadio} />
+            <span className={styles.basisIcon}><Icon name="icon-truck" className="nav-icon" /></span>
+            <div className={styles.basisBody}>
+              <span className={styles.basisTitle}>Receiving history</span>
+              <span className={styles.basisSub}>Usually received every 30 to 45 days</span>
+              <span className={styles.basisSub}>Example: last received Jun 2, 2026</span>
+            </div>
+            <span className={`${styles.badge} ${styles.badgeGreen} ${styles.basisPill}`}>Recommended</span>
+          </div>
+          <div className={styles.basisCard}>
+            <span className={styles.basisRadio} />
+            <span className={styles.basisIcon}><Icon name="icon-chart" className="nav-icon" /></span>
+            <div className={styles.basisBody}>
+              <span className={styles.basisTitle}>Order history</span>
+              <span className={styles.basisSub}>Based on uploaded order history</span>
+              <span className={styles.basisSub}>Example: typical order quantity 4 tubs</span>
+            </div>
+          </div>
+          <div className={styles.basisCard}>
+            <span className={styles.basisRadio} />
+            <span className={styles.basisIcon}><Icon name="icon-clock" className="nav-icon" /></span>
+            <div className={styles.basisBody}>
+              <span className={styles.basisTitle}>Custom cadence</span>
+              <span className={styles.basisSub}>Manual reminder every 30 days</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Drawer anatomy */}
+      <section className={styles.section}>
+        <h2>Drawer</h2>
+        <p className={styles.sectionNote}>
+          The right-side slide-in is the primary detail + edit surface. Live it
+          mounts as a fixed overlay (<code>min(440px, 94vw)</code>, scrim, slide
+          from the right); shown here inline so the whole anatomy is visible at
+          rest — header + record pill + close, identity hero with status pills,
+          key/value sections, and a sticky footer. Structural reference:{" "}
+          <code>DocumentDrawer</code> in evidence.jsx (DESIGN.md §11).
+        </p>
+        <div className={styles.drawerSpec}>
+          <div className={styles.dsHead}>
+            <h3>Product / Lot Detail</h3>
+            <span className={`${styles.badge} ${styles.badgeBlue}`}>Evidence record</span>
+            <button className={`${styles.btn} ${styles.btnIcon}`} aria-label="Close" tabIndex={-1}>
+              <Icon name="icon-x" className="nav-icon" />
+            </button>
+          </div>
+          <div className={styles.dsBody}>
+            <div className={styles.dsHero}>
+              <span className={styles.dsThumb}><Icon name="icon-package" className="nav-icon" /></span>
+              <div className={styles.dsHeroBody}>
+                <span className={styles.dsHeroName}>CaviWipes Disinfectant Towelettes</span>
+                <span className={styles.dsHeroSub}>Lot / Location record · CW-160</span>
+                <div className={styles.dsHeroBadges}>
+                  <span className={`${styles.badge} ${styles.badgeOutline}`}><Icon name="icon-check-circle" className="nav-icon" /> Present</span>
+                  <span className={`${styles.badge} ${styles.badgeOutline}`}><Icon name="icon-check-circle" className="nav-icon" /> Exact match</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h4 className={styles.dsSectionH}>Lot &amp; location</h4>
+              <dl className={styles.dsMeta}>
+                <div><dt>Lot number</dt><dd>A219</dd></div>
+                <div><dt>Expiration</dt><dd>Apr 2027</dd></div>
+                <div><dt>Capture source</dt><dd>Receiving scan</dd></div>
+                <div><dt>Last verified</dt><dd>Today, 9:41 AM</dd></div>
+                <div><dt>Days remaining</dt><dd className={styles.alert}>Below par</dd></div>
+              </dl>
+            </div>
+          </div>
+          <div className={styles.dsFoot}>
+            <button className={`${styles.btn} ${styles.btnPrimary}`} tabIndex={-1}>
+              <Icon name="icon-check-circle" className="nav-icon" /> Verify status
+            </button>
+            <div className={styles.dsFootRow}>
+              <button className={`${styles.btn} ${styles.btnGhostBlue}`} tabIndex={-1}>Edit record</button>
+              <button className={`${styles.btn} ${styles.btnDanger}`} tabIndex={-1}>Confirm removal</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Mobile */}
+      <section className={styles.section}>
+        <h2>Mobile — scanner-first</h2>
+        <p className={styles.sectionNote}>
+          The phone surface is its own flow, not a shrunk desktop: full-screen
+          camera, bottom sheets, big tap targets, tighter radii (sheet 16, card
+          10–12, thumb 8). The same scanner records two things — <strong>Receiving</strong>{" "}
+          (creates an intake record + reorder signal) and <strong>Shelf Audit</strong>{" "}
+          (verifies presence + status). Say &ldquo;Create intake record,&rdquo; never
+          &ldquo;Add stock&rdquo;; quantity is optional &ldquo;received,&rdquo; never &ldquo;on hand&rdquo;
+          (DESIGN.md §16).
+        </p>
+        <div className={styles.phoneRow}>
+          {/* Phone 1 — scan mode + camera */}
+          <div className={styles.phone}>
+            <div className={styles.phoneBar}><BrandMark /></div>
+            <div className={styles.segToggle}>
+              <button className={`${styles.segBtn} ${styles.segBtnOn}`} tabIndex={-1}>Receiving</button>
+              <button className={styles.segBtn} tabIndex={-1}><Icon name="icon-shield-check" className="nav-icon" /> Shelf Audit</button>
+            </div>
+            <div className={`${styles.modeCard} ${styles.modeCardOn}`}>
+              <div className={styles.modeHead}>
+                <span className={styles.modeIcon}><Icon name="icon-package" className="nav-icon" /></span>
+                <div>
+                  <div className={styles.modeName}>Receiving</div>
+                  <div className={styles.modeDesc}>Use when a new shipment arrives</div>
+                </div>
+              </div>
+              <span className={styles.modeRecords}>Records</span>
+              <div className={styles.chipRow}>
+                {["Lot", "Expiry", "Received date", "Location", "Qty (optional)"].map((c) => (
+                  <span className={`${styles.badge} ${styles.badgeBlue}`} key={c}><Icon name="icon-check" className="nav-icon" /> {c}</span>
+                ))}
+              </div>
+            </div>
+            <div className={styles.cameraMock}>
+              <span className={styles.locPill}><Icon name="icon-package" className="nav-icon" /> Hygiene Cabinet <Icon name="icon-chevron-down" className="nav-icon" /></span>
+              <div className={styles.reticle}><span /><span /><span /><span /></div>
+              <span className={styles.cameraCaption}>Align barcode inside frame</span>
+            </div>
+            <button className={styles.mobileBtn} tabIndex={-1}><Icon name="icon-scan" className="nav-icon" /> Continue</button>
+          </div>
+
+          {/* Phone 2 — captured + status + actions */}
+          <div className={styles.phone}>
+            <div className={styles.phoneBar}><BrandMark /></div>
+            <div className={styles.phoneTitle}>Mobile Receiving Scan</div>
+            <div className={styles.phoneLede}>Lot + expiry capture</div>
+            <div className={styles.successBanner}>
+              <Icon name="icon-check-circle" className="nav-icon" />
+              <div className={styles.successBody}>
+                <span className={styles.successTitle}>Barcode and label detected</span>
+                <span className={styles.successSub}>Lot and expiry captured</span>
+              </div>
+            </div>
+            <div className={styles.captCard}>
+              <span className={styles.captIcon}><Icon name="icon-tag" className="nav-icon" /></span>
+              <div className={styles.captBody}>
+                <span className={styles.captLabel}>Lot (captured)</span>
+                <span className={styles.captValue}>A219</span>
+              </div>
+              <span className={styles.captCheck}><Icon name="icon-check-circle" className="nav-icon" /></span>
+            </div>
+            <div className={styles.captCard}>
+              <span className={styles.captIcon}><Icon name="icon-calendar" className="nav-icon" /></span>
+              <div className={styles.captBody}>
+                <span className={styles.captLabel}>Quantity received (optional)</span>
+                <span className={styles.captValue}>160 wipes</span>
+              </div>
+              <span className={styles.captCheck}><Icon name="icon-check-circle" className="nav-icon" /></span>
+            </div>
+            <span className={styles.modeRecords}>Shelf-audit status</span>
+            <div className={styles.statusBtnRow}>
+              <button className={`${styles.statusBtn} ${styles.statusBtnGreen}`} tabIndex={-1}>
+                <Icon name="icon-check-circle" className="nav-icon" />
+                <span className={styles.statusBtnLabel}>Present</span>
+                <span className={styles.statusBtnSub}>On the shelf</span>
+              </button>
+              <button className={`${styles.statusBtn} ${styles.statusBtnGold}`} tabIndex={-1}>
+                <Icon name="icon-arrow-right" className="nav-icon" />
+                <span className={styles.statusBtnLabel}>Moved</span>
+                <span className={styles.statusBtnSub}>Location changed</span>
+              </button>
+            </div>
+            <button className={styles.mobileBtn} tabIndex={-1}><Icon name="icon-clipboard-check" className="nav-icon" /> Save intake record</button>
+          </div>
         </div>
       </section>
 
