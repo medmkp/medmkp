@@ -855,6 +855,19 @@
 .attnChevron { color: #cbb487; flex-shrink: 0; }
 .attnChevron svg { width: 20px; height: 20px; }
 
+/* ── Location-scoped chooser (deep-link from a QR label) ────────────── */
+.scopedHead { display: flex; align-items: center; gap: 12px; }
+.scopedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.scopedIcon svg { width: 22px; height: 22px; }
+
 /* ── Mode picker (Screen 1) ─────────────────────────────────────────── */
 .modeCards { display: flex; flex-direction: column; gap: 12px; }
 .modeCard {

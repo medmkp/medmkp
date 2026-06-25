@@ -53,7 +53,7 @@ function Stat({ icon, tone, label, value }) {
 
 // ── Scan Sessions list + start-a-session picker ───────────────────────
 
-export function ScanSessionsView({ onOpenSession, onNavigate, onToast }) {
+export function ScanSessionsView({ startLocationId, onOpenSession, onNavigate, onToast }) {
   const [sessions, setSessions] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,6 +111,7 @@ export function ScanSessionsView({ onOpenSession, onNavigate, onToast }) {
         sessions={sessions}
         locations={locations}
         starting={starting}
+        startLocationId={startLocationId}
         needsAttention={needsAttention}
         onOpenSession={onOpenSession}
         onStart={startFor}

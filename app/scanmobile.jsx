@@ -117,14 +117,65 @@ function ModeCard({ value, onSelect, meta }) {
   );
 }
 
+// ── Location-scoped mode chooser (deep-link from a printed QR label) ──
+// Same record-type choice as the generic picker, but the location is already
+// known, so it's named up top and only the two scan records that apply to a
+// shelf are offered (Reorder isn't a per-location action).
+function ScopedModeChooser({ location, starting, onPick, onBack }) {
+  const meta = typeMeta(location.type);
+  return (
+    <div className={s.screen}>
+      <header className={s.topbar}>
+        <button type="button" className={s.iconBtn} onClick={onBack} aria-label="Back">
+          <Icon name="icon-chevron-left" />
+        </button>
+        <span className={s.barTitle}>Scan location</span>
+      </header>
+      <div className={s.body}>
+        <div className={s.scopedHead}>
+          <span className={`${s.scopedIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
+          <div className={s.intro}>
+            <h1 className={s.h1}>{location.name}</h1>
+            <p className={s.sub}>Choose how to scan this location.</p>
+          </div>
+        </div>
+
+        <div className={s.modeCards}>
+          {["shelf_audit", "receiving"].map((value) => (
+            <ModeCard
+              key={value}
+              value={value}
+              onSelect={(v) => { if (!starting) onPick(v); }}
+              meta={SCAN_MODE_META[value]}
+            />
+          ))}
+        </div>
+
+        <div className={s.infoBanner}>
+          <Icon name="icon-info" />
+          Shelf Audit checks what&rsquo;s on this shelf; Receiving logs a new delivery.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Screens 1 + 2: Start scan / Choose mode / Choose location ────────
 
 export function MobileScanStart({
-  loading, sessions, locations, starting, needsAttention,
+  loading, sessions, locations, starting, startLocationId, needsAttention,
   onOpenSession, onStart, onNavigate,
 }) {
   // "home" | "choose-scan-mode" | "audit-scanner"
   const [step, setStep] = useState("home");
+
+  // Deep-link from a printed location QR: the URL carries the location id, so
+  // the flow starts scoped to that one location (no home, no location picker).
+  const scopedLocation = useMemo(
+    () => (startLocationId ? (locations || []).find((l) => l.id === startLocationId) : null),
+    [startLocationId, locations],
+  );
+  const [scopedDismissed, setScopedDismissed] = useState(false);
 
   const attnItems = needsAttention?.items || 0;
   const attnLocs  = needsAttention?.locations || 0;
@@ -151,6 +202,33 @@ export function MobileScanStart({
     // Shelf Audit goes straight to the scanner; the location is picked there
     // (an audit is scoped to one location, so it's the first action).
     setStep("audit-scanner");
+  }
+
+  // ── Screen: location-scoped chooser (deep-link from a QR label) ─────
+  // The location is already known (scanned off the cabinet), so skip straight
+  // to the record-type choice. Shelf Audit scopes to this location; Receiving
+  // is a delivery that fans out to many shelves, so it isn't location-bound.
+  if (startLocationId && !scopedDismissed) {
+    if (scopedLocation) {
+      return (
+        <ScopedModeChooser
+          location={scopedLocation}
+          starting={starting}
+          onPick={(mode) => onStart(mode === "receiving" ? null : scopedLocation, mode)}
+          onBack={() => setScopedDismissed(true)}
+        />
+      );
+    }
+    // Still loading the location list — hold before deciding it's missing.
+    if (loading) {
+      return (
+        <div className={s.screen}>
+          <div className={`${s.body} ${s.bodyTop}`}><div className={s.emptyNote}>Loading…</div></div>
+        </div>
+      );
+    }
+    // Location not found (deleted or a stale link) — fall through to the normal
+    // start screen rather than dead-end.
   }
 
   // ── Screen: choose scan mode ────────────────────────────────────────

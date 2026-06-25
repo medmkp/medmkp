@@ -53,6 +53,7 @@ export const routeByView = {
   reorderList: "/app/reorder-list",
   locations: "/app/locations",
   locationAdd: "/app/locations/new",
+  qrLabels: "/app/locations/qr-labels",
   scanSessions: "/app/scan-sessions",
   evidence: "/app/evidence",
   evidenceBinder: "/app/evidence/binder",
@@ -86,7 +87,7 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/needs-attention") return { view: "needsAttention", isLoggedIn: true };
   if (path === "/app/reorder-list") return { view: "reorderList", isLoggedIn: true };
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
-  if (path === "/app/scan-sessions") return { view: "scanSessions", isLoggedIn: true };
+  if (path === "/app/scan-sessions") return { view: "scanSessions", isLoggedIn: true, scanLocationId: query.get("location") || "" };
   if (path.startsWith("/app/scan-sessions/")) return { view: "scanSession", isLoggedIn: true, scanSessionId: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
   if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
@@ -96,6 +97,7 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/history") return { view: "history", isLoggedIn: true };
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
   if (path === "/app/locations/new") return { view: "locationAdd", isLoggedIn: true };
+  if (path === "/app/locations/qr-labels") return { view: "qrLabels", isLoggedIn: true };
   if (path.startsWith("/app/locations/")) return { view: "locationDetail", isLoggedIn: true, locationId: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/locations") return { view: "locations", isLoggedIn: true };
   if (path === "/app/savings") return { view: "savings", isLoggedIn: true };

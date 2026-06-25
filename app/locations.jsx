@@ -406,6 +406,10 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
             <Icon name="icon-plus" />
             Add location
           </button>
+          <button type="button" className={s.addBtn} onClick={() => onNavigate?.("/app/locations/qr-labels")}>
+            <Icon name="icon-grid" />
+            Print QR codes
+          </button>
           <button type="button" className={s.scanBtn} onClick={() => onStartScan?.(null)}>
             <Icon name="icon-scan" />
             Start scan session
