@@ -19,6 +19,7 @@ const TYPE_LABELS = {
 // The print layouts on offer. `perPage` documents the Avery-style sheet each
 // maps to; `qr` is the QR module size in px for that label footprint.
 const LAYOUTS = [
+  { id: "one-up", label: "1-up", sub: "9.5\" × 11\" · full page", cols: 1, qr: 420 },
   { id: "two-up", label: "2-up", sub: "4\" × 2\" · Avery 5163", cols: 2, qr: 132 },
   { id: "three-up", label: "3-up", sub: "2.6\" × 2\" · Avery 5160", cols: 3, qr: 104 },
   { id: "four-up", label: "4-up", sub: "2\" × 2\" · square", cols: 4, qr: 88 },
@@ -40,7 +41,7 @@ function scanUrlFor(loc) {
 export function QrLabelView({ onBack, onToast }) {
   const [locations, setLocations] = useState(null); // null = loading
   const [selected, setSelected] = useState(() => new Set());
-  const [layoutId, setLayoutId] = useState(LAYOUTS[1].id);
+  const [layoutId, setLayoutId] = useState("three-up");
   const [showType, setShowType] = useState(true);
   const [showMark, setShowMark] = useState(true);
 

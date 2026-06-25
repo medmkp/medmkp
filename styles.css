@@ -10642,6 +10642,18 @@ th {
   text-align: center;
   gap: 8px;
 }
+/* 1-up — one large QR per page, centered like a poster (demo). */
+.qrl-sheet-one-up .qrl-label {
+  flex-direction: column;
+  text-align: center;
+  gap: 16px;
+  padding: 28px;
+}
+.qrl-sheet-one-up .qrl-label-meta { align-items: center; }
+.qrl-sheet-one-up .qrl-label-mark { width: 30px; height: 30px; }
+.qrl-sheet-one-up .qrl-label-name { font-size: 22px; font-weight: 600; }
+.qrl-sheet-one-up .qrl-label-type { font-size: 13px; }
+.qrl-sheet-one-up .qrl-label-hint { font-size: 13px; }
 .qrl-label-qr { flex-shrink: 0; line-height: 0; }
 .qrl-label-qr svg { display: block; height: auto; }
 .qrl-label-meta {
@@ -10689,7 +10701,7 @@ th {
 @media print {
   .topbar, .sidebar, .mobile-bottom-nav, .toast,
   .qrl-head, .qrl-controls, .qrl-preview-head { display: none !important; }
-  .app-body, .app-main { display: block; }
+  .app-body, .app-main { display: block; padding: 0; margin: 0; }
 
   .qrl-page { padding: 0; gap: 0; }
   .qrl-body { display: block; }
@@ -10707,7 +10719,30 @@ th {
     page-break-inside: avoid;
   }
   .qrl-label-type { color: var(--blue); }
+
+  /* 1-up — one big QR filling a 9.5" × 11" page (demo). Each selected location
+     prints on its own page; the QR is vector so it stays crisp at this size. */
+  .qrl-sheet-one-up .qrl-label {
+    page: qrposter;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 0;
+    min-height: 9.5in;
+    justify-content: center;
+    gap: 0.4in;
+    padding: 0.25in;
+    break-after: page;
+  }
+  .qrl-sheet-one-up .qrl-label:last-child { break-after: auto; }
+  .qrl-sheet-one-up .qrl-label-qr svg { width: 6.6in; height: 6.6in; }
+  .qrl-sheet-one-up .qrl-label-mark { width: 0.5in; height: 0.5in; }
+  .qrl-sheet-one-up .qrl-label-name { font-size: 30pt; }
+  .qrl-sheet-one-up .qrl-label-type { font-size: 15pt; }
+  .qrl-sheet-one-up .qrl-label-hint { font-size: 12pt; }
 }
+
+/* Named page for the 1-up demo poster — sized to the requested 9.5" × 11". */
+@page qrposter { size: 9.5in 11in; margin: 0.4in; }
 
 /* ===== Phase 1c — Office layout ===== */
 .ol { display: flex; flex-direction: column; gap: 18px; }
