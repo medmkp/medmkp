@@ -2,7 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { requirePractice } from "../../../../utils/practice"
-import { LOCATION_TYPES, needsAttention, loadOwnedLocation, attachInventoryImages } from "../../../../utils/inventory"
+import { LOCATION_TYPES, needsAttention, loadOwnedLocation, attachInventoryImages, attachInventoryPrices } from "../../../../utils/inventory"
 
 // GET /medmkp/locations/:id — one location plus its inventory items.
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
@@ -14,6 +14,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
 
   const items = await medmkp.listInventoryItems({ location_id: location.id })
   const withImages = await attachInventoryImages(medmkp, items as any[])
+  const withPrices = await attachInventoryPrices(medmkp, withImages)
   const now = new Date()
   res.json({
     location: {
@@ -21,7 +22,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       item_count: items.length,
       needs_attention_count: (items as any[]).filter((i) => needsAttention(i, now)).length,
     },
-    items: withImages.map((i) => ({ ...i, needs_attention: needsAttention(i, now) })),
+    items: withPrices.map((i) => ({ ...i, needs_attention: needsAttention(i, now) })),
   })
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
-import { daysUntil, formatTraceDate, traceApi, traceErrorMessage } from "./lib";
+import { daysUntil, formatTraceDate, money, traceApi, traceErrorMessage } from "./lib";
 import { ConfirmModal, ProductThumb } from "./ui";
 import s from "./locations.module.css";
 
@@ -783,16 +783,19 @@ function formatMonthYear(iso) {
   return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
-// Price range across known offers for this item's matched product. The Phase-1
-// location feed doesn't join catalog pricing yet, so this renders only when the
-// backend supplies price_min/price_max (or a price_range) — never fabricated.
+// Price range across known supplier offers for this item's matched product — the
+// same cross-supplier comparison the catalog shows, joined onto each lot by
+// canonical_product_id. Renders only when the backend supplies a price range (an
+// unmatched or price-less item shows "—"), never fabricated. Prices are cents.
 function formatPriceRange(it) {
-  const money = (n) => `$${Number(n).toFixed(2)}`;
-  const lo = it.price_min ?? it.price_range?.min ?? null;
-  const hi = it.price_max ?? it.price_range?.max ?? null;
-  if (lo == null && hi == null) return null;
-  if (lo != null && hi != null && Number(lo) !== Number(hi)) return `${money(lo)}–${money(hi)}`;
-  return money(lo ?? hi);
+  const range = it.price_range_cents;
+  if (!range) return null;
+  const { lowest, highest } = range;
+  if (lowest == null && highest == null) return null;
+  if (lowest != null && highest != null && lowest !== highest) {
+    return `${money.format(lowest / 100)}–${money.format(highest / 100)}`;
+  }
+  return money.format((lowest ?? highest) / 100);
 }
 
 // Per-row kebab for the items table: a single "Remove item" action that deletes

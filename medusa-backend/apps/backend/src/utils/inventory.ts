@@ -1,5 +1,6 @@
 import type { MedusaResponse } from "@medusajs/framework/http"
 import type MedMKPModuleService from "../modules/medmkp/service"
+import { isMarketplaceSupplierId } from "../ingestion/marketplace/suppliers"
 
 // Allowed location types (stored as text; validated here at the API layer).
 export const LOCATION_TYPES = [
@@ -108,6 +109,66 @@ export async function attachInventoryImages(
     ...i,
     image_url:
       i.photo_url || (i.canonical_product_id ? imageByCanonical.get(i.canonical_product_id) : "") || null,
+  }))
+}
+
+// Attach a cross-supplier price range to each inventory item. Mirrors
+// attachInventoryImages: resolve canonical_product_id → its exact/variant
+// supplier offers → the latest price snapshot of each, and report the
+// [lowest, highest] pack price across them. This is the same comparison the
+// catalog shows, joined onto each lot so the location table can price what's on
+// the shelf. Marketplace listings (Amazon/Alibaba) are excluded, matching the
+// search feed. Items with no match or no priced offer get price_range_cents:
+// null (the UI renders "—" — never a fabricated price).
+export async function attachInventoryPrices(
+  medmkp: MedMKPModuleService,
+  items: any[]
+): Promise<any[]> {
+  const canonicalIds = [...new Set(items.map((i) => i.canonical_product_id).filter(Boolean))] as string[]
+  if (!canonicalIds.length) {
+    return items.map((i) => ({ ...i, price_range_cents: null }))
+  }
+
+  const matches = (await medmkp.listCanonicalProductMatches({ canonical_product_id: canonicalIds })) as any[]
+  const relevant = matches.filter((m) => m.match_status === "exact" || m.match_status === "variant")
+  const supplierProductIds = [...new Set(relevant.map((m) => m.supplier_product_id).filter(Boolean))]
+  const [supplierProducts, snapshots] = supplierProductIds.length
+    ? await Promise.all([
+        medmkp.listSupplierProducts({ id: supplierProductIds }),
+        medmkp.listSupplierPriceSnapshots({ supplier_product_id: supplierProductIds }),
+      ])
+    : [[], []]
+
+  const supplierIdByProduct = new Map((supplierProducts as any[]).map((sp) => [sp.id, sp.supplier_id]))
+  // Latest snapshot per supplier product (price feeds are append-only).
+  const latest = new Map<string, any>()
+  for (const snap of snapshots as any[]) {
+    const existing = latest.get(snap.supplier_product_id)
+    if (!existing || new Date(snap.captured_at).getTime() > new Date(existing.captured_at).getTime()) {
+      latest.set(snap.supplier_product_id, snap)
+    }
+  }
+
+  // Gather the latest pack price of every non-marketplace matched offer, keyed by
+  // canonical product, then reduce each list to a [lowest, highest] range.
+  const pricesByCanonical = new Map<string, number[]>()
+  for (const m of relevant) {
+    if (isMarketplaceSupplierId(supplierIdByProduct.get(m.supplier_product_id))) continue
+    const snap = latest.get(m.supplier_product_id)
+    if (!snap || typeof snap.price_cents !== "number") continue
+    const list = pricesByCanonical.get(m.canonical_product_id) ?? []
+    list.push(snap.price_cents)
+    pricesByCanonical.set(m.canonical_product_id, list)
+  }
+
+  const rangeByCanonical = new Map<string, { lowest: number; highest: number }>()
+  for (const [canonicalId, prices] of pricesByCanonical) {
+    rangeByCanonical.set(canonicalId, { lowest: Math.min(...prices), highest: Math.max(...prices) })
+  }
+
+  return items.map((i) => ({
+    ...i,
+    price_range_cents: (i.canonical_product_id && rangeByCanonical.get(i.canonical_product_id)) || null,
   }))
 }
 
