@@ -780,6 +780,8 @@ export const traceApi = {
   // Confirm a lot was physically pulled (reason: expiry | recall | manual), or
   // undo with { pulled: false }. The only thing that moves a lot out of active.
   pull: (id, body) => traceFetch(`/api/inventory/${encodeURIComponent(id)}/pull`, jsonBody("POST", body)),
+  // Delete a single inventory evidence record (a mis-scan / wrong item).
+  removeItem: (id) => traceFetch(`/api/inventory/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 // Shared review-bucket vocabulary for scan-session lines (UI labels + tone).

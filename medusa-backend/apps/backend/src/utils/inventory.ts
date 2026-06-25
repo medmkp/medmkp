@@ -74,6 +74,43 @@ export async function loadOwnedLocation(
   return loc
 }
 
+// Attach a product image_url to each inventory item. The item itself carries no
+// image (photo_url is a Phase-3 upload, normally null), so the picture comes from
+// the matched catalog product: resolve canonical_product_id → its exact/variant
+// supplier offers → the first one with an image. A captured photo_url, when
+// present, still wins. Returns the items with an `image_url` field added.
+export async function attachInventoryImages(
+  medmkp: MedMKPModuleService,
+  items: any[]
+): Promise<any[]> {
+  const canonicalIds = [...new Set(items.map((i) => i.canonical_product_id).filter(Boolean))] as string[]
+  if (!canonicalIds.length) {
+    return items.map((i) => ({ ...i, image_url: i.photo_url ?? null }))
+  }
+
+  const matches = (await medmkp.listCanonicalProductMatches({ canonical_product_id: canonicalIds })) as any[]
+  const relevant = matches.filter((m) => m.match_status === "exact" || m.match_status === "variant")
+  const supplierProductIds = [...new Set(relevant.map((m) => m.supplier_product_id).filter(Boolean))]
+  const supplierProducts = supplierProductIds.length
+    ? ((await medmkp.listSupplierProducts({ id: supplierProductIds })) as any[])
+    : []
+  const imageBySupplierProduct = new Map(supplierProducts.map((sp) => [sp.id, sp.image_url || ""]))
+
+  // First non-empty image per canonical product wins (mirrors the search feed).
+  const imageByCanonical = new Map<string, string>()
+  for (const m of relevant) {
+    if (imageByCanonical.has(m.canonical_product_id)) continue
+    const img = imageBySupplierProduct.get(m.supplier_product_id)
+    if (img) imageByCanonical.set(m.canonical_product_id, img)
+  }
+
+  return items.map((i) => ({
+    ...i,
+    image_url:
+      i.photo_url || (i.canonical_product_id ? imageByCanonical.get(i.canonical_product_id) : "") || null,
+  }))
+}
+
 // Same, for an inventory item (ownership is via its location's practice).
 export async function loadOwnedItem(
   medmkp: MedMKPModuleService,
