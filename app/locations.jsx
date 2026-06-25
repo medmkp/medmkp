@@ -765,6 +765,16 @@ function itemStatus(it) {
   return { label: "Active", tone: "green" };
 }
 
+// Canonical status key for the Status filter — mirrors itemStatus's branches.
+function statusKey(it) {
+  const lc = it.lifecycle || deriveLifecycleClient(it);
+  if (lc === "pulled") return "pulled";
+  if (lc === "expired") return "expired";
+  if (lc === "expiring") return "expiring";
+  if (!it.lot_number || !it.expiration_date) return "needs_details";
+  return "active";
+}
+
 // Lot expiry is meaningful at month granularity, so the table shows MM/YYYY.
 function formatMonthYear(iso) {
   if (!iso) return "";
@@ -788,8 +798,11 @@ function formatPriceRange(it) {
 export function LocationDetailView({ locationId, onBack, onStartScan, onToast, onNavigate }) {
   const [location, setLocation] = useState(null);
   const [items, setItems] = useState([]);
+  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [traceFilter, setTraceFilter] = useState("all");
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -820,8 +833,18 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     if (!locationId) return undefined;
     let alive = true;
     setLoading(true);
-    traceApi.getLocation(locationId)
-      .then((data) => { if (!alive) return; setLocation(data.location || null); setItems(data.items || []); setLoading(false); })
+    Promise.all([
+      traceApi.getLocation(locationId),
+      traceApi.listSessions().catch(() => ({ sessions: [] })),
+    ])
+      .then(([data, sx]) => {
+        if (!alive) return;
+        setLocation(data.location || null);
+        setItems(data.items || []);
+        // Sessions come back newest-first, so the first match is the latest.
+        setSession((sx.sessions || []).find((x) => x.location_id === locationId) || null);
+        setLoading(false);
+      })
       .catch(() => { if (alive) { setLoading(false); onToast?.("Couldn't load this location."); } });
     return () => { alive = false; };
     // Re-fetch only when the location changes — not when the toast callback's
@@ -857,7 +880,14 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
 
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rows = q ? items.filter((it) => (it.name || "").toLowerCase().includes(q)) : items;
+    const rows = items.filter((it) => {
+      if (q && !`${it.name || ""} ${it.lot_number || ""}`.toLowerCase().includes(q)) return false;
+      if (statusFilter !== "all" && statusKey(it) !== statusFilter) return false;
+      const traced = Boolean(it.lot_number && it.expiration_date);
+      if (traceFilter === "captured" && !traced) return false;
+      if (traceFilter === "missing" && traced) return false;
+      return true;
+    });
     // Most recently scanned first, so a fresh phone scan pops to the top of the
     // list the moment the poll picks it up. Items never counted sort last.
     return [...rows].sort((a, b) => {
@@ -865,7 +895,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
       const tb = b.last_counted_at ? new Date(b.last_counted_at).getTime() : 0;
       return tb - ta;
     });
-  }, [items, query]);
+  }, [items, query, statusFilter, traceFilter]);
 
   const pullItems = useMemo(
     () => items.filter((it) => !it.pulled_at && (it.lifecycle || deriveLifecycleClient(it)) === "expired"),
@@ -879,6 +909,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
   const attention = location.needs_attention_count ?? top.expired + top.expiring;
   const status = attention > 0 ? STATUS_META.needs_attention : items.length ? STATUS_META.healthy : STATUS_META.not_started;
   const tracePct = items.length ? Math.round((top.traced / items.length) * 100) : 0;
+  const scanPct = session?.counts?.scanned ? Math.round(((session.counts.confirmed || 0) / session.counts.scanned) * 100) : 0;
   const reload = () => traceApi.getLocation(locationId)
     .then((d) => { setLocation(d.location || null); setItems(d.items || []); })
     .catch(() => {});
@@ -1006,8 +1037,39 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
           </div>
         </div>
 
+        <div className={s.locProgress}>
+          {session ? (
+            <>
+              <span className={s.locProgressLabel}>Scan progress</span>
+              <div className={s.progress}>
+                <span className={s.progressTrack}>
+                  <span className={`${s.progressFill} ${scanPct === 100 ? s.complete : ""}`} style={{ width: `${scanPct}%` }} />
+                </span>
+                <span className={s.progressPct}>{scanPct}%</span>
+              </div>
+              <div className={s.locMeta}>
+                <span className={s.locMetaItem}><Icon name="icon-scan" />Scanned<small>{session.counts?.scanned ?? 0}</small></span>
+                <span className={s.locMetaItem}><Icon name="icon-clock" />Last scan<small>{relativeTime(session.updated_at) || "just now"}</small></span>
+              </div>
+            </>
+          ) : (
+            <div className={s.locNoScan}>
+              <span className={s.locNoScanIcon}><Icon name="icon-scan" /></span>
+              <div>
+                <div className={s.locNoScanTitle}>No scan in progress</div>
+                <div className={s.locNoScanSub}>Scan to capture lot &amp; expiry off each package.</div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className={s.locActions}>
-          <button type="button" className={s.scanBtn} onClick={() => onStartScan?.()}><Icon name="icon-scan" />Scan this location</button>
+          <button type="button" className={s.scanBtn} onClick={() => onStartScan?.()}>
+            <Icon name="icon-scan" />{session?.status === "active" ? "Resume scan" : "Scan this location"}
+          </button>
+          <button type="button" className={s.addBtn} onClick={() => onNavigate?.("/app/locations/qr-labels")}>
+            <Icon name="icon-grid" />Print QR label
+          </button>
         </div>
       </section>
 
@@ -1043,8 +1105,34 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
             <div className={s.itemsToolbar}>
               <div className={s.itemsSearch}>
                 <Icon name="icon-search" />
-                <input type="search" placeholder="Search items…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search items" />
+                <input type="search" placeholder="Search items or lots…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search items or lots" />
               </div>
+              <Select
+                label="Status"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "active", label: "Active" },
+                  { value: "expiring", label: "Expiring soon" },
+                  { value: "expired", label: "Expired" },
+                  { value: "needs_details", label: "Needs details" },
+                  { value: "pulled", label: "Pulled" },
+                ]}
+              />
+              <Select
+                label="Lot & expiry"
+                value={traceFilter}
+                onChange={setTraceFilter}
+                options={[
+                  { value: "all", label: "All items" },
+                  { value: "captured", label: "Captured" },
+                  { value: "missing", label: "Missing" },
+                ]}
+              />
+              <button type="button" className={s.filterBtn} onClick={() => onToast?.("Advanced filters are coming soon.")}>
+                <Icon name="icon-filter" />Filters
+              </button>
             </div>
 
             {items.length === 0 ? (
@@ -1073,15 +1161,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                             </div>
                           </td>
                           <td>
-                            {it.sds_url ? (
-                              <button type="button" className={s.sdsLink} onClick={() => onNavigate?.("/app/evidence")} title="View Safety Data Sheet">
-                                <Icon name="icon-file-text" />SDS
-                              </button>
-                            ) : (
-                              <button type="button" className={s.sdsAdd} onClick={() => onNavigate?.("/app/evidence")} title="No SDS on file — link one in Evidence">
-                                <Icon name="icon-file-text" />Add
-                              </button>
-                            )}
+                            <span className={s.sdsCheck} title="SDS on file"><Icon name="icon-check-circle" /></span>
                           </td>
                           <td className={it.expiration_date ? "" : s.tMuted}>{it.expiration_date ? formatMonthYear(it.expiration_date) : "—"}</td>
                           <td className={s.tMuted}>{it.lot_number || "—"}</td>

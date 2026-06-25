@@ -1349,13 +1349,30 @@
 .locProgress { display: flex; flex-direction: column; gap: 7px; }
 .locProgressLabel { font-size: 12.5px; font-weight: 500; color: #6b7888; }
 
-.locMeta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 4px; }
+.locMeta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 6px; }
 .locMetaItem { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 500; color: #3a4a5a; }
 .locMetaItem svg { width: 15px; height: 15px; color: #9aa6b4; }
-.locMetaItem small { display: block; font-size: 11px; font-weight: 500; color: #9aa6b4; }
+.locMetaItem small { font-weight: 600; color: #14202E; }
 
-.locActions { display: flex; flex-direction: column; gap: 8px; min-width: 180px; }
-.locActions .scanBtn { justify-content: center; height: 40px; }
+/* Middle column when no scan session exists yet — a quiet prompt instead of a bar. */
+.locNoScan { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.locNoScanIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #eef2f8;
+  color: #8a97a6;
+  flex-shrink: 0;
+}
+.locNoScanIcon svg { width: 18px; height: 18px; }
+.locNoScanTitle { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.locNoScanSub { font-size: 12px; color: #6b7888; margin-top: 1px; }
+
+.locActions { display: flex; flex-direction: column; gap: 8px; min-width: 200px; }
+.locActions .scanBtn, .locActions .addBtn { width: 100%; justify-content: center; height: 40px; }
 
 .btnWide {
   display: inline-flex;
@@ -1489,29 +1506,14 @@
 .tdRed { color: var(--red); font-weight: 500; }
 .tdAmber { color: #c2710c; font-weight: 500; }
 
-/* SDS cell: a per-item link to the Safety Data Sheet. Blue when one is on file,
-   a muted "Add" affordance (to the Evidence library) when it isn't. */
-.sdsLink, .sdsAdd {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.sdsLink svg, .sdsAdd svg { width: 14px; height: 14px; flex-shrink: 0; }
-.sdsLink { color: var(--blue); }
-.sdsLink:hover { text-decoration: underline; }
-.sdsAdd { color: var(--muted); }
-.sdsAdd:hover { color: var(--blue); }
+/* SDS cell: a green check marking the Safety Data Sheet is on file. */
+.sdsCheck { display: inline-flex; align-items: center; color: #1a8f53; }
+.sdsCheck svg { width: 16px; height: 16px; }
 
-/* Items toolbar + search — matches the Needs Attention search bar (white field,
-   #d6deea border, 13.5px text) rather than the board's tinted search. */
-.itemsToolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+/* Items toolbar — search + filter dropdowns + Filters button, matching the
+   Needs Attention worklist toolbar (search grows, filters stay fixed-width,
+   everything stretches to a common height). */
+.itemsToolbar { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
 .itemsSearch {
   display: inline-flex;
   align-items: center;
@@ -1520,10 +1522,12 @@
   border-radius: 10px;
   padding: 0 12px;
   background: #fff;
-  flex: 1 1 240px;
+  flex: 1 1 220px;
   min-width: 180px;
-  max-width: 340px;
 }
+/* The shared Select (.field) and the Filters button size to the toolbar height. */
+.itemsToolbar .field { flex: 0 0 150px; }
+.itemsToolbar .filterBtn { flex: 0 0 auto; }
 .itemsSearch svg { width: 16px; height: 16px; color: #8a97a6; flex-shrink: 0; }
 .itemsSearch input {
   border: 0;
