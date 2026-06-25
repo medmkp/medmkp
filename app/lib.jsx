@@ -769,6 +769,9 @@ export const traceApi = {
   updateLocation: (id, body) => traceFetch(`/api/locations/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
   deleteLocation: (id, force) =>
     traceFetch(`/api/locations/${encodeURIComponent(id)}${force ? "?force=1" : ""}`, { method: "DELETE" }),
+  // Permanently delete every inventory item captured at a location ("Clear list").
+  clearLocationItems: (id) =>
+    traceFetch(`/api/locations/${encodeURIComponent(id)}/items`, { method: "DELETE" }),
   listSessions: (query = "") => traceFetch(`/api/scan-sessions${query}`),
   startSession: (body) => traceFetch("/api/scan-sessions", jsonBody("POST", body)),
   getSession: (id) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}`),
