@@ -954,14 +954,28 @@ function ReorderScanSheet({ result, onPersist, onDismiss }) {
 // a "reading…" note while it runs, then a confirm-it note once the fields are
 // pre-filled. Assistive — the values land in the editable fields, never silently.
 function OcrHint({ ocrBusy, suggestion }) {
-  const found = !ocrBusy && (suggestion?.lot || suggestion?.expiry);
-  if (!ocrBusy && !found) return null;
+  if (ocrBusy) {
+    return (
+      <div className={s.modeSheetInfo} aria-live="polite">
+        <Icon name="icon-scan" />
+        Reading lot &amp; expiry off the label…
+      </div>
+    );
+  }
+  // suggestion is null until OCR has run (it doesn't run when the barcode already
+  // carried lot + expiry); once it has, name exactly what was filled so a blank
+  // field reads as "type this in", not a silent miss.
+  if (!suggestion) return null;
+  const { lot, expiry } = suggestion;
+  let msg;
+  if (lot && expiry) msg = "Filled lot & expiry from the label — check they’re right.";
+  else if (lot) msg = "Filled the lot from the label — check it’s right.";
+  else if (expiry) msg = "Filled the expiry from the label — check it’s right.";
+  else msg = "Couldn’t read lot or expiry off the label — enter them below.";
   return (
     <div className={s.modeSheetInfo} aria-live="polite">
       <Icon name="icon-scan" />
-      {ocrBusy
-        ? "Reading lot & expiry off the label…"
-        : "Filled lot/expiry from the label — check they’re right."}
+      {msg}
     </div>
   );
 }

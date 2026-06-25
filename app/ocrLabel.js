@@ -114,26 +114,94 @@ export function parseLotExpiry(text) {
 
 // ── Browser OCR engine ────────────────────────────────────────────────
 
-// One Tesseract worker, created on first use and reused — the WASM core + the
-// English model are ~12 MB to load, so we never pay that twice. Lazy-imported so
+// One lazy import of Tesseract (the WASM core + the English model are ~12 MB, so
+// we load them once) and one worker built from it — never pay that twice. Lazy so
 // none of it touches the initial bundle (same pattern as the @zxing QR writer).
+let modulePromise = null;
 let workerPromise = null;
+function getModule() {
+  if (!modulePromise) modulePromise = import("tesseract.js");
+  return modulePromise;
+}
 function getWorker() {
-  if (!workerPromise) {
-    workerPromise = import("tesseract.js").then(({ createWorker }) => createWorker("eng"));
-  }
+  if (!workerPromise) workerPromise = getModule().then(({ createWorker }) => createWorker("eng"));
   return workerPromise;
+}
+
+// Grayscale + per-frame contrast-stretch the captured frame onto a fresh canvas.
+// Medical labels print dark text on saturated foil/colour (Patterson's gold
+// suture labels, Pulpdent's boxed markers); Tesseract reads the luma far more
+// reliably than the raw colour frame, and stretching the actual tonal range to
+// full black/white rescues low-contrast foil. Small crops are upscaled — the
+// recogniser wants tall glyphs. Best-effort: returns the source untouched if the
+// frame can't be read back (e.g. a tainted canvas, or no DOM).
+function preprocess(source) {
+  const sw = source.width || source.videoWidth || 0;
+  const sh = source.height || source.videoHeight || 0;
+  if (!sw || !sh || typeof document === "undefined") return source;
+  const minSide = Math.min(sw, sh);
+  const scale = minSide < 800 ? Math.min(2, 1200 / minSide) : 1;
+  const w = Math.round(sw * scale), h = Math.round(sh * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return source;
+  ctx.drawImage(source, 0, 0, w, h);
+  let image;
+  try { image = ctx.getImageData(0, 0, w, h); } catch { return canvas; }
+  const px = image.data;
+  // Pass 1: luma, plus a histogram of the result.
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < px.length; i += 4) {
+    const g = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+    px[i] = px[i + 1] = px[i + 2] = g;
+    hist[g]++;
+  }
+  // Pass 2: stretch the 0.5–99.5 percentile band to [0,255] (percentiles, not
+  // min/max, so a glare highlight or a dark edge doesn't flatten the stretch).
+  const cut = (px.length / 4) * 0.005;
+  let lo = 0, hi = 255, acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= cut) { lo = v; break; } }
+  acc = 0;
+  for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc >= cut) { hi = v; break; } }
+  const span = Math.max(1, hi - lo);
+  for (let i = 0; i < px.length; i += 4) {
+    let v = ((px[i] - lo) * 255) / span;
+    v = v < 0 ? 0 : v > 255 ? 255 : v;
+    px[i] = px[i + 1] = px[i + 2] = v;
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
 }
 
 // Run OCR on a captured frame (a canvas / ImageBitmap / blob) and return the
 // parsed { lot, expiry }. Resolves to {} on any failure — OCR is best-effort and
 // the user can always type the values in.
+//
+// Two page-segmentation passes, because no single mode reads every label:
+// SPARSE_TEXT ("find text anywhere, ignore layout") nails labels whose lot/expiry
+// sit next to a 2D barcode — the layout-aware modes treat that row as an image
+// and drop it — while AUTO recovers low-contrast foil that sparse mode misses
+// entirely. Run sparse first, only fall back to AUTO for a field it didn't get,
+// then keep each field from whichever pass found it.
 export async function ocrLotExpiry(source) {
   if (!source) return {};
   try {
-    const worker = await getWorker();
-    const { data } = await worker.recognize(source);
-    return parseLotExpiry(data?.text || "");
+    const [{ PSM }, worker] = await Promise.all([getModule(), getWorker()]);
+    const image = preprocess(source);
+    const read = async (psm) => {
+      await worker.setParameters({ tessedit_pageseg_mode: psm });
+      const { data } = await worker.recognize(image);
+      return parseLotExpiry(data?.text || "");
+    };
+    let { lot, expiry } = await read(PSM.SPARSE_TEXT);
+    if (!lot || !expiry) {
+      const more = await read(PSM.AUTO);
+      lot = lot || more.lot;
+      expiry = expiry || more.expiry;
+    }
+    return { lot, expiry };
   } catch {
     return {};
   }
