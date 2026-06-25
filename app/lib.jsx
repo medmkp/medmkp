@@ -688,6 +688,18 @@ function isLikelyGtin(value) {
   return (10 - (sum % 10)) % 10 === check;
 }
 
+// A scanned code that's a website link, not a product — our own tracedds.com QR
+// codes (on packaging / the styleguide), or any URL QR. These never resolve to a
+// catalog item, so the scanner buzzes and skips them rather than filing junk.
+export function isQrUrl(code) {
+  const raw = String(code || "").trim();
+  if (!raw) return false;
+  if (/^https?:\/\//i.test(raw)) return true;   // full URL
+  if (/^www\./i.test(raw)) return true;         // scheme-less URL
+  if (/\btracedds\.com\b/i.test(raw)) return true; // our own QR codes
+  return false;
+}
+
 // Why a scan didn't resolve to a catalog product, phrased for the buyer. Turns a
 // silent "Needs review" into an explanation: a QR that's only a marketing URL, an
 // HIBC/GTIN we don't carry yet, or a code that isn't a product at all (an

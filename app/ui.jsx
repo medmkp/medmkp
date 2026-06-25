@@ -37,14 +37,15 @@ export function useBarcodeScanner({ active, onScan }) {
     // Fire one scan, then cool down briefly so flicker/misreads between frames
     // don't double-register. A barcode held continuously in frame is suppressed
     // by lastCode in the loop below, so this cooldown only debounces the handoff
-    // from one code to the next.
+    // from one code to the next — kept short so scanning several items in a row
+    // keeps up with the buyer instead of dropping the ones in between.
     function fire(code) {
       if (cooling) return;
       cooling = true;
       lastCode = code || lastCode;
       if (navigator.vibrate) navigator.vibrate(50);
       onScanRef.current?.(code || null);
-      cooldownId = window.setTimeout(() => { cooling = false; }, 1200);
+      cooldownId = window.setTimeout(() => { cooling = false; }, 800);
     }
 
     async function detectOn(source) {

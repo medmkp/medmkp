@@ -105,7 +105,7 @@ function DesktopScanTray({ result, onNavigate }) {
           <div className="desktop-scan-thumb"><Icon name="icon-x" className="button-icon" /></div>
           <div>
             <strong>{item.barcode ? `Code ${item.barcode}` : "No code read"}</strong>
-            <span>It&rsquo;s on your list as “Needs review” — search the catalog to link the right product.</span>
+            <span>Nothing was added — search the catalog to add the right product.</span>
           </div>
         </div>
       </aside>
