@@ -310,14 +310,29 @@ async function resolveHitsToProducts(
 async function fuzzyCanonicalSearch(
   medmkp: MedMKPModuleService,
   q: string,
-  limit: number
+  limit: number,
+  // When given, retrieve candidates by EACH of these tokens (union) instead of
+  // the single most distinctive one. The substitute path passes the product's
+  // top tokens so a house-brand name ("Criterion ...") whose longest token is
+  // the brand still pulls the product TYPE ("nitrile") into the pool.
+  retrievalTokens?: string[]
 ): Promise<Array<{ product: any; score: number }>> {
   const queryTokens = tokenizeName(q)
-  const distinctive = [...queryTokens].sort((a, b) => b.length - a.length)[0] || q
-  const candidates = await medmkp.listCanonicalProducts(
-    { q: distinctive.length >= 3 ? distinctive : q },
-    { take: 600 }
-  )
+  let candidates: CanonicalRow[]
+  if (retrievalTokens && retrievalTokens.length) {
+    const pools = await Promise.all(
+      retrievalTokens
+        .slice(0, 3)
+        .map((token) => medmkp.listCanonicalProducts({ q: token }, { take: 400 }))
+    )
+    candidates = dedupeById(pools.flat())
+  } else {
+    const distinctive = [...queryTokens].sort((a, b) => b.length - a.length)[0] || q
+    candidates = await medmkp.listCanonicalProducts(
+      { q: distinctive.length >= 3 ? distinctive : q },
+      { take: 600 }
+    )
+  }
 
   const queryGrams = trigrams(queryTokens.join(" ") || q.toLowerCase())
   const scored = candidates
@@ -347,7 +362,16 @@ async function substitutesFor(
   limit: number
 ): Promise<any[]> {
   if (!name.trim()) return []
-  const results = await fuzzyCanonicalSearch(medmkp, name, limit)
+  // Retrieve by the few most distinctive tokens, not just the single longest:
+  // for a house-brand item ("Criterion N300 Nitrile Exam Gloves ...") the longest
+  // token is the brand, so a single-token pull only finds its own price-less
+  // siblings. Including the next tokens pulls the product type ("nitrile") into
+  // the pool; the full-name rerank then floats the closest priced equivalents.
+  const retrieval = [...new Set(tokenizeName(name))]
+    .filter((token) => token.length >= 3 && /[a-z]/.test(token))
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 3)
+  const results = await fuzzyCanonicalSearch(medmkp, name, limit, retrieval)
   return results
     .filter((r) => r.product.offer_count > 0)
     .map((r) => ({ ...r.product, match: { kind: "substitute", score: r.score } }))

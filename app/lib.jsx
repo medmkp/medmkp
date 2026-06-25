@@ -1402,7 +1402,11 @@ export function offerCandidates(row) {
   }));
   if (fromOffers.length) return fromOffers;
   if (row.matchName) {
-    return [{ key: row.selectedOfferKey || null, name: row.matchName, supplier: row.supplier, sub: row.matchSub, packLabel: row.packLabel, price: row.price, perEa: row.perEa, image: row.image, recommended: true, availability: row.availability, liveAvailable: row.liveAvailable, productUrl: row.productUrl || "" }];
+    // No purchasable offer (login-gated supplier, e.g. Henry Schein house
+    // brands): fall back to the catalog brand so the candidate still names the
+    // supplier instead of a bare "—". Mirrors the list row's MatchSupplier.
+    const fallbackSupplier = row.supplier && row.supplier !== "—" ? row.supplier : row.matchBrand || row.supplier;
+    return [{ key: row.selectedOfferKey || null, name: row.matchName, supplier: fallbackSupplier, sub: row.matchSub, packLabel: row.packLabel, price: row.price, perEa: row.perEa, image: row.image, recommended: true, availability: row.availability, liveAvailable: row.liveAvailable, productUrl: row.productUrl || "" }];
   }
   return [];
 }

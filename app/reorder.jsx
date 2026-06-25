@@ -685,7 +685,11 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
     productUrl: offer.productUrl || "",
   })), row.selectedOfferKey);
   if (!isResolve && !candidates.length && row.matchName) {
-    candidates.push({ key: row.selectedOfferKey || null, name: row.matchName, supplier: row.supplier, sub: row.matchSub, packLabel: row.packLabel, price: row.price, perEa: row.perEa, image: row.image, recommended: true, confidence: row.confidence, availability: row.availability, liveAvailable: row.liveAvailable, productUrl: row.productUrl || "" });
+    // No purchasable offer (login-gated supplier, e.g. Henry Schein house
+    // brands): name the matched supplier from the catalog brand rather than a
+    // bare "—", so the buyer can see who carries it even with no listed price.
+    const fallbackSupplier = row.supplier && row.supplier !== "—" ? row.supplier : row.matchBrand || row.supplier;
+    candidates.push({ key: row.selectedOfferKey || null, name: row.matchName, supplier: fallbackSupplier, sub: row.matchSub, packLabel: row.packLabel, price: row.price, perEa: row.perEa, image: row.image, recommended: true, confidence: row.confidence, availability: row.availability, liveAvailable: row.liveAvailable, productUrl: row.productUrl || "" });
   }
   const recIdx = candidates.findIndex((candidate) => candidate.recommended);
   if (recIdx > 0) candidates.unshift(...candidates.splice(recIdx, 1));
@@ -789,7 +793,7 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
                 <input type="radio" name="m-cand" checked={selected === 0} disabled={!isOrderable(candidates[0])} onChange={() => setSelected(0)} />
                 <ProductThumb image={candidates[0].image} alt={candidates[0].name} />
                 <span className="m-match-info"><CandidateName supplier={candidates[0].supplier} name={candidates[0].name} canonicalName={row.canonicalName} productUrl={candidates[0].productUrl} />{candidates[0].packLabel && <small>{candidates[0].packLabel}</small>}<CandidateStock availability={candidates[0].availability} liveAvailable={candidates[0].liveAvailable} /></span>
-                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrPriceLabel(candidates[0].price)}</strong>{showPerEa(candidates[0].perEa, candidates[0].price) && <small>${mrEa(candidates[0].perEa)} / ea</small>}</span>
+                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrPriceLabel(candidates[0].price)}</strong>{showPerEa(candidates[0].perEa, candidates[0].price) ? <small>${mrEa(candidates[0].perEa)} / ea</small> : (!(candidates[0].price > 0) && candidates[0].supplier && candidates[0].supplier !== "—" && <small>Login required</small>)}</span>
               </label>
             </section>
             {candidates.length > 1 && (
