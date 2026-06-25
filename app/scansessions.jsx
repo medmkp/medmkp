@@ -6,6 +6,7 @@ import {
   SCAN_BUCKETS,
   daysUntil,
   formatTraceDate,
+  isQrUrl,
   scanLinePayload,
   scanLookup,
   scanMissReason,
@@ -290,6 +291,14 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
 
   const handleScan = useCallback(async (code) => {
     if (!code || !active) return;
+    // A website QR — our own tracedds.com codes or any URL — isn't a product.
+    // Never file it as a review line (same guard as the reorder scanner): buzz +
+    // explain, and keep the camera scanning for the next item.
+    if (isQrUrl(code)) {
+      vibrateNoMatch();
+      onToast?.("Skipped a website QR code — that's not a product barcode.");
+      return;
+    }
     try {
       const { product, scanned, kind } = await scanLookup(code);
       const payload = scanLinePayload(code, product, scanned);
