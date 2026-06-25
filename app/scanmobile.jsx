@@ -117,49 +117,6 @@ function ModeCard({ value, onSelect, meta }) {
   );
 }
 
-// ── Location-scoped mode chooser (deep-link from a printed QR label) ──
-// Same record-type choice as the generic picker, but the location is already
-// known, so it's named up top and only the two scan records that apply to a
-// shelf are offered (Reorder isn't a per-location action).
-function ScopedModeChooser({ location, starting, onPick, onBack }) {
-  const meta = typeMeta(location.type);
-  return (
-    <div className={s.screen}>
-      <header className={s.topbar}>
-        <button type="button" className={s.iconBtn} onClick={onBack} aria-label="Back">
-          <Icon name="icon-chevron-left" />
-        </button>
-        <span className={s.barTitle}>Scan location</span>
-      </header>
-      <div className={s.body}>
-        <div className={s.scopedHead}>
-          <span className={`${s.scopedIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
-          <div className={s.intro}>
-            <h1 className={s.h1}>{location.name}</h1>
-            <p className={s.sub}>Choose how to scan this location.</p>
-          </div>
-        </div>
-
-        <div className={s.modeCards}>
-          {["shelf_audit", "receiving"].map((value) => (
-            <ModeCard
-              key={value}
-              value={value}
-              onSelect={(v) => { if (!starting) onPick(v); }}
-              meta={SCAN_MODE_META[value]}
-            />
-          ))}
-        </div>
-
-        <div className={s.infoBanner}>
-          <Icon name="icon-info" />
-          Shelf Audit checks what&rsquo;s on this shelf; Receiving logs a new delivery.
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Screens 1 + 2: Start scan / Choose mode / Choose location ────────
 
 export function MobileScanStart({
@@ -175,7 +132,17 @@ export function MobileScanStart({
     () => (startLocationId ? (locations || []).find((l) => l.id === startLocationId) : null),
     [startLocationId, locations],
   );
-  const [scopedDismissed, setScopedDismissed] = useState(false);
+  // Scanning a label drops straight into the camera: auto-start (or resume) a
+  // shelf-audit session for that location — Shelf Audit is the default, and the
+  // scanner's mode selector switches to Receiving. Fire once.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStarted.current) return;
+    if (startLocationId && scopedLocation) {
+      autoStarted.current = true;
+      onStart(scopedLocation, "shelf_audit");
+    }
+  }, [startLocationId, scopedLocation, onStart]);
 
   const attnItems = needsAttention?.items || 0;
   const attnLocs  = needsAttention?.locations || 0;
@@ -204,31 +171,18 @@ export function MobileScanStart({
     setStep("audit-scanner");
   }
 
-  // ── Screen: location-scoped chooser (deep-link from a QR label) ─────
-  // The location is already known (scanned off the cabinet), so skip straight
-  // to the record-type choice. Shelf Audit scopes to this location; Receiving
-  // is a delivery that fans out to many shelves, so it isn't location-bound.
-  if (startLocationId && !scopedDismissed) {
-    if (scopedLocation) {
-      return (
-        <ScopedModeChooser
-          location={scopedLocation}
-          starting={starting}
-          onPick={(mode) => onStart(mode === "receiving" ? null : scopedLocation, mode)}
-          onBack={() => setScopedDismissed(true)}
-        />
-      );
-    }
-    // Still loading the location list — hold before deciding it's missing.
-    if (loading) {
-      return (
-        <div className={s.screen}>
-          <div className={`${s.body} ${s.bodyTop}`}><div className={s.emptyNote}>Loading…</div></div>
+  // ── Screen: deep-link from a printed QR — auto-starting into the camera ──
+  // Hold on a quiet loading screen while the shelf-audit session is created and
+  // we navigate into the scanner. A stale/deleted location id falls through to
+  // the normal start screen rather than dead-ending.
+  if (startLocationId && (scopedLocation || loading)) {
+    return (
+      <div className={s.screen}>
+        <div className={`${s.body} ${s.bodyTop}`}>
+          <div className={s.emptyNote}>{scopedLocation ? "Starting shelf audit…" : "Loading…"}</div>
         </div>
-      );
-    }
-    // Location not found (deleted or a stale link) — fall through to the normal
-    // start screen rather than dead-end.
+      </div>
+    );
   }
 
   // ── Screen: choose scan mode ────────────────────────────────────────
@@ -412,12 +366,12 @@ export function MobileScanSession({
   session, lines, counts, active,
   pendingLine, captureType,
   onScan, onAddProduct, onPatchLine, onRemoveLine, onComplete, onBack, onClearPending,
-  locations, onSwitchLocation, onNavigate,
+  locations, onSwitchLocation, onSwitchMode, onNavigate,
 }) {
   const [viewMode, setViewMode] = useState("scan"); // scan | review
   const [detail, setDetail] = useState(null);
   const [link, setLink]   = useState(null);
-  const [sheet, setSheet] = useState(null); // manual | search | help | location
+  const [sheet, setSheet] = useState(null); // manual | search | help | location | mode
   // Mode is fixed for the life of the session — chosen up front, never switched
   // mid-scan (Receiving and Shelf Audit are different events, not two views).
   const localMode = captureType || "shelf_audit";
@@ -448,6 +402,16 @@ export function MobileScanSession({
   // (last place put away to); Shelf Audit shows the audited location.
   const receivingLoc = locations.find((l) => l.id === receivingLocId) || locations[0] || null;
   const locLabel = localMode === "receiving" ? (receivingLoc?.name || "Set location") : locName;
+
+  // The mode badge is a selector. Receiving and Shelf Audit are different
+  // sessions (receiving is location-less; an audit is scoped to one location),
+  // so switching starts/resumes the other session and navigates into it.
+  // Switching back to Shelf Audit reuses the location we're already pointed at.
+  function pickMode(mode) {
+    setSheet(null);
+    if (mode === localMode) return;
+    onSwitchMode?.(mode, mode === "receiving" ? null : receivingLoc);
+  }
 
   // ----- Shelf details (deep edit) -----
   if (detail) {
@@ -533,17 +497,22 @@ export function MobileScanSession({
         </span>
       </div>
 
-      {/* Context strip — mode badge + location, anchored under the header so it
-          holds its position across the scan → post-scan transition (the sheet
-          rises underneath it, nothing hops). The mode badge is a read-only
-          identity marker; the location is the interactive selector — for
-          Receiving it sets the sticky default, for Shelf Audit it switches the
-          audited location. */}
+      {/* Context strip — mode selector + location, anchored under the header so
+          it holds its position across the scan → post-scan transition (the sheet
+          rises underneath it, nothing hops). Both are selectors: the mode badge
+          switches Shelf Audit ↔ Receiving; the location pill — for Receiving sets
+          the sticky default, for Shelf Audit switches the audited location. */}
       <div className={s.contextStrip}>
-        <span className={`${s.modeBadge} ${localMode === "receiving" ? s.modeBadgeReceiving : s.modeBadgeAudit}`}>
+        <button
+          type="button"
+          className={`${s.modeBadge} ${s.modeBadgeBtn} ${localMode === "receiving" ? s.modeBadgeReceiving : s.modeBadgeAudit}`}
+          onClick={() => setSheet("mode")}
+          aria-label={`Scan mode: ${SCAN_MODE_META[localMode]?.label}. Change mode.`}
+        >
           <Icon name={localMode === "receiving" ? "icon-package" : "icon-clipboard-check"} />
           {SCAN_MODE_META[localMode]?.label}
-        </span>
+          <span className={s.modeBadgeCaret}><Icon name="icon-chevron-down" /></span>
+        </button>
         <button type="button" className={s.locPill} onClick={() => setSheet("location")}>
           <Icon name="icon-map-pin" />
           <span className={s.locPillName}>{locLabel}</span>
@@ -585,6 +554,7 @@ export function MobileScanSession({
       )}
 
       {sheet === "manual"   && <ManualSheet onClose={() => setSheet(null)} onSubmit={(code) => { onScan(code); setSheet(null); }} />}
+      {sheet === "mode"     && <ModeSheet current={localMode} onClose={() => setSheet(null)} onPick={pickMode} />}
       {sheet === "search"   && <SearchSheet title="Search product" onClose={() => setSheet(null)} onPick={(p) => { onAddProduct(p); setSheet(null); }} />}
       {sheet === "location" && (
         <LocationSheet
@@ -1552,6 +1522,34 @@ function SearchSheet({ title, hint, onClose, onPick }) {
       {hint && <p className={s.sheetHint}>{hint}</p>}
       <div className={s.sheetScroll}>
         <ProductSearchResults query={query} results={results} loading={loading} onPick={onPick} emptyHint="Type a product name to find it." />
+      </div>
+    </SheetShell>
+  );
+}
+
+// Mode selector — switch the session between Shelf Audit and Receiving. Reorder
+// isn't offered here: it scans into the reorder list, not this evidence session.
+function ModeSheet({ current, onClose, onPick }) {
+  return (
+    <SheetShell title="Scan mode" onClose={onClose}>
+      <div className={s.sheetScroll}>
+        <div className={s.locList}>
+          {["shelf_audit", "receiving"].map((m) => {
+            const meta = SCAN_MODE_META[m];
+            return (
+              <button key={m} type="button" className={s.locRow} onClick={() => onPick(m)}>
+                <span className={s.locRowIcon}><Icon name={m === "receiving" ? "icon-package" : "icon-clipboard-check"} /></span>
+                <span className={s.modeRowBody}>
+                  <span className={s.locRowName}>{meta.label}</span>
+                  <span className={s.modeRowDesc}>{meta.desc}</span>
+                </span>
+                {m === current
+                  ? <span className={s.lastUsedCheck}><Icon name="icon-check" /></span>
+                  : <span className={s.locRowChevron}><Icon name="icon-chevron-right" /></span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </SheetShell>
   );

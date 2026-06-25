@@ -386,6 +386,20 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
     }
   }
 
+  // Switch the record type from the scanner's mode selector. Each mode is its
+  // own session (receiving is location-less; an audit is scoped to a location),
+  // so start/resume the matching session and navigate into it.
+  async function switchMode(mode, location) {
+    try {
+      const body = { capture_type: mode };
+      if (mode !== "receiving" && location?.id) body.location_id = location.id;
+      const { session: next } = await traceApi.startSession(body);
+      onNavigate?.(`/app/scan-sessions/${next.id}`);
+    } catch {
+      onToast?.("Couldn't switch scan mode.");
+    }
+  }
+
   const counts = session?.counts || { scanned: 0, confirmed: 0, needs_details: 0, needs_review: 0 };
   const traced = useMemo(() => lines.filter((l) => l.lot_number && l.expiration_date).length, [lines]);
   const tracePct = counts.scanned ? Math.round((traced / counts.scanned) * 100) : 0;
@@ -416,6 +430,7 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
         onClearPending={() => setPendingLine(null)}
         locations={locations}
         onSwitchLocation={switchLocation}
+        onSwitchMode={switchMode}
         onNavigate={onNavigate}
       />
     );

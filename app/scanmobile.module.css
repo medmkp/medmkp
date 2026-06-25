@@ -279,6 +279,10 @@
 .locRowIcon { color: #2F5BD6; flex-shrink: 0; display: inline-flex; }
 .locRowIcon svg { width: 26px; height: 26px; }
 .locRowName { flex: 1; min-width: 0; font-size: 16px; font-weight: 500; color: #14202E; }
+/* Mode rows pair a label with a one-line description. */
+.modeRowBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.modeRowBody .locRowName { flex: 0 0 auto; }
+.modeRowDesc { font-size: 12.5px; color: #6a7889; line-height: 1.3; }
 .locRowChevron { color: #b6c0cd; flex-shrink: 0; }
 .locRowChevron svg { width: 19px; height: 19px; }
 
@@ -855,19 +859,6 @@
 .attnChevron { color: #cbb487; flex-shrink: 0; }
 .attnChevron svg { width: 20px; height: 20px; }
 
-/* ── Location-scoped chooser (deep-link from a QR label) ────────────── */
-.scopedHead { display: flex; align-items: center; gap: 12px; }
-.scopedIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  flex-shrink: 0;
-}
-.scopedIcon svg { width: 22px; height: 22px; }
-
 /* ── Mode picker (Screen 1) ─────────────────────────────────────────── */
 .modeCards { display: flex; flex-direction: column; gap: 12px; }
 .modeCard {
@@ -934,6 +925,11 @@
   border: 1px solid rgba(29, 158, 117, 0.55);
   color: #7fd9bf;
 }
+/* The badge is a tappable selector (button element), so inherit the app font
+   and add a caret. */
+.modeBadgeBtn { font-family: inherit; cursor: pointer; }
+.modeBadgeCaret { display: inline-flex; opacity: 0.85; margin-left: -1px; }
+.modeBadgeCaret svg { width: 14px; height: 14px; }
 
 /* ── Mode-specific bottom sheets ────────────────────────────────────── */
 .modeSheet {
