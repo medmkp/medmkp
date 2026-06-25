@@ -108,6 +108,19 @@
 .tGreen { color: #0a9861; background: #e5f6ec; }
 .tAmber { color: #c2710c; background: #fff3db; }
 .tRed { color: var(--red); background: rgba(209, 53, 43, 0.1); }
+
+/* Compact KPI cards (mobile only) — mirrors the scan Review screen's statGrid
+   so the Location Board header matches the just-merged Shelf Audit review. */
+.statsMini { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.statMini {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 4px 9px; border-radius: 12px;
+  border: 1px solid #e7ecf3; background: #fff;
+}
+.statMini svg { width: 17px; height: 17px; }
+.statMiniTop { display: flex; align-items: center; gap: 6px; }
+.statMiniVal { font-size: 19px; font-weight: 600; color: #14202E; line-height: 1; }
+.statMiniLabel { font-size: 11px; color: #6a7889; text-align: center; line-height: 1.15; }
 .tViolet { color: #7c3aed; background: #f1ecff; }
 .tIndigo { color: #4f46e5; background: #ebecff; }
 .tTeal { color: #0d9488; background: #e1f6f1; }
@@ -284,6 +297,13 @@
   gap: 8px;
   margin-left: auto;
 }
+
+/* The toolbar buttons have no vertical padding (they were sized by stretching
+   to match the search/filter row). With those hidden on mobile — and the row
+   wrapping on desktop — they collapse to text height, so give them a normal
+   button height. */
+.toolbarActions .addBtn,
+.toolbarActions .scanBtn { height: 40px; }
 
 .scanBtn {
   display: inline-flex;
@@ -1671,15 +1691,6 @@
   flex-shrink: 0;
 }
 .mBackBtn svg { width: 20px; height: 20px; }
-/* Labeled back-to-start link at the top of the mobile Location Board (no global
-   nav on mobile, so this is the way home to the scan start). */
-.mBack {
-  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
-  margin-bottom: -12px; padding: 4px 8px 4px 2px;
-  border: 0; background: none; cursor: pointer;
-  color: var(--blue); font-size: 14px; font-weight: 500;
-}
-.mBack svg { width: 18px; height: 18px; }
 .mHeadTitle { flex: 1; min-width: 0; font-size: 19px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; }
 .mHeadSpacer { width: 38px; flex-shrink: 0; }
 .mBody { display: flex; flex-direction: column; gap: 14px; padding-bottom: 24px; }

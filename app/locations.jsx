@@ -39,7 +39,20 @@ const TONE = { blue: s.tBlue, green: s.tGreen, amber: s.tAmber, red: s.tRed, vio
 // Text/foreground tone (no background) for inline icons + status labels.
 const TONE_TEXT = { blue: s.txBlue, green: s.txGreen, amber: s.txAmber, red: s.txRed };
 
-function Stat({ icon, tint, label, value, meta }) {
+function Stat({ icon, tint, tone, label, value, meta, compact }) {
+  // Mobile renders the compact KPI card used by the scan Review screen: icon +
+  // number share one line, a short label sits centered below, meta is dropped.
+  if (compact) {
+    return (
+      <div className={s.statMini}>
+        <div className={`${s.statMiniTop} ${tone}`}>
+          <Icon name={icon} />
+          <span className={s.statMiniVal}>{value}</span>
+        </div>
+        <span className={s.statMiniLabel}>{label}</span>
+      </div>
+    );
+  }
   return (
     <div className={s.stat}>
       <span className={`${s.statIcon} ${tint}`}><Icon name={icon} /></span>
@@ -341,66 +354,75 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
 
   return (
     <div className={s.board}>
-      {isMobile && (
-        <button type="button" className={s.mBack} onClick={() => onNavigate?.("/app")}>
-          <Icon name="icon-chevron-left" /> Start scan
-        </button>
+      {isMobile ? (
+        <header className={s.mHead}>
+          <button type="button" className={s.mBackBtn} onClick={() => onNavigate?.("/app")} aria-label="Back to start scan">
+            <Icon name="icon-chevron-left" />
+          </button>
+          <span className={s.mHeadTitle}>Location Board</span>
+          <span className={s.mHeadSpacer} />
+        </header>
+      ) : (
+        <header className={s.head}>
+          <h1 className={s.title}>Location Board</h1>
+          <p className={s.subtitle}>
+            Track rooms, cabinets, and scan coverage across the office. Start or resume a scan session, resolve issues, and monitor location health.
+          </p>
+        </header>
       )}
-      <header className={s.head}>
-        <h1 className={s.title}>Location Board</h1>
-        <p className={s.subtitle}>
-          Track rooms, cabinets, and scan coverage across the office. Start or resume a scan session, resolve issues, and monitor location health.
-        </p>
-      </header>
 
-      <div className={s.stats}>
-        <Stat icon="icon-map-pin" tint={s.tBlue} label="Total locations" value={stats.total} />
-        <Stat icon="icon-clock" tint={s.tBlue} label="Scans in progress" value={stats.inProgress} meta={`${stats.inProgressPct}% of locations`} />
-        <Stat icon="icon-alert-triangle" tint={s.tAmber} label="Need attention" value={stats.needAttention} meta={`${stats.needAttentionPct}% of locations`} />
-        <Stat icon="icon-check-circle" tint={s.tGreen} label="Sessions completed" value={stats.completed} />
+      <div className={isMobile ? s.statsMini : s.stats}>
+        <Stat compact={isMobile} icon="icon-map-pin" tint={s.tBlue} tone={s.txBlue} label="Total locations" value={stats.total} />
+        <Stat compact={isMobile} icon="icon-clock" tint={s.tBlue} tone={s.txBlue} label="Scans in progress" value={stats.inProgress} meta={`${stats.inProgressPct}% of locations`} />
+        <Stat compact={isMobile} icon="icon-alert-triangle" tint={s.tAmber} tone={s.txAmber} label="Need attention" value={stats.needAttention} meta={`${stats.needAttentionPct}% of locations`} />
+        <Stat compact={isMobile} icon="icon-check-circle" tint={s.tGreen} tone={s.txGreen} label="Sessions completed" value={stats.completed} />
       </div>
 
       <div className={s.toolbar}>
-        <label className={s.search}>
-          <Icon name="icon-search" />
-          <input type="search" placeholder="Search locations…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search locations" />
-        </label>
-        <Select
-          label="Status"
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: "all", label: "All statuses" },
-            { value: "in_progress", label: "In progress" },
-            { value: "completed", label: "Completed" },
-            { value: "needs_attention", label: "Needs attention" },
-            { value: "not_started", label: "Not started" },
-            { value: "healthy", label: "Healthy" },
-          ]}
-        />
-        <Select
-          label="Room type"
-          value={roomType}
-          onChange={setRoomType}
-          options={[
-            { value: "all", label: "All room types" },
-            { value: "operatory", label: "Operatory" },
-            { value: "cabinet", label: "Cabinet" },
-            { value: "sterilization", label: "Sterilization" },
-            { value: "lab", label: "Lab" },
-            { value: "storage", label: "Storage" },
-            { value: "emergency_kit", label: "Emergency kit" },
-          ]}
-        />
-        <Select
-          label="Sort by"
-          value={sort}
-          onChange={setSort}
-          options={[
-            { value: "attention", label: "Needs attention" },
-            { value: "name", label: "Name" },
-          ]}
-        />
+        {!isMobile && (
+          <>
+            <label className={s.search}>
+              <Icon name="icon-search" />
+              <input type="search" placeholder="Search locations…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search locations" />
+            </label>
+            <Select
+              label="Status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: "All statuses" },
+                { value: "in_progress", label: "In progress" },
+                { value: "completed", label: "Completed" },
+                { value: "needs_attention", label: "Needs attention" },
+                { value: "not_started", label: "Not started" },
+                { value: "healthy", label: "Healthy" },
+              ]}
+            />
+            <Select
+              label="Room type"
+              value={roomType}
+              onChange={setRoomType}
+              options={[
+                { value: "all", label: "All room types" },
+                { value: "operatory", label: "Operatory" },
+                { value: "cabinet", label: "Cabinet" },
+                { value: "sterilization", label: "Sterilization" },
+                { value: "lab", label: "Lab" },
+                { value: "storage", label: "Storage" },
+                { value: "emergency_kit", label: "Emergency kit" },
+              ]}
+            />
+            <Select
+              label="Sort by"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: "attention", label: "Needs attention" },
+                { value: "name", label: "Name" },
+              ]}
+            />
+          </>
+        )}
         <div className={s.toolbarActions}>
           <button type="button" className={s.addBtn} onClick={() => onAddLocation?.()}>
             <Icon name="icon-plus" />
@@ -408,7 +430,7 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
           </button>
           <button type="button" className={s.scanBtn} onClick={() => onStartScan?.(null)}>
             <Icon name="icon-scan" />
-            Start scan session
+            Start scan
           </button>
         </div>
       </div>
