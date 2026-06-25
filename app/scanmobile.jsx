@@ -1287,12 +1287,12 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
   const confirmedShown = showAllConfirmed ? confirmed : confirmed.slice(0, 2);
 
   return (
-    <div className={s.screen}>
-      <header className={s.topbar}>
+    <div className={`${s.screen} ${s.reviewScroll}`}>
+      <header className={`${s.topbar} ${s.reviewTopbar}`}>
         <button type="button" className={s.iconBtn} onClick={onBack} aria-label="Back"><Icon name="icon-chevron-left" /></button>
         <span className={s.barTitle}>Review {session.location_name || "location"}</span>
       </header>
-      <div className={s.body}>
+      <div className={`${s.body} ${s.reviewBodyScroll}`}>
         <div className={s.reviewTitle}>
           <span className={s.reviewSub}>Scan session review</span>
         </div>
@@ -1397,7 +1397,7 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
 
         <div className={s.banner}><Icon name="icon-info" /> You can finish this location after saving.</div>
       </div>
-      <div className={s.footer}>
+      <div className={`${s.footer} ${s.reviewFooter}`}>
         <button type="button" className={s.btnOutline} onClick={onScanMore}><Icon name="icon-scan" /> Scan more</button>
         <button type="button" className={s.btnPrimary} onClick={onSave}><Icon name="icon-check" /> Save session</button>
       </div>

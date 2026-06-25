@@ -762,6 +762,17 @@
 }
 .banner svg { width: 18px; height: 18px; color: #2F5BD6; flex-shrink: 0; }
 
+/* Review screen scrolls as one overlay so every scanned item + the action bar
+   stay reachable. The shared app-shell pattern (locked-height .screen with a
+   flex:1 .body scroller) clips the bottom on iOS Safari because the fixed box
+   resolves to the dynamic viewport. Here the overlay itself owns the scroll;
+   header sticks to the top, footer to the bottom, and the body grows with its
+   content instead of being height-locked. */
+.reviewScroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.reviewTopbar { position: sticky; top: 0; z-index: 3; }
+.reviewBodyScroll { flex: 1 0 auto; overflow: visible; }
+.reviewFooter { position: sticky; bottom: 0; }
+
 /* ── Bottom sheets (manual / search / link / help / location switch) ── */
 .sheetRoot { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; justify-content: flex-end; }
 .sheetBackdrop { position: absolute; inset: 0; background: rgba(8, 14, 26, 0.5); }
