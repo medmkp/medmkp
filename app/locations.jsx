@@ -1018,63 +1018,63 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
         <p className={s.subtitle}>Inventory, traceability coverage, and reorder needs for this location.</p>
       </header>
 
-      <div className={s.stats}>
-        <Stat icon="icon-package" tint={s.tBlue} label="Tracked items" value={top.tracked} />
-        <Stat icon="icon-shield-check" tint={s.tGreen} label="Lot &amp; expiry captured" value={`${tracePct}%`} />
-        <Stat icon="icon-clock" tint={s.tAmber} label="Expiring soon" value={top.expiring} />
-        <Stat icon="icon-alert-triangle" tint={s.tRed} label="Expired (pull now)" value={top.expired} />
-      </div>
-
-      <section className={s.locHeader}>
-        <div className={s.locHeadMain}>
-          <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
-          <div className={s.locHeadBody}>
-            <div className={s.cardTitleRow}>
-              <span className={s.locHeadName}>{location.name}</span>
-              <span className={`${s.badge} ${status.badge}`}>{status.label}</span>
-            </div>
-            <div className={s.cardSub}>{meta.label}{location.qr_code ? ` · ${location.qr_code}` : ""}</div>
-          </div>
-        </div>
-
-        <div className={s.locProgress}>
-          {session ? (
-            <>
-              <span className={s.locProgressLabel}>Scan progress</span>
-              <div className={s.progress}>
-                <span className={s.progressTrack}>
-                  <span className={`${s.progressFill} ${scanPct === 100 ? s.complete : ""}`} style={{ width: `${scanPct}%` }} />
-                </span>
-                <span className={s.progressPct}>{scanPct}%</span>
-              </div>
-              <div className={s.locMeta}>
-                <span className={s.locMetaItem}><Icon name="icon-scan" />Scanned<small>{session.counts?.scanned ?? 0}</small></span>
-                <span className={s.locMetaItem}><Icon name="icon-clock" />Last scan<small>{relativeTime(session.updated_at) || "just now"}</small></span>
-              </div>
-            </>
-          ) : (
-            <div className={s.locNoScan}>
-              <span className={s.locNoScanIcon}><Icon name="icon-scan" /></span>
-              <div>
-                <div className={s.locNoScanTitle}>No scan in progress</div>
-                <div className={s.locNoScanSub}>Scan to capture lot &amp; expiry off each package.</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className={s.locActions}>
-          <button type="button" className={s.scanBtn} onClick={() => onStartScan?.()}>
-            <Icon name="icon-scan" />{session?.status === "active" ? "Resume scan" : "Scan this location"}
-          </button>
-          <button type="button" className={s.addBtn} onClick={() => onNavigate?.("/app/locations/qr-labels")}>
-            <Icon name="icon-grid" />Print QR label
-          </button>
-        </div>
-      </section>
-
       <div className={s.detailGrid}>
         <div className={s.detailMain}>
+          <div className={s.stats}>
+            <Stat icon="icon-package" tint={s.tBlue} label="Tracked items" value={top.tracked} />
+            <Stat icon="icon-shield-check" tint={s.tGreen} label="Lot &amp; expiry captured" value={`${tracePct}%`} />
+            <Stat icon="icon-clock" tint={s.tAmber} label="Expiring soon" value={top.expiring} />
+            <Stat icon="icon-alert-triangle" tint={s.tRed} label="Expired (pull now)" value={top.expired} />
+          </div>
+
+          <section className={s.locHeader}>
+            <div className={s.locHeadMain}>
+              <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
+              <div className={s.locHeadBody}>
+                <div className={s.cardTitleRow}>
+                  <span className={s.locHeadName}>{location.name}</span>
+                  <span className={`${s.badge} ${status.badge}`}>{status.label}</span>
+                </div>
+                <div className={s.cardSub}>{meta.label}{location.qr_code ? ` · ${location.qr_code}` : ""}</div>
+              </div>
+            </div>
+
+            <div className={s.locProgress}>
+              {session ? (
+                <>
+                  <span className={s.locProgressLabel}>Scan progress</span>
+                  <div className={s.progress}>
+                    <span className={s.progressTrack}>
+                      <span className={`${s.progressFill} ${scanPct === 100 ? s.complete : ""}`} style={{ width: `${scanPct}%` }} />
+                    </span>
+                    <span className={s.progressPct}>{scanPct}%</span>
+                  </div>
+                  <div className={s.locMeta}>
+                    <span className={s.locMetaItem}><Icon name="icon-scan" />Scanned<small>{session.counts?.scanned ?? 0}</small></span>
+                    <span className={s.locMetaItem}><Icon name="icon-clock" />Last scan<small>{relativeTime(session.updated_at) || "just now"}</small></span>
+                  </div>
+                </>
+              ) : (
+                <div className={s.locNoScan}>
+                  <span className={s.locNoScanIcon}><Icon name="icon-scan" /></span>
+                  <div>
+                    <div className={s.locNoScanTitle}>No scan in progress</div>
+                    <div className={s.locNoScanSub}>Scan to capture lot &amp; expiry off each package.</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className={s.locActions}>
+              <button type="button" className={s.scanBtn} onClick={() => onStartScan?.()}>
+                <Icon name="icon-scan" />{session?.status === "active" ? "Resume scan" : "Scan this location"}
+              </button>
+              <button type="button" className={s.addBtn} onClick={() => onNavigate?.("/app/locations/qr-labels")}>
+                <Icon name="icon-grid" />Print QR label
+              </button>
+            </div>
+          </section>
+
           <section className={s.panel}>
             <div className={s.cardHeadRow}>
               <h2 className={s.panelTitle}>Items in this location</h2>
