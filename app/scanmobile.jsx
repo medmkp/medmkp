@@ -364,7 +364,7 @@ function MobileAuditLocationGate({ locations, starting, onPick, onBack, onManage
 
 export function MobileScanSession({
   session, lines, counts, active,
-  pendingLine, captureType,
+  pendingLine, captureType, ocrBusy, ocrSuggestion,
   onScan, onAddProduct, onPatchLine, onRemoveLine, onComplete, onBack, onClearPending,
   locations, onSwitchLocation, onSwitchMode, onNavigate,
 }) {
@@ -389,8 +389,8 @@ export function MobileScanSession({
 
   const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
     active: cameraActive,
-    onScan: (code) => {
-      onScan(code);
+    onScan: (code, getShot) => {
+      onScan(code, getShot);
       // A location / website QR isn't a product — the parent shows a "not a
       // product" toast. Skip the green "captured" pulse so pointing at a
       // location placard mid-audit doesn't strobe the viewfinder.
@@ -543,6 +543,8 @@ export function MobileScanSession({
           line={pendingLine}
           locationName={receivingLoc?.name || ""}
           locationId={receivingLoc?.id || null}
+          ocrBusy={ocrBusy}
+          suggestion={ocrSuggestion}
           onOpenLocation={() => setSheet("location")}
           onPersist={(id, body) => onPatchLine(id, body)}
           onDismiss={(id, body) => { onPatchLine(id, body); onClearPending?.(); }}
@@ -553,6 +555,8 @@ export function MobileScanSession({
           key={pendingLine.id}
           line={pendingLine}
           locationName={locName}
+          ocrBusy={ocrBusy}
+          suggestion={ocrSuggestion}
           onPersist={(id, body) => onPatchLine(id, body)}
           onDismiss={(id, body) => { onPatchLine(id, body); onClearPending?.(); }}
         />
@@ -946,7 +950,23 @@ function ReorderScanSheet({ result, onPersist, onDismiss }) {
 // persists them when the next scan replaces it (keyed remount) or it's flicked
 // down. The destination is the sticky location set by the top-of-screen pill;
 // the Location card echoes it and taps back to that picker.
-function ReceivingScanSheet({ line, locationName, locationId, onOpenLocation, onPersist, onDismiss }) {
+// When OCR has read lot/expiry off the package, surface it in the capture drawer:
+// a "reading…" note while it runs, then a confirm-it note once the fields are
+// pre-filled. Assistive — the values land in the editable fields, never silently.
+function OcrHint({ ocrBusy, suggestion }) {
+  const found = !ocrBusy && (suggestion?.lot || suggestion?.expiry);
+  if (!ocrBusy && !found) return null;
+  return (
+    <div className={s.modeSheetInfo} aria-live="polite">
+      <Icon name="icon-scan" />
+      {ocrBusy
+        ? "Reading lot & expiry off the label…"
+        : "Filled lot/expiry from the label — check they’re right."}
+    </div>
+  );
+}
+
+function ReceivingScanSheet({ line, locationName, locationId, ocrBusy, suggestion, onOpenLocation, onPersist, onDismiss }) {
   const matched = line.status !== "needs_review";
   const initialLot = line.lot_number || "";
   const initialExp = line.expiration_date ? String(line.expiration_date).slice(0, 10) : "";
@@ -957,6 +977,13 @@ function ReceivingScanSheet({ line, locationName, locationId, onOpenLocation, on
   const [dragY, setDragY] = useState(0);
   const startY = useRef(0);
   const dragging = useRef(false);
+
+  // OCR arrives a beat after the drawer opens (it runs after the catalog lookup);
+  // fill only fields the user hasn't already typed into.
+  useEffect(() => {
+    if (suggestion?.lot) setLot((v) => v || suggestion.lot);
+    if (suggestion?.expiry) setExp((v) => v || suggestion.expiry);
+  }, [suggestion?.lot, suggestion?.expiry]);
 
   // The captured body, read from the latest values at persist time. Location
   // tracks the sticky default live (via a ref) so changing it from the top pill
@@ -1083,6 +1110,7 @@ function ReceivingScanSheet({ line, locationName, locationId, onOpenLocation, on
             </button>
           </div>
         </div>
+        <OcrHint ocrBusy={ocrBusy} suggestion={suggestion} />
       </div>
     </div>
   );
@@ -1096,7 +1124,7 @@ function ReceivingScanSheet({ line, locationName, locationId, onOpenLocation, on
 // present; not-found / removed are reconcile actions, not scans. No buttons:
 // it persists when the next scan replaces it (keyed remount) or it's flicked
 // down.
-function ShelfAuditScanSheet({ line, locationName, onPersist, onDismiss }) {
+function ShelfAuditScanSheet({ line, locationName, ocrBusy, suggestion, onPersist, onDismiss }) {
   const matched = line.status !== "needs_review";
   const initialLot = line.lot_number || "";
   const initialExp = line.expiration_date ? String(line.expiration_date).slice(0, 10) : "";
@@ -1105,6 +1133,12 @@ function ShelfAuditScanSheet({ line, locationName, onPersist, onDismiss }) {
   const [dragY, setDragY] = useState(0);
   const startY = useRef(0);
   const dragging = useRef(false);
+
+  // OCR arrives a beat after the drawer opens; fill only the empty fields.
+  useEffect(() => {
+    if (suggestion?.lot) setLot((v) => v || suggestion.lot);
+    if (suggestion?.expiry) setExp((v) => v || suggestion.expiry);
+  }, [suggestion?.lot, suggestion?.expiry]);
 
   const latest = useRef();
   latest.current = { lot, exp };
@@ -1199,6 +1233,7 @@ function ShelfAuditScanSheet({ line, locationName, onPersist, onDismiss }) {
             </div>
           </div>
         </div>
+        <OcrHint ocrBusy={ocrBusy} suggestion={suggestion} />
       </div>
     </div>
   );

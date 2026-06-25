@@ -33,28 +33,65 @@ export function useBarcodeScanner({ active, onScan }) {
     let lastCode = null;  // last code fired while it stays in frame
     let emptyFrames = 0;  // consecutive frames with no barcode in view
     let rotCanvas = null; // reused offscreen canvas for the rotated re-read
+    let lastShot = null;  // frozen frame around the last fired code, for OCR
+
+    // Snapshot the current frame, cropped to a generous neighborhood of the
+    // barcode — the lot/expiry text sits on the same label, usually within a
+    // barcode's width — so the optional OCR pass runs faster and on fewer
+    // distractor strings. Falls back to the full frame when we have no box (the
+    // rotated re-read, or a manual shutter press).
+    function snapshotAround(box) {
+      const video = videoRef.current;
+      if (!video || video.readyState < 2) return null;
+      const w = video.videoWidth, h = video.videoHeight;
+      if (!w || !h) return null;
+      let sx = 0, sy = 0, sw = w, sh = h;
+      if (box && box.width && box.height) {
+        // Generous: the lot/expiry can sit well above or below the barcode on the
+        // same label, so favour including it over a tight crop. Still trims the
+        // frame edges, which drops a distractor code from a neighbouring package.
+        const padX = box.width * 2, padY = box.height * 5;
+        sx = Math.max(0, box.x - padX);
+        sy = Math.max(0, box.y - padY);
+        sw = Math.min(w - sx, box.width + padX * 2);
+        sh = Math.min(h - sy, box.height + padY * 2);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = sw;
+      canvas.height = sh;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+      return canvas;
+    }
 
     // Fire one scan, then cool down briefly so flicker/misreads between frames
     // don't double-register. A barcode held continuously in frame is suppressed
     // by lastCode in the loop below, so this cooldown only debounces the handoff
     // from one code to the next — kept short so scanning several items in a row
     // keeps up with the buyer instead of dropping the ones in between.
-    function fire(code) {
+    function fire(code, box) {
       if (cooling) return;
       cooling = true;
       lastCode = code || lastCode;
+      // Freeze the frame now, while the package is still in view — OCR runs later
+      // (after the async lookup) and the phone will have moved by then. Exposed to
+      // the consumer as a lazy getter so the pixels are only read if a lookup
+      // comes back without lot/expiry and OCR is actually warranted.
+      lastShot = code ? snapshotAround(box) : null;
       // A successful capture buzzes; a website / location QR doesn't — it's not a
       // product, so skip the success haptic and let the consumer show its own
       // "not a product" hint instead.
       if (navigator.vibrate && !isQrUrl(code)) navigator.vibrate(50);
-      onScanRef.current?.(code || null);
+      onScanRef.current?.(code || null, () => lastShot);
       cooldownId = window.setTimeout(() => { cooling = false; }, 800);
     }
 
     async function detectOn(source) {
       try {
         const codes = await detector.detect(source);
-        return codes && codes.length ? codes[0].rawValue : null;
+        if (!codes || !codes.length) return null;
+        return { value: codes[0].rawValue, box: codes[0].boundingBox || null };
       } catch (error) {
         return null;
       }
@@ -64,7 +101,8 @@ export function useBarcodeScanner({ active, onScan }) {
       const video = videoRef.current;
       if (!video || !detector || video.readyState < 2) return null;
 
-      // Try the frame as-is first — the common case, and the cheapest.
+      // Try the frame as-is first — the common case, and the cheapest. Its box is
+      // in video-pixel space, so OCR can crop the upright frame to it.
       const upright = await detectOn(video);
       if (upright) return upright;
 
@@ -86,13 +124,17 @@ export function useBarcodeScanner({ active, onScan }) {
       ctx.rotate(Math.PI / 2);
       ctx.drawImage(video, -w / 2, -h / 2);
       ctx.restore();
-      return detectOn(rotCanvas);
+      const rotated = await detectOn(rotCanvas);
+      // The box here is in rotated-canvas space — not usable against the upright
+      // frame — so drop it and let OCR fall back to the full frame.
+      return rotated ? { value: rotated.value, box: null } : null;
     }
 
     // Shutter press: read the current frame; proceed even if no barcode is
     // decoded so the manual capture path always adds an item.
     captureRef.current = async () => {
-      fire(await detectFrame());
+      const hit = await detectFrame();
+      fire(hit?.value || null, hit?.box || null);
     };
 
     async function openCamera() {
@@ -155,8 +197,8 @@ export function useBarcodeScanner({ active, onScan }) {
         if (detector && isMounted) {
           setAutoDetect(true);
           intervalId = window.setInterval(async () => {
-            const code = await detectFrame();
-            if (!code) {
+            const hit = await detectFrame();
+            if (!hit) {
               // Barcode out of view for a beat → let it fire again next time it's
               // presented, so the buyer can deliberately re-scan an item. A
               // website / location QR is the exception: keep it muted once
@@ -166,8 +208,8 @@ export function useBarcodeScanner({ active, onScan }) {
               return;
             }
             emptyFrames = 0;
-            if (code === lastCode) return;  // same barcode still in frame → ignore
-            fire(code);
+            if (hit.value === lastCode) return;  // same barcode still in frame → ignore
+            fire(hit.value, hit.box);
           }, 350);
         }
       } catch (error) {
