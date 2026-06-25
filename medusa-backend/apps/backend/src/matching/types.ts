@@ -22,6 +22,14 @@ export type NormalizedProduct = {
   mfrSku: string
   /** 0..1 — how trustworthy an exact mfrSku collision is as identity evidence. */
   skuStrength: number
+  /**
+   * Manufacturer model with a leading distributor line/category prefix stripped
+   * (DC Dental "219-4302" -> "4302", where Henry Schein carries the same item as
+   * plain "4302"). "" when the SKU carries no such prefix. An *additional* weak
+   * join key layered on top of mfrSku, never a replacement — scoring still gates
+   * the merge on brand + name.
+   */
+  skuCore: string
   /** Canonical brand key, or null when the brand field is junk/house label. */
   brandKey: string | null
   brandTokens: string[]

@@ -7,6 +7,7 @@ import {
   normalizeBrand,
   normalizeProduct,
   parsePackQty,
+  skuModelCore,
   skuStrength,
   tokenizeName,
 } from "../normalize"
@@ -76,6 +77,18 @@ describe("normalization", () => {
     expect(tokenizeName("Extracting Forceps 151AS")).toContain("151as")
     expect(tokenizeName("Extracting Forceps 151A")).toContain("151a")
   })
+
+  it("strips a distributor line prefix to the maker model, conservatively", () => {
+    // DC Dental prepends an internal line code the maker (and Henry Schein) omit.
+    expect(skuModelCore("219-4302")).toBe("4302")
+    expect(skuModelCore("219-4301")).toBe("4301")
+    // No prefix, or the trailing part is too short / letter-only to trust.
+    expect(skuModelCore("4302")).toBe("")
+    expect(skuModelCore("C15053-006")).toBe("") // leading segment isn't numeric
+    expect(skuModelCore("826-WC")).toBe("") // core has no digit
+    expect(skuModelCore("219-12")).toBe("") // core too short
+    expect(skuModelCore("")).toBe("")
+  })
 })
 
 describe("identity matching (golden pairs from production data)", () => {
@@ -115,6 +128,53 @@ describe("identity matching (golden pairs from production data)", () => {
     )
     expect(["exact", "variant", "needs_review"]).toContain(decision.status)
     expect(decision.status).not.toBe("reject")
+  })
+
+  it("bridges a DC Dental vendor-prefixed SKU to the plain Henry Schein model", () => {
+    // Real prod rows: the same Dynarex applicator, but DC Dental prefixes the
+    // model ("219-4302") while Henry Schein carries it as "4302". Without the
+    // prefix-stripped core, there's no shared catalog code and the divergent
+    // distributor names alone score too low to merge — so the priced DC Dental
+    // offer never joins the (price-less) Henry Schein canonical.
+    const decision = score(
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "4302",
+        brand: "Dynarex Corporation",
+        name: "Applicator 6 in Wood Shaft Non Sterile 1000/Bx",
+        pack_size: "1000/Bx",
+      },
+      {
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "219-4302",
+        brand: "Dynarex",
+        name: 'Cotton Tipped Wood Applicators Non-Sterile 6" 1000/Cs',
+      }
+    )
+    expect(["exact", "variant"]).toContain(decision.status)
+    expect(decision.confidence).toBeGreaterThanOrEqual(75)
+  })
+
+  it("does not let a shared model core merge unrelated products", () => {
+    // Both reduce to model "4302" (DC Dental "219-4302" via its core, Dedeco
+    // "4302" directly), but they're a cotton applicator and a mounted stone from
+    // different makers — brand + name must still veto the core collision.
+    const decision = score(
+      {
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "219-4302",
+        brand: "Dynarex",
+        name: 'Cotton Tipped Wood Applicators Non-Sterile 6" 1000/Cs',
+      },
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "4302",
+        brand: "Dedeco International Inc",
+        name: "Green Giant Mounted Stones Green 12/Bx",
+        pack_size: "12/Bx",
+      }
+    )
+    expect(decision.status).toBe("reject")
   })
 
   it("matches Dura-Green WH2 as same product with same pack", () => {
@@ -456,6 +516,29 @@ describe("end-to-end clustering", () => {
     expect(result.clusters[0].supplierCount).toBe(2)
   })
 
+  it("folds a priced vendor-prefixed offer into a price-less plain-model canonical", () => {
+    const rows = [
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "4302",
+        brand: "Dynarex Corporation",
+        name: "Applicator 6 in Wood Shaft Non Sterile 1000/Bx",
+        pack_size: "1000/Bx",
+        price_cents: null, // login-gated: identity only, no price
+      }),
+      product({
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "219-4302",
+        brand: "Dynarex",
+        name: 'Cotton Tipped Wood Applicators Non-Sterile 6" 1000/Cs',
+        price_cents: 11635,
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    expect(result.clusters).toHaveLength(1)
+    expect(result.clusters[0].supplierCount).toBe(2)
+  })
+
   it("clusters true matches and isolates impostors sharing a weak SKU", () => {
     const rows = [
       product({
@@ -503,6 +586,24 @@ describe("end-to-end clustering", () => {
       cluster.members.map((member) => member.row.name)
     )
     expect(allMemberNames).not.toContain("Oregano Oil Enteric 90 Sgels")
+  })
+
+  it("does not let a vendor-prefixed supplier's own variants weld a family together", () => {
+    // The hazard the model-conflict axis guards: DC Dental's "375-330001" /
+    // "375-330002" die stones each core-match a DIFFERENT external product, and
+    // DC's two listings name-cluster ("Die Stone 33lb"), so without the guard the
+    // DC pair acts as a hub that welds two unrelated stones into one canonical.
+    // The model axis (carried only by the prefix-coded supplier) makes the two DC
+    // listings hard-conflict, so each joins only its own match.
+    const rows = [
+      product({ supplier_id: "msup_dcdental_com", manufacturer_sku: "375-330001", brand: "Whip Mix", name: "Die Stone Aqua 33lb 330001", price_cents: 4000 }),
+      product({ supplier_id: "msup_dcdental_com", manufacturer_sku: "375-330002", brand: "Whip Mix", name: "Die Stone Green 33lb 330002", price_cents: 4000 }),
+      product({ supplier_id: "msup_dentalcity_com", manufacturer_sku: "330001", brand: "Whip Mix", name: "Die Stone Aqua 33lb 330001", price_cents: 4200 }),
+      product({ supplier_id: "msup_dentalcity_com", manufacturer_sku: "330002", brand: "Whip Mix", name: "Die Stone Green 33lb 330002", price_cents: 4200 }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    // Two clusters of 2 (Aqua with Aqua, Green with Green) — never one welded 4.
+    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 2])
   })
 
   it("does not let a size-less bridge collapse Small and X-Small into one canonical", () => {

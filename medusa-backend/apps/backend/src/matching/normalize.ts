@@ -110,6 +110,52 @@ export function skuStrength(sku: string): number {
   return len >= 6 ? 0.6 : 0.3
 }
 
+/**
+ * Manufacturer model with a leading distributor line/category prefix stripped.
+ * Some distributors prepend an internal segment to the maker's part number — DC
+ * Dental stores Dynarex model 4302 as "219-4302", while Henry Schein carries the
+ * same item as plain "4302". That extra "<2-4 digits>-" segment hides the shared
+ * model from exact-SKU blocking (normalizeSku("219-4302") = "2194302" != "4302").
+ *
+ * Returns the trailing core only when it is itself a plausible model (>=4 chars,
+ * contains a digit); "" otherwise. This is intentionally *additive* — callers
+ * key on it ON TOP OF the full SKU, never instead of it — because the same
+ * "<digits>-<digits>" shape also describes a maker part number a distributor
+ * merely hyphenates (Dental City "100-3371" == Premier "1003371"), which the
+ * full-SKU key already matches. Stray core collisions are left for scoring's
+ * brand/name/attribute guards to reject.
+ *
+ * Applied ONLY to suppliers in PREFIX_CODED_SUPPLIERS, because the "<digits>-"
+ * shape is ambiguous: for DC Dental it's a throwaway internal line number, but
+ * for distributors who number diamond burs by shape (Darby "846-016C") the
+ * leading segment IS the identity and the trailing "016C" is a size+grit shared
+ * across many shapes — stripping it fuses different burs. Per-supplier gating
+ * keeps the bridge to vendors empirically confirmed to use a throwaway prefix.
+ */
+/**
+ * Suppliers whose manufacturer_sku carries a throwaway "<digits>-" line prefix
+ * in front of the real maker model (DC Dental NetSuite, e.g. "219-4302"). Gated
+ * narrowly on purpose — add a supplier here only after confirming its prefix is
+ * a line code, not a shape/family identifier.
+ */
+export const PREFIX_CODED_SUPPLIERS = new Set(["msup_dcdental_com"])
+
+export function skuModelCore(raw: string | null | undefined): string {
+  if (!raw) {
+    return ""
+  }
+  const cleaned = stripDiacritics(raw).toUpperCase().replace(/[^A-Z0-9-]/g, "")
+  const match = cleaned.match(/^\d{2,4}-(.+)$/)
+  if (!match) {
+    return ""
+  }
+  const core = match[1].replace(/-/g, "")
+  if (core.length < 4 || !/[0-9]/.test(core)) {
+    return ""
+  }
+  return core
+}
+
 export function normalizeBrand(
   raw: string | null | undefined,
   supplierId: string
@@ -397,11 +443,25 @@ export function extractSkuLikeTokens(name: string): string[] {
 
 export function normalizeProduct(row: SupplierProductRow): NormalizedProduct {
   const mfrSku = normalizeSku(row.manufacturer_sku)
+  const skuCore = PREFIX_CODED_SUPPLIERS.has(row.supplier_id)
+    ? skuModelCore(row.manufacturer_sku)
+    : ""
   const brand = normalizeBrand(row.brand, row.supplier_id)
   const nameTokens = tokenizeName(row.name)
   const skuLikeTokens = extractSkuLikeTokens(row.name)
   const skuLikeSet = new Set(skuLikeTokens)
   const numericAttrs = extractNumericAttrs(row.name)
+  // The prefix-stripped model is a hard-conflict axis: two products with
+  // different models are different products. Only prefix-coded suppliers carry
+  // it, so it can only ever veto a pair of THAT supplier's own listings —
+  // exactly the same-supplier name-cluster that would otherwise act as a hub,
+  // welding each variant's distinct cross-supplier match into one mega-cluster
+  // (e.g. DC Dental's "375-330001"/"375-330002" die stones bridging Hard Rock
+  // Aqua to Silky Rock). A cross-supplier core match still goes through, because
+  // the other side has no model axis to conflict with.
+  if (skuCore) {
+    numericAttrs.set("model", new Set([skuCore]))
+  }
   let packQty = parsePackQty(row.pack_size, row.name)
   // A "pack quantity" that is really the product's catalog number (e.g. a
   // trailing "(24746)") would wreck per-unit prices; veto those.
@@ -451,6 +511,7 @@ export function normalizeProduct(row: SupplierProductRow): NormalizedProduct {
     row,
     mfrSku,
     skuStrength: skuStrength(mfrSku),
+    skuCore,
     brandKey: brand.key,
     brandTokens: brand.tokens,
     nameTokens,

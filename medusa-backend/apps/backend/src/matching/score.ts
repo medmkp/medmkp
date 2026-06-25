@@ -1,4 +1,4 @@
-import { brandsAgree } from "./normalize"
+import { brandsAgree, skuStrength } from "./normalize"
 import type { NormalizedProduct, PairDecision } from "./types"
 
 export function jaccard(a: Iterable<string>, b: Iterable<string>): number {
@@ -96,6 +96,24 @@ export function compareNumericAttrs(a: NormalizedProduct, b: NormalizedProduct):
 export function skuEvidence(a: NormalizedProduct, b: NormalizedProduct): { score: number; kind: string } {
   if (a.mfrSku && a.mfrSku === b.mfrSku) {
     return { score: Math.min(a.skuStrength, b.skuStrength), kind: "mfr-sku" }
+  }
+  // Distributor vendor-prefix bridge: one side hides the shared maker model
+  // behind an internal line code (DC Dental "219-4302" vs Henry Schein "4302").
+  // Match the prefix-stripped core against the other side's full SKU or core,
+  // but ONLY when the brand agrees. A bare model — especially a short numeric —
+  // collides across unrelated makers ("4302" is a Dynarex applicator, a Dedeco
+  // mounted stone, and more), and unlike a full mfrSku match it carries no
+  // distributor-independent identity, so brand agreement is what keeps it from
+  // fusing different products that merely share a trailing number. Scored only
+  // as strongly as the bare model warrants, so name similarity still governs.
+  let core = ""
+  if (a.skuCore && (a.skuCore === b.mfrSku || a.skuCore === b.skuCore)) {
+    core = a.skuCore
+  } else if (b.skuCore && b.skuCore === a.mfrSku) {
+    core = b.skuCore
+  }
+  if (core && brandsAgree(a, b) === "match") {
+    return { score: skuStrength(core), kind: "mfr-sku-core" }
   }
   const aInB = a.mfrSku.length >= 5 && b.skuLikeTokens.includes(a.mfrSku)
   const bInA = b.mfrSku.length >= 5 && a.skuLikeTokens.includes(b.mfrSku)
