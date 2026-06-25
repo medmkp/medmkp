@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { daysUntil, formatTraceDate, traceApi, traceErrorMessage } from "./lib";
-import { ProductThumb } from "./ui";
+import { ConfirmModal, ProductThumb } from "./ui";
 import s from "./locations.module.css";
 
 // Locations surface: the Location Board (real per-practice locations with scan
@@ -850,6 +850,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
   const [traceFilter, setTraceFilter] = useState("all");
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -963,8 +964,8 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     catch { onToast?.("Couldn't mark pulled."); }
   };
   // Remove a single inventory record (a mis-scan or wrong item). Optimistically
-  // drop it from the list; the 3s poll reconciles. Unlike Clear list (view-only),
-  // this deletes the evidence record on the backend.
+  // drop it from the list; the 3s poll reconciles. Like Clear list, this deletes
+  // the evidence record on the backend.
   const onRemove = async (it) => {
     try {
       await traceApi.removeItem(it.id);
@@ -974,14 +975,25 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
       onToast?.("Couldn't remove the item.");
     }
   };
-  // Clear the list from view (this session only). Inventory is append-only
-  // compliance evidence with no bulk-delete, so this doesn't wipe the backend —
-  // reloading restores it.
+  // "Clear list" permanently deletes every item captured here. It's a real
+  // backend wipe (not a view-only blank), so it sticks and syncs to every device
+  // — otherwise the 3s poll just restores everything. Gate it behind a confirm.
   const handleClearList = () => {
     setMenuOpen(false);
     if (!items.length) return;
-    setItems([]);
-    onToast?.("List cleared.");
+    setConfirmingClear(true);
+  };
+  const confirmClearList = async () => {
+    setConfirmingClear(false);
+    setItems([]); // optimistic; reload reconciles from the now-empty backend
+    try {
+      await traceApi.clearLocationItems(locationId);
+      onToast?.("List cleared.");
+      reload();
+    } catch {
+      onToast?.("Couldn't clear the list.");
+      reload();
+    }
   };
 
   // Phone surface: a card list of everything captured at this location (the
@@ -1291,6 +1303,17 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
           </section>
         </aside>
       </div>
+
+      {confirmingClear && (
+        <ConfirmModal
+          title="Clear this location’s list?"
+          body={`This permanently deletes all ${items.length} item${items.length === 1 ? "" : "s"} captured at ${location.name}, on every device. This can’t be undone.`}
+          confirmLabel="Clear list"
+          destructive
+          onConfirm={confirmClearList}
+          onClose={() => setConfirmingClear(false)}
+        />
+      )}
     </div>
   );
 }
