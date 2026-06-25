@@ -1431,39 +1431,44 @@
 /* ── Items table ────────────────────────────────────────────────────── */
 .tableWrap { margin: 12px 0 0; }
 
-.table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+/* Density matches the Needs Attention worklist: 12.5px body, a tinted, rounded
+   header band, and tight row padding so the two surfaces read as one system. */
+.table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
 .table th {
   text-align: left;
-  font-size: 10.5px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--muted);
-  padding: 0 8px 8px;
-  border-bottom: 1px solid #eef1f6;
+  font-size: 12px;
+  font-weight: 600;
+  /* Override the global `th { text-transform: uppercase }` — render as written. */
+  text-transform: none;
+  color: #6b7888;
+  background: #f4f6fa;
+  padding: 9px 8px;
+  border-bottom: 1px solid #e6ebf2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.table th:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.table th:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
 .table td {
-  padding: 8px;
-  border-bottom: 1px solid #f1f4f8;
+  padding: 8px 7px;
+  border-bottom: 1px solid #f0f3f8;
   vertical-align: middle;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--ink);
 }
-.table tbody tr:hover { background: #fafcff; }
+.table tbody tr:hover { background: #f6f9ff; }
 
 /* Fixed column widths so the 7 columns always fit the panel — no horizontal scroll. */
-.table th:nth-child(1), .table td:nth-child(1) { width: 30%; }   /* Item */
-.table th:nth-child(2), .table td:nth-child(2) { width: 9%; }    /* On hand */
-.table th:nth-child(3), .table td:nth-child(3) { width: 7%; }    /* Par */
-.table th:nth-child(4), .table td:nth-child(4) { width: 14%; }   /* Lot */
-.table th:nth-child(5), .table td:nth-child(5) { width: 14%; }   /* Expiration */
-.table th:nth-child(6), .table td:nth-child(6) { width: 12%; }   /* Status */
-.table th:nth-child(7), .table td:nth-child(7) { width: 14%; }   /* Last counted */
+.table th:nth-child(1), .table td:nth-child(1) { width: 26%; }   /* Item */
+.table th:nth-child(2), .table td:nth-child(2) { width: 8%; }    /* SDS */
+.table th:nth-child(3), .table td:nth-child(3) { width: 13%; }   /* Expiration */
+.table th:nth-child(4), .table td:nth-child(4) { width: 15%; }   /* Lot */
+.table th:nth-child(5), .table td:nth-child(5) { width: 14%; }   /* Price */
+.table th:nth-child(6), .table td:nth-child(6) { width: 13%; }   /* Status */
+.table th:nth-child(7), .table td:nth-child(7) { width: 11%; }   /* Last counted */
 
 .tItem { font-weight: 500; color: var(--ink); }
 .tItemCell { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -1483,6 +1488,106 @@
 .tMuted { color: var(--muted); }
 .tdRed { color: var(--red); font-weight: 500; }
 .tdAmber { color: #c2710c; font-weight: 500; }
+
+/* SDS cell: a per-item link to the Safety Data Sheet. Blue when one is on file,
+   a muted "Add" affordance (to the Evidence library) when it isn't. */
+.sdsLink, .sdsAdd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.sdsLink svg, .sdsAdd svg { width: 14px; height: 14px; flex-shrink: 0; }
+.sdsLink { color: var(--blue); }
+.sdsLink:hover { text-decoration: underline; }
+.sdsAdd { color: var(--muted); }
+.sdsAdd:hover { color: var(--blue); }
+
+/* Items toolbar + search — matches the Needs Attention search bar (white field,
+   #d6deea border, 13.5px text) rather than the board's tinted search. */
+.itemsToolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+.itemsSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d6deea;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: 340px;
+}
+.itemsSearch svg { width: 16px; height: 16px; color: #8a97a6; flex-shrink: 0; }
+.itemsSearch input {
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  width: 100%;
+  background: none;
+  padding: 9px 0;
+}
+
+/* Table-header kebab + its "Clear list" menu. */
+.headKebabWrap { position: relative; flex-shrink: 0; }
+.headKebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #fff;
+  color: #8a97a6;
+  cursor: pointer;
+}
+.headKebab svg { width: 17px; height: 17px; }
+.headKebab:hover, .headKebabOpen { border-color: var(--blue); color: var(--blue); }
+.headMenu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 168px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(11, 21, 51, 0.14);
+}
+.headMenu li { margin: 0; }
+.headMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
+  text-align: left;
+  padding: 8px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.headMenuItem svg { width: 15px; height: 15px; color: #8a97a6; }
+.headMenuItem:hover { background: #f4f6fa; }
+.headMenuDanger { color: #c5392e; }
+.headMenuDanger svg { color: #c5392e; }
+.headMenuDanger:hover { background: #fdeceb; }
 
 .evi { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
 .evi svg { width: 14px; height: 14px; }

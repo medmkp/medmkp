@@ -765,12 +765,34 @@ function itemStatus(it) {
   return { label: "Active", tone: "green" };
 }
 
+// Lot expiry is meaningful at month granularity, so the table shows MM/YYYY.
+function formatMonthYear(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+// Price range across known offers for this item's matched product. The Phase-1
+// location feed doesn't join catalog pricing yet, so this renders only when the
+// backend supplies price_min/price_max (or a price_range) — never fabricated.
+function formatPriceRange(it) {
+  const money = (n) => `$${Number(n).toFixed(2)}`;
+  const lo = it.price_min ?? it.price_range?.min ?? null;
+  const hi = it.price_max ?? it.price_range?.max ?? null;
+  if (lo == null && hi == null) return null;
+  if (lo != null && hi != null && Number(lo) !== Number(hi)) return `${money(lo)}–${money(hi)}`;
+  return money(lo ?? hi);
+}
+
 export function LocationDetailView({ locationId, onBack, onStartScan, onToast, onNavigate }) {
   const [location, setLocation] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [isMobile, setIsMobile] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
@@ -780,6 +802,20 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  // Close the table-header menu on outside-click or Escape (same pattern as the
+  // Select dropdowns and the topbar menus).
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onPointerDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    const onKeyDown = (e) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
   useEffect(() => {
     if (!locationId) return undefined;
     let alive = true;
@@ -788,7 +824,11 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
       .then((data) => { if (!alive) return; setLocation(data.location || null); setItems(data.items || []); setLoading(false); })
       .catch(() => { if (alive) { setLoading(false); onToast?.("Couldn't load this location."); } });
     return () => { alive = false; };
-  }, [locationId, onToast]);
+    // Re-fetch only when the location changes — not when the toast callback's
+    // identity changes (it's redefined every parent render, which would re-fetch
+    // on every toast and clobber a client-side clear of the list).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationId]);
 
   // Live updates: while this location is open and the tab is visible, re-fetch
   // every 3s so items scanned on a phone (Receiving or Shelf Audit, both write
@@ -845,6 +885,15 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
   const onPull = async (it) => {
     try { await traceApi.pull(it.id, { reason: "manual" }); onToast?.(`Marked pulled — ${it.name}`); reload(); }
     catch { onToast?.("Couldn't mark pulled."); }
+  };
+  // Clear the list from view (this session only). Inventory is append-only
+  // compliance evidence with no bulk-delete, so this doesn't wipe the backend —
+  // reloading restores it.
+  const handleClearList = () => {
+    setMenuOpen(false);
+    if (!items.length) return;
+    setItems([]);
+    onToast?.("List cleared.");
   };
 
   // Phone surface: a card list of everything captured at this location (the
@@ -965,12 +1014,37 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
       <div className={s.detailGrid}>
         <div className={s.detailMain}>
           <section className={s.panel}>
-            <h2 className={s.panelTitle}>Items in this location</h2>
-            <div className={s.toolbar}>
-              <label className={s.search}>
+            <div className={s.cardHeadRow}>
+              <h2 className={s.panelTitle}>Items in this location</h2>
+              {items.length > 0 && (
+                <div className={s.headKebabWrap} ref={menuRef}>
+                  <button
+                    type="button"
+                    className={`${s.headKebab} ${menuOpen ? s.headKebabOpen : ""}`}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    aria-label="List actions"
+                    onClick={() => setMenuOpen((v) => !v)}
+                  >
+                    <Icon name="icon-more-vertical" />
+                  </button>
+                  {menuOpen && (
+                    <ul className={s.headMenu} role="menu">
+                      <li role="none">
+                        <button type="button" role="menuitem" className={`${s.headMenuItem} ${s.headMenuDanger}`} onClick={handleClearList}>
+                          <Icon name="icon-trash" />Clear list
+                        </button>
+                      </li>
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className={s.itemsToolbar}>
+              <div className={s.itemsSearch}>
                 <Icon name="icon-search" />
                 <input type="search" placeholder="Search items…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search items" />
-              </label>
+              </div>
             </div>
 
             {items.length === 0 ? (
@@ -980,13 +1054,14 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                 <table className={s.table}>
                   <thead>
                     <tr>
-                      <th>Item</th><th>Est. qty</th><th>Par</th><th>Lot</th><th>Expiration</th><th>Status</th><th>Last scanned</th>
+                      <th>Item</th><th>SDS</th><th>Expiration</th><th>Lot</th><th>Price</th><th>Status</th><th>Last scanned</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleItems.map((it) => {
                       const st = itemStatus(it);
                       const lc = it.lifecycle || deriveLifecycleClient(it);
+                      const price = formatPriceRange(it);
                       return (
                         <tr key={it.id}>
                           <td>
@@ -997,10 +1072,20 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                               ) : <span className={s.tItem}>{it.name}</span>}
                             </div>
                           </td>
-                          <td>{it.quantity_on_hand ?? 0}</td>
-                          <td className={s.tMuted}>{it.par_level ?? "—"}</td>
+                          <td>
+                            {it.sds_url ? (
+                              <button type="button" className={s.sdsLink} onClick={() => onNavigate?.("/app/evidence")} title="View Safety Data Sheet">
+                                <Icon name="icon-file-text" />SDS
+                              </button>
+                            ) : (
+                              <button type="button" className={s.sdsAdd} onClick={() => onNavigate?.("/app/evidence")} title="No SDS on file — link one in Evidence">
+                                <Icon name="icon-file-text" />Add
+                              </button>
+                            )}
+                          </td>
+                          <td className={it.expiration_date ? "" : s.tMuted}>{it.expiration_date ? formatMonthYear(it.expiration_date) : "—"}</td>
                           <td className={s.tMuted}>{it.lot_number || "—"}</td>
-                          <td className={it.expiration_date ? "" : s.tMuted}>{it.expiration_date ? formatTraceDate(it.expiration_date) : "—"}</td>
+                          <td className={price ? "" : s.tMuted}>{price || "—"}</td>
                           <td>
                             <span className={`${s.badge} ${PILL_TONE[st.tone]}`}>{st.label}</span>
                             {lc === "expired" && (
