@@ -1094,6 +1094,7 @@
   position: absolute;
   top: calc(62px + env(safe-area-inset-top));
   left: 50%; transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px; border-radius: 999px;
   background: #e3f6ec; color: #0a7a4d;
@@ -1102,6 +1103,11 @@
   z-index: 6;
 }
 .scanAddedBadge svg { width: 16px; height: 16px; flex-shrink: 0; color: #0a9861; }
+/* Amber variant: a re-scan ("already scanned") or a skipped website QR — an
+   acknowledgement, not a success. */
+.scanWarnBadge { background: #fdf1d6; color: #8a5a00; box-shadow: 0 6px 20px rgba(80, 56, 8, 0.18); }
+.scanWarnBadge svg { color: #b07400; }
+.scanBadgeText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Unmatched-scan drawer (/app/scan) ──────────────────────────────────
    Shown when a scan resolves to no catalog product: an alert header, three

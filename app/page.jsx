@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchResults } from "./catalog";
 import { BrandMark, Icon, IconSprite } from "./icons";
-import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
+import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { ScanSessionsView, ScanSessionView } from "./scansessions";
 import { MobileReorderScan } from "./scanmobile";
@@ -259,6 +259,16 @@ export default function Home() {
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  // Decode the match chime eagerly on mount — during camera warm-up / the
+  // permission prompt — so the bell is ready before the first scan. Creating the
+  // AudioContext and decoding audio don't need a user gesture (only playback /
+  // resume does), so this closes the race where an early match fell back to the
+  // synthesized chime. The gesture handler below still resumes a suspended
+  // context for actual playback.
+  useEffect(() => {
+    loadMatchChime(getScanAudioCtx());
+  }, []);
+
   // Prime the audio context on the first user gesture so the match chime can
   // sound even when later scans arrive from the camera (which is not itself a
   // tap). iOS requires a gesture before WebAudio will play.
@@ -282,13 +292,25 @@ export default function Home() {
     };
   }, []);
 
-  // Per-scan feedback: a chime when the scan matched a product, a buzz when it
-  // didn't. Fires once per result (setScanResult is only set non-null by a
-  // scan; clears pass null and are ignored).
+  // Per-scan feedback, by outcome:
+  //   added     — a NEW product landed on the list → match chime
+  //   unmatched — a real barcode with no catalog match → buzz (no chime)
+  //   qr        — a website QR (our tracedds.com codes, any URL) → buzz
+  //   duplicate — already on the list → silent (the amber pill is the feedback)
+  // Fires once per result; clears pass null and are ignored.
   useEffect(() => {
     if (!scanResult) return;
-    if (scanResult.status === "Not found") vibrateNoMatch();
-    else playMatchChime();
+    if (scanResult.kind === "added") playMatchChime();
+    else if (scanResult.kind === "unmatched" || scanResult.kind === "qr") vibrateNoMatch();
+  }, [scanResult]);
+
+  // The "already scanned" and "skipped QR" pills are transient acknowledgements —
+  // there's no sheet to dismiss — so they clear themselves (a fresh scan replaces
+  // them first; this just sweeps the last one).
+  useEffect(() => {
+    if (scanResult?.kind !== "duplicate" && scanResult?.kind !== "qr") return;
+    const timer = window.setTimeout(() => setScanResult(null), 1600);
+    return () => window.clearTimeout(timer);
   }, [scanResult]);
 
   // Persist the sidebar collapse preference per-device.
@@ -1025,11 +1047,24 @@ export default function Home() {
     uploadAbortRef.current?.abort("cancelled");
   }
 
-  async function addScannedItem(code) {
+  // Mark the reorder list as touched and ensure the "Barcode scans" source row
+  // exists. Only call this when an item is actually being added, so a skipped
+  // scan (QR / no match / duplicate) never dirties the list or files an empty
+  // source.
+  function markScanSource() {
     setListTouched(true);
     setUploadedDocs((docs) => docs.some((doc) => doc.id === "scan")
       ? docs
       : [...docs, { id: "scan", name: "Barcode scans", itemCount: 0 }]);
+  }
+
+  async function addScannedItem(code) {
+    // A website QR — our own tracedds.com codes or any URL — isn't a product.
+    // Never add it: buzz + a transient "skipped" pill, keep the camera scanning.
+    if (isQrUrl(code)) {
+      setScanResult({ kind: "qr", status: "Not found", item: { barcode: code }, code });
+      return false;
+    }
 
     // Resolve against the real catalog FIRST: GTIN/UPC barcode then exact SKU.
     // scanLookup also returns the lot/expiry decoded off a GS1/HIBC barcode. We
@@ -1041,53 +1076,83 @@ export default function Home() {
     if (scanned?.lot) decoded.lot = scanned.lot;
     if (scanned?.expiry) decoded.expirationDate = scanned.expiry;
 
-    // One instance per product: a code already ON the list (active) re-surfaces
-    // so the buyer sees it registered, but never bumps the quantity — they set
-    // quantity back on the reorder list. This keeps a barcode lingering in frame
-    // (or a deliberate re-scan) from piling up duplicate counts. Match only
-    // active items: a removed/cleared item is a tombstone (included:false), and
-    // re-scanning it should bring it back, not be rejected as a duplicate.
+    // One instance per product: a code already ON the list (active) doesn't add
+    // again — it shows the amber "already scanned" pill (no chime). We still
+    // backfill any lot/expiry the package now carries onto a row that lacks them
+    // (never clobbering a value the buyer already has). Match only active items:
+    // a removed/cleared item is a tombstone (included:false) and re-scanning it
+    // should bring it back, not be treated as a duplicate.
     const existing = code ? draftItems.find((item) => item.barcode === code && item.included !== false) : null;
     if (existing) {
-      // Backfill lot/expiry the package now carries onto a row that lacks them
-      // (e.g. it was added before lot/expiry capture). Never clobber a value the
-      // buyer already has — only fill the gaps.
-      const item = {
+      let item = existing;
+      const filled = {
         ...existing,
         lot: existing.lot || decoded.lot || "",
         expirationDate: existing.expirationDate || decoded.expirationDate || null,
       };
-      if (item.lot !== existing.lot || item.expirationDate !== existing.expirationDate) {
-        item.updatedAt = Date.now();
-        setDraftItems((items) => items.map((it) => (it.id === existing.id ? item : it)));
+      if (filled.lot !== existing.lot || filled.expirationDate !== existing.expirationDate) {
+        filled.updatedAt = Date.now();
+        item = filled;
+        setListTouched(true);
+        setDraftItems((items) => items.map((it) => (it.id === existing.id ? filled : it)));
       }
-      setScanResult({ status: statusFromItem(item), item, isDuplicate: true, qty: item.draftQty || 1 });
-      showToast("Already on your list");
+      setScanResult({ kind: "duplicate", status: statusFromItem(item), item, isDuplicate: true, qty: item.draftQty || 1 });
+      return false;
+    }
+
+    // Build the draft item to learn whether the code resolved to a real product
+    // (this covers both a live catalog match and the demo SCAN_CATALOG barcodes).
+    const item = makeScanDraftItem(code, product, scanned);
+    const isMatched = item.matchStatus !== "unmatched";
+
+    // No catalog match: don't add. Buzz + the unmatched sheet (search / capture /
+    // skip) lets the buyer link a product manually — nothing lands on the list
+    // unless they pick one there. The decoded lot/expiry rides along so a manual
+    // match still keeps its traceability.
+    if (!isMatched) {
+      setScanResult({ kind: "unmatched", status: "Not found", item: { barcode: code }, code, scanned });
       return false;
     }
 
     // Re-scanning a removed/cleared item revives its tombstone in place (keeping
     // any qty/notes/price it carried) and refreshes lot/expiry off this scan.
-    const tombstone = code ? draftItems.find((item) => item.barcode === code && item.included === false) : null;
+    const tombstone = code ? draftItems.find((it) => it.barcode === code && it.included === false) : null;
     if (tombstone) {
       const revived = { ...tombstone, ...decoded, included: true, updatedAt: Date.now() };
+      markScanSource();
       setDraftItems((items) => items.map((it) => (it.id === tombstone.id ? revived : it)));
       setScanCount((n) => n + 1);
-      setScanResult({ status: statusFromItem(revived), item: revived, isDuplicate: false, qty: revived.draftQty || 1 });
+      setScanResult({ kind: "added", status: statusFromItem(revived), item: revived, isDuplicate: false, qty: revived.draftQty || 1 });
       showToast(`Added ${revived.product || revived.canonicalName || code || "item"}`);
       return true;
     }
 
-    const item = makeScanDraftItem(code, product, scanned);
-
+    markScanSource();
     setDraftItems((items) => {
       if (code && items.some((it) => it.barcode === code && it.included !== false)) return items; // race guard
       return [...items, item];
     });
     setScanCount((n) => n + 1);
-    setScanResult({ status: statusFromItem(item), item, isDuplicate: false, qty: item.draftQty || 1 });
-    showToast(product ? `Added ${product.name}` : code ? `Scanned ${code} — needs review` : "Item added");
+    setScanResult({ kind: "added", status: statusFromItem(item), item, isDuplicate: false, qty: item.draftQty || 1 });
+    showToast(`Added ${product?.name || item.product || code}`);
     return true;
+  }
+
+  // From the unmatched-scan search sheet (/app/scan): the buyer found the right
+  // catalog product for a code we couldn't auto-match. Add it as a normal scanned
+  // item, carrying the original barcode + any lot/expiry decoded off the package.
+  function addSearchedScanProduct(product) {
+    if (!product) return;
+    const code = scanResult?.code || "";
+    const scanned = scanResult?.scanned || null;
+    markScanSource();
+    const item = makeScanDraftItem(code, product, scanned);
+    setDraftItems((items) => {
+      if (code && items.some((it) => it.barcode === code && it.included !== false)) return items;
+      return [...items, item];
+    });
+    setScanCount((n) => n + 1);
+    showToast(`Added ${product.name}`);
   }
 
   // Add a catalog product (from the product page) to the current reorder list.
@@ -1798,8 +1863,8 @@ export default function Home() {
                 onScan={handleScanComplete}
                 onClearScanResult={() => setScanResult(null)}
                 onApplyDetails={applyScanDetails}
-                onLinkProduct={linkProductToItem}
-                onCaptureLabel={() => showToast("Label capture is coming soon — saved as a pending item")}
+                onSearchAdd={addSearchedScanProduct}
+                onCaptureLabel={() => showToast("Label capture is coming soon")}
                 onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
                 onBack={() => { setScanResult(null); navigate("/app/reorder-list"); }}
               />

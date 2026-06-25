@@ -615,19 +615,22 @@ export function MobileScanSession({
 
 export function MobileReorderScan({
   active = true, scanResult, scanCount = 0,
-  onScan, onClearScanResult, onApplyDetails, onLinkProduct, onCaptureLabel, onReview, onBack,
+  onScan, onClearScanResult, onApplyDetails, onSearchAdd, onCaptureLabel, onReview, onBack,
 }) {
   const [sheet, setSheet] = useState(null); // manual (Enter code)
   const [captured, setCaptured] = useState(false);
   const pulseTimer = useRef();
 
-  const drawerOpen = Boolean(scanResult);
-  const matched = drawerOpen && scanResult.status !== "Not found";
-  // Keep the camera running under the compact matched drawer so the buyer can
-  // scan the next item without dismissing it first — the drawer is non-blocking
-  // and the next scan replaces it. A full sheet (Enter code / Search) or the
-  // unmatched decision sheet still pauses scanning.
-  const cameraActive = active && !sheet && (!drawerOpen || matched);
+  // Outcome of the latest scan, set by the parent: "added" (new match),
+  // "duplicate" (already on the list), "unmatched" (real code, no catalog
+  // match), or "qr" (a website QR — skipped). Drives the acknowledgement shown.
+  const kind = scanResult?.kind;
+  // Keep the camera live behind every acknowledgement — the compact matched
+  // drawer, the unmatched decision sheet, and the transient pills all float over
+  // a running viewfinder so the next item scans without dismissing anything
+  // first (no more black screen on a no-match). Only a full input sheet (Enter
+  // code / Search the catalog) pauses scanning.
+  const cameraActive = active && !sheet;
 
   const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
     active: cameraActive,
@@ -679,58 +682,80 @@ export function MobileReorderScan({
       {/* No location pill here: scanning into the reorder list doesn't pick a
           location up front — it's captured per item in the post-scan drawer. */}
 
-      {/* Floating confirmation that a matched scan auto-added the item. The
-          unmatched case has no badge — its own drawer says "No exact match". */}
-      {drawerOpen && scanResult.status !== "Not found" && (
+      {/* Floating acknowledgement pills. A new match adds the item (green); a
+          re-scan of something already on the list shows an amber "already
+          scanned" pill (no chime, nothing added); a website QR shows an amber
+          "skipped" pill. The unmatched case has no pill — its own sheet asks
+          what to do. */}
+      {kind === "added" && (
         <div className={s.scanAddedBadge}>
           <Icon name="icon-check-circle" />
-          Item added successfully
+          Item added
+        </div>
+      )}
+      {kind === "duplicate" && (
+        <div className={`${s.scanAddedBadge} ${s.scanWarnBadge}`}>
+          <Icon name="icon-refresh" />
+          <span className={s.scanBadgeText}>
+            {scanResult.item?.product || scanResult.item?.canonicalName
+              ? `Already scanned · ${scanResult.item.product || scanResult.item.canonicalName}`
+              : "Already scanned"}
+          </span>
+        </div>
+      )}
+      {kind === "qr" && (
+        <div className={`${s.scanAddedBadge} ${s.scanWarnBadge}`}>
+          <Icon name="icon-info" />
+          Skipped website QR code
         </div>
       )}
 
       <div className={s.camFrame} aria-hidden="true"><span /><span /><span /><span /></div>
-      {cameraStatus === "ready" && (!drawerOpen || matched) && (
+      {cameraStatus === "ready" && kind !== "unmatched" && (
         <div className={s.camHint}>
-          {matched ? "Point at the next item to keep scanning" : autoDetect ? "Point at a barcode" : "Tap Enter code to type it in"}
+          {kind === "added" ? "Point at the next item to keep scanning" : autoDetect ? "Point at a barcode" : "Tap Enter code to type it in"}
         </div>
       )}
 
-      {!drawerOpen && (
+      {/* Enter code stays available except where the bottom of the screen is
+          taken by the matched drawer or the unmatched sheet. */}
+      {kind !== "added" && kind !== "unmatched" && (
         <button type="button" className={s.camManualBtn} onClick={() => setSheet("manual")}>
           <Icon name="icon-plus-circle" /> Enter code
         </button>
       )}
 
-      {/* Matched scans capture lot/expiry; an unmatched scan instead offers
-          capture-label / search / skip and is saved as a pending item. */}
-      {drawerOpen && (
-        scanResult.status === "Not found" ? (
-          <UnmatchedScanSheet
-            onCaptureLabel={() => { onCaptureLabel?.(); onClearScanResult?.(); }}
-            onSearch={() => setSheet("search")}
-            onSkip={() => onClearScanResult?.()}
-          />
-        ) : (
-          <ReorderScanSheet
-            key={scanResult.item?.id}
-            result={scanResult}
-            onPersist={onApplyDetails}
-            onDismiss={(body) => {
-              onApplyDetails?.(scanResult.item?.id, body);
-              onClearScanResult?.();
-            }}
-          />
-        )
+      {/* A new match opens the compact lot/expiry drawer over the live camera. An
+          unmatched scan opens the decision sheet (search / capture / skip) —
+          nothing is added unless the buyer picks a product there. Duplicate and
+          QR outcomes show only a transient pill (handled above). */}
+      {kind === "unmatched" && (
+        <UnmatchedScanSheet
+          onCaptureLabel={() => { onCaptureLabel?.(); onClearScanResult?.(); }}
+          onSearch={() => setSheet("search")}
+          onSkip={() => onClearScanResult?.()}
+        />
+      )}
+      {kind === "added" && (
+        <ReorderScanSheet
+          key={scanResult.item?.id}
+          result={scanResult}
+          onPersist={onApplyDetails}
+          onDismiss={(body) => {
+            onApplyDetails?.(scanResult.item?.id, body);
+            onClearScanResult?.();
+          }}
+        />
       )}
 
       {sheet === "manual" && <ManualSheet onClose={() => setSheet(null)} onSubmit={(code) => { onScan?.(code); setSheet(null); }} />}
       {sheet === "search" && (
         <SearchSheet
           title="Search the catalog"
-          hint="Find the right product to match this item."
+          hint="Find the right product to add for this scan."
           onClose={() => setSheet(null)}
           onPick={(product) => {
-            if (scanResult?.item?.id) onLinkProduct?.(scanResult.item.id, product);
+            onSearchAdd?.(product);
             setSheet(null);
             onClearScanResult?.();
           }}
@@ -777,7 +802,7 @@ function UnmatchedScanSheet({ onCaptureLabel, onSearch, onSkip }) {
         </div>
 
         <div className={s.unmatchedFootnote}>
-          <Icon name="icon-info" /> We&rsquo;ll create a pending item you can review later.
+          <Icon name="icon-info" /> Nothing is added unless you search and pick a product.
         </div>
       </div>
     </div>
