@@ -1,3 +1,4 @@
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { GET } from "../route"
 
 // Exercises the scan route's HIBC wiring end-to-end against a stubbed module
@@ -40,7 +41,13 @@ function makeService(overrides: Record<string, any> = {}) {
 }
 
 function run(service: any, query: string) {
-  const req: any = { url: `/medmkp/products/search?${query}`, scope: { resolve: () => service } }
+  // The GUDID-reference fallback resolves the PG connection and calls knex.raw();
+  // stub it so a barcode that misses every earlier path doesn't throw. All other
+  // tokens (i.e. MEDMKP_MODULE) resolve to the module service mock.
+  const knex = { raw: async () => ({ rows: [] }) }
+  const resolve = (token: string) =>
+    token === ContainerRegistrationKeys.PG_CONNECTION ? knex : service
+  const req: any = { url: `/medmkp/products/search?${query}`, scope: { resolve } }
   let body: any
   const res: any = { json: (payload: any) => { body = payload } }
   return GET(req, res).then(() => body)
