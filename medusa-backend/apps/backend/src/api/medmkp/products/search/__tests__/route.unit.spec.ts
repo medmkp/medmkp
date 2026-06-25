@@ -212,3 +212,62 @@ describe("GET /medmkp/products/search — substitute fallback", () => {
     expect(body.products[0].best_offer.supplier_name).toBe("DC Dental")
   })
 })
+
+// House-brand regression: when the scanned item's longest name token is its
+// (house) brand — "Criterion N300 Nitrile..." — a single-token retrieval only
+// pulls the brand's own price-less siblings. The substitute search must retrieve
+// by the next tokens too so the product TYPE ("nitrile") brings in priced
+// equivalents from other brands.
+const HS_GLOVE = {
+  id: "sp_hsglove", supplier_id: "sup_hs", sku: "GLOVE123", manufacturer_sku: "N300",
+  name: "Criterion N300 Nitrile Exam Gloves Small Electric Blue Non-Sterile 300/Bx",
+  brand: "Henry Schein Inc.", category: "Gloves", image_url: "", pack_size: "300/Bx", pack_quantity: 300, base_unit: "glove",
+}
+const VELVET_SP = {
+  id: "sp_velvet", supplier_id: "sup_dc", sku: "V-300",
+  name: "Velvet 300 Nitrile Exam Gloves Small Blue Non-Sterile 300/Bx",
+  brand: "Velvet", image_url: "", pack_size: "300/Bx", pack_quantity: 300, base_unit: "glove",
+}
+const CRITERION_CANON = { id: "canon_criterion", name: HS_GLOVE.name, category: "Gloves" }
+const VELVET_CANON = { id: "canon_velvet", name: VELVET_SP.name, category: "Gloves" }
+
+describe("GET /medmkp/products/search — substitute retrieval keys on product type, not brand", () => {
+  it("surfaces a priced cross-brand substitute reached only via a type token", async () => {
+    const service = {
+      listSupplierProducts: jest.fn(async (filter: any) => {
+        if (filter.sku?.includes("GLOVE123")) return [HS_GLOVE]
+        if (filter.id) return [HS_GLOVE, VELVET_SP].filter((sp) => filter.id.includes(sp.id))
+        return []
+      }),
+      listCanonicalProductMatches: jest.fn(async (filter: any) => {
+        const ids: string[] = filter.canonical_product_id ?? []
+        const bySp: string[] = filter.supplier_product_id ?? []
+        const out: any[] = []
+        if (bySp.includes("sp_hsglove") || ids.includes("canon_criterion")) out.push({ canonical_product_id: "canon_criterion", supplier_product_id: "sp_hsglove", match_status: "exact" })
+        if (ids.includes("canon_velvet")) out.push({ canonical_product_id: "canon_velvet", supplier_product_id: "sp_velvet", match_status: "exact" })
+        return out
+      }),
+      // Brand token finds only the price-less house-brand canonical; the type
+      // token "nitrile" is what reaches the priced Velvet canonical.
+      listCanonicalProducts: jest.fn(async (filter: any) => {
+        if (filter.id?.includes("canon_criterion")) return [CRITERION_CANON]
+        if (filter.q === "criterion") return [CRITERION_CANON]
+        if (filter.q === "nitrile") return [VELVET_CANON]
+        return []
+      }),
+      listSupplierPriceSnapshots: jest.fn(async (filter: any) => {
+        if (filter.supplier_product_id?.includes("sp_velvet")) return [{ supplier_product_id: "sp_velvet", price_cents: 1539, unit_price_cents: 5, availability: "in_stock", captured_at: "2026-06-20T00:00:00Z" }]
+        return []
+      }),
+      listSuppliers: jest.fn(async () => [{ id: "sup_dc", name: "DC Dental" }, { id: "sup_hs", name: "Henry Schein" }]),
+    }
+    const body = await run(service, "code=GLOVE123")
+
+    expect(body.kind).toBe("substitute")
+    expect(body.products[0].best_offer.name).toContain("Velvet")
+    expect(body.products[0].best_offer.price_cents).toBe(1539)
+    // The retrieval must have queried by the type token, not just the brand.
+    const queried = service.listCanonicalProducts.mock.calls.map((c: any[]) => c[0]?.q).filter(Boolean)
+    expect(queried).toContain("nitrile")
+  })
+})
