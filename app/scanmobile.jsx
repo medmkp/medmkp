@@ -1397,11 +1397,6 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
   const [openReview,    setOpenReview]    = useState(true);
   const [openDetails,   setOpenDetails]   = useState(true);
   const [openConfirmed, setOpenConfirmed] = useState(true);
-  const [showAllDetails,   setShowAllDetails]   = useState(false);
-  const [showAllConfirmed, setShowAllConfirmed] = useState(false);
-
-  const detailsShown   = showAllDetails   ? details   : details.slice(0, 4);
-  const confirmedShown = showAllConfirmed ? confirmed : confirmed.slice(0, 2);
 
   return (
     <div className={`${s.screen} ${s.reviewScroll}`}>
@@ -1455,7 +1450,7 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
             </button>
             {openDetails && (
               <div className={s.revList}>
-                {detailsShown.map((line) => (
+                {details.map((line) => (
                   <SwipeRow key={line.id} onRemove={() => onRemoveLine(line.id)}>
                     <span className={s.revThumb}>{line.image_url ? <img src={line.image_url} alt="" /> : <Icon name="icon-clock" />}</span>
                     <div className={s.revBody}>
@@ -1470,11 +1465,6 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
                     </div>
                   </SwipeRow>
                 ))}
-                {details.length > 4 && !showAllDetails && (
-                  <button type="button" className={s.moreRow} onClick={() => setShowAllDetails(true)}>
-                    <Icon name="icon-plus" /> {details.length - 4} more items
-                  </button>
-                )}
               </div>
             )}
           </section>
@@ -1489,7 +1479,7 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
             </button>
             {openConfirmed && (
               <div className={s.revList}>
-                {confirmedShown.map((line) => (
+                {confirmed.map((line) => (
                   <SwipeRow key={line.id} onRemove={() => onRemoveLine(line.id)}>
                     <span className={s.revThumb}>{line.image_url ? <img src={line.image_url} alt="" /> : <Icon name="icon-check-circle" />}</span>
                     <div className={s.revBody}>
@@ -1502,11 +1492,6 @@ function ReviewSession({ session, lines, counts, onBack, onScanMore, onSave, onD
                     <span className={`${s.resultPill} ${s.pillGreen}`}><Icon name="icon-check-circle" /> Exact match</span>
                   </SwipeRow>
                 ))}
-                {confirmed.length > 2 && !showAllConfirmed && (
-                  <button type="button" className={s.moreRow} onClick={() => setShowAllConfirmed(true)}>
-                    <Icon name="icon-plus" /> {confirmed.length - 2} more confirmed items
-                  </button>
-                )}
               </div>
             )}
           </section>
