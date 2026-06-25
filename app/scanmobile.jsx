@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogoMark, Icon, QrScanGlyph } from "./icons";
-import { formatTraceDate, SWIPE_REVEAL } from "./lib";
+import { formatTraceDate, isQrUrl, SWIPE_REVEAL } from "./lib";
 import { ProductSearchResults, useBarcodeScanner, useProductSearch } from "./ui";
 import s from "./scanmobile.module.css";
 
@@ -391,6 +391,10 @@ export function MobileScanSession({
     active: cameraActive,
     onScan: (code) => {
       onScan(code);
+      // A location / website QR isn't a product — the parent shows a "not a
+      // product" toast. Skip the green "captured" pulse so pointing at a
+      // location placard mid-audit doesn't strobe the viewfinder.
+      if (isQrUrl(code)) return;
       setCaptured(true);
       window.clearTimeout(pulseTimer.current);
       pulseTimer.current = window.setTimeout(() => setCaptured(false), 700);
@@ -625,6 +629,9 @@ export function MobileReorderScan({
     active: cameraActive,
     onScan: (code) => {
       onScan?.(code);
+      // A website QR isn't a product — the parent shows a transient "skipped"
+      // pill. Skip the green "captured" pulse so it doesn't strobe.
+      if (isQrUrl(code)) return;
       setCaptured(true);
       window.clearTimeout(pulseTimer.current);
       pulseTimer.current = window.setTimeout(() => setCaptured(false), 700);

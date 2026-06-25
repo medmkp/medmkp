@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Icon } from "./icons";
-import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, candidateSub, cap, formatNeedBy, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, supplierInitials, supplierLogoSrc } from "./lib";
+import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, supplierInitials, supplierLogoSrc } from "./lib";
 
 export function useBarcodeScanner({ active, onScan }) {
   const videoRef = useRef(null);
@@ -43,7 +43,10 @@ export function useBarcodeScanner({ active, onScan }) {
       if (cooling) return;
       cooling = true;
       lastCode = code || lastCode;
-      if (navigator.vibrate) navigator.vibrate(50);
+      // A successful capture buzzes; a website / location QR doesn't — it's not a
+      // product, so skip the success haptic and let the consumer show its own
+      // "not a product" hint instead.
+      if (navigator.vibrate && !isQrUrl(code)) navigator.vibrate(50);
       onScanRef.current?.(code || null);
       cooldownId = window.setTimeout(() => { cooling = false; }, 800);
     }
@@ -155,8 +158,11 @@ export function useBarcodeScanner({ active, onScan }) {
             const code = await detectFrame();
             if (!code) {
               // Barcode out of view for a beat → let it fire again next time it's
-              // presented, so the buyer can deliberately re-scan an item.
-              if (++emptyFrames >= 3) lastCode = null;
+              // presented, so the buyer can deliberately re-scan an item. A
+              // website / location QR is the exception: keep it muted once
+              // announced so a placard flickering in and out of frame doesn't
+              // re-trigger the "not a product" warning over and over.
+              if (++emptyFrames >= 3 && !isQrUrl(lastCode)) lastCode = null;
               return;
             }
             emptyFrames = 0;
