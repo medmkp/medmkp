@@ -12,16 +12,19 @@ import {
 } from "./lib";
 import { ScanHandoffQr } from "./ui";
 import { MobileScanStart, MobileScanSession } from "./scanmobile";
+import { planScanMerge } from "./scanMerge";
 import { playMatchChime, vibrateNoMatch } from "./scanSound";
 import s from "./scansessions.module.css";
 
-// Scanner — session-less. Pick a location (and a record type: Receiving or Shelf
-// Audit), then scan: every scan lands immediately as lot-at-location evidence on
-// that location. There is no resumable session, no "complete" step — the data is
-// saved as you go. Exact matches land as matched evidence; anything the catalog
-// can't identify lands as a placeholder that surfaces in Needs Attention until
-// it's linked to a product. Scanning is a phone activity; the desktop view keys
-// codes in and hands off to the phone camera.
+// Scanner — session-less, no modes. Pick a location, then scan: every scan lands
+// immediately as lot-at-location evidence on that location. A lot not yet on the
+// shelf is a receive, an already-filed lot is a confirmation — the backend infers
+// which (a new record vs a merge), no record type to choose up front. There is no
+// resumable session, no "complete" step — the data is saved as you go. Exact
+// matches land as matched evidence; anything the catalog can't identify lands as a
+// placeholder that surfaces in Needs Attention until it's linked to a product.
+// Scanning is a phone activity; the desktop view keys codes in and hands off to
+// the phone camera.
 
 const TYPE_META = {
   operatory: { icon: "icon-dental-chair", tint: s.tBlue },
@@ -33,8 +36,6 @@ const TYPE_META = {
   other: { icon: "icon-map-pin", tint: s.tBlue },
 };
 const typeMeta = (type) => TYPE_META[type] || TYPE_META.other;
-
-const MODE_LABEL = { receiving: "Receiving", shelf_audit: "Shelf Audit" };
 
 // Decorate a freshly-saved evidence item for the scanner UI: attach the matched
 // product's image + offer (the inventory row itself carries neither) so the
@@ -48,20 +49,26 @@ function decorateItem(item, product) {
   };
 }
 
-export function ScannerView({ startLocationId, startMode, onNavigate, onToast }) {
+export function ScannerView({ startLocationId, onNavigate, onToast }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-  // "start" → choose mode + location; "scanning" → the camera/keypad surface.
+  // "start" → choose location; "scanning" → the camera/keypad surface.
   const [phase, setPhase] = useState(startLocationId ? "scanning" : "start");
-  const [captureType, setCaptureType] = useState(startMode || "shelf_audit");
   const [currentLocationId, setCurrentLocationId] = useState(startLocationId || null);
   const [items, setItems] = useState([]); // captured this run, for the count + list
   const [pendingItem, setPendingItem] = useState(null);
-  // OCR suggestion for the pending item: { itemId, busy, lot?, expiry? }.
+  // OCR suggestion for the pending item: { itemId, busy, needLot, needExp, lot?, expiry? }.
   const [ocr, setOcr] = useState(null);
   const [manual, setManual] = useState("");
   const flashTimer = useRef();
+  // Serialize scan processing: one package's 1D and 2D codes fire ~1s apart, and
+  // the later read must see the row the first one filed so it merges onto it
+  // rather than racing ahead and duplicating it (see planScanMerge).
+  const scanLock = useRef(Promise.resolve());
+  // Mirror of the pending item, kept in a ref so a racing dual-symbology follow-up
+  // sees the row the previous scan just filed (state lags a render behind).
+  const pendingItemRef = useRef(null);
 
   useEffect(() => { setIsMobile(window.matchMedia("(max-width: 900px)").matches); }, []);
 
@@ -86,18 +93,16 @@ export function ScannerView({ startLocationId, startMode, onNavigate, onToast })
 
   const active = phase === "scanning";
 
-  // Begin scanning. Shelf Audit is scoped to the chosen location; Receiving fans
-  // out to shelves, so it defaults to the first location and the put-away
-  // location is changed from the scanner's pill as the tech moves.
-  const start = useCallback((loc, mode) => {
-    const cap = mode || "shelf_audit";
-    setCaptureType(cap);
-    setCurrentLocationId(loc?.id || (cap === "receiving" ? (locations[0]?.id || null) : null));
+  // Begin scanning at the chosen location. The put-away / audited location is
+  // changed from the scanner's pill as the tech moves; every scan files there.
+  const start = useCallback((loc) => {
+    setCurrentLocationId(loc?.id || null);
     setItems([]);
     setPendingItem(null);
+    pendingItemRef.current = null;
     setOcr(null);
     setPhase("scanning");
-  }, [locations]);
+  }, []);
 
   const handleScan = useCallback(async (code, getShot) => {
     if (!code || !active) return;
@@ -111,12 +116,58 @@ export function ScannerView({ startLocationId, startMode, onNavigate, onToast })
     // Freeze the scanned frame now (mobile only), while the package is still in
     // view — OCR runs after the lookup, by which point the phone has moved.
     const frame = typeof getShot === "function" ? getShot() : null;
-    setOcr(null);
+
+    // Serialize so a dual-symbology follow-up scan sees the row the first filed and
+    // merges onto it rather than racing ahead and duplicating it.
+    const prev = scanLock.current;
+    let unlock;
+    scanLock.current = new Promise((r) => { unlock = r; });
     try {
-      const { product, scanned } = await scanLookup(code);
-      const body = { location_id: currentLocationId, capture_type: captureType, ...scanLinePayload(code, product, scanned) };
+      await prev;
+      const pending = pendingItemRef.current;
+      // The camera re-fires a barcode that flickers out of and back into frame
+      // (glare on a foil label, focus hunting). It's already in the drawer — don't
+      // re-file it (churns the list) or re-chime. OCR keeps reading the held label.
+      if (pending && code === pending.barcode) return;
+
+      setOcr(null);
+      const { product, scanned, gtin } = await scanLookup(code);
+      const payload = scanLinePayload(code, product, scanned);
+
+      // One package, two symbologies: a 1D barcode (GTIN only) and a 2D GS1 code
+      // (GTIN + lot + expiry) read a beat apart resolve to the same item — by GTIN
+      // even when it isn't in the catalog. Rather than file a duplicate evidence
+      // row, fold the richer read's lot/expiry onto the row still pending — or drop
+      // the read when it adds nothing (a bare GTIN arriving after the GS1 read).
+      // gtin rides on the in-memory item only (not persisted); it's all the merge
+      // needs in the held-item window. See planScanMerge.
+      const plan = planScanMerge(pending, { ...payload, gtin });
+      if (plan.merge) {
+        if (plan.patch) {
+          const { item } = await traceApi.updateItem(pending.id, plan.patch);
+          // Keep the in-memory render data (thumbnail, offer, gtin, the received/
+          // confirmed action) the patched row doesn't carry back.
+          const merged = { ...pending, ...item, gtin: pending.gtin, _offer: pending._offer, image_url: pending.image_url, inventory_action: pending.inventory_action };
+          pendingItemRef.current = merged; // mirror now so a racing follow-up sees it
+          setItems((p) => [merged, ...p.filter((i) => i.id !== merged.id)]);
+          setPendingItem(merged);
+        }
+        playMatchChime();
+        return;
+      }
+
+      // No record type to choose: a scan files the lot at the location as evidence.
+      // capture_type records how the lot first entered (a receive); the per-scan
+      // received-vs-confirmed distinction comes from the outcome below.
+      const body = { location_id: currentLocationId, capture_type: "receiving", ...payload };
       const { item, outcome } = await traceApi.createScan(body);
-      const decorated = decorateItem(item, product);
+      // outcome ("added" | "merged" | "unmatched") → inventory_action: a fresh lot
+      // at this location is a receive; an existing lot re-scanned is a confirm.
+      const inventory_action = outcome === "merged" ? "confirmed" : "received";
+      const decorated = { ...decorateItem(item, product), inventory_action, gtin };
+      // Mirror into the ref immediately, ahead of the render that sets it, so a
+      // dual-symbology follow-up scan merges onto this row instead of duplicating.
+      pendingItemRef.current = decorated;
       // A re-scan of the same lot returns the same record id — replace in place and
       // float it to the top rather than stacking a duplicate row.
       setItems((prev) => [decorated, ...prev.filter((i) => i.id !== decorated.id)]);
@@ -132,18 +183,21 @@ export function ScannerView({ startLocationId, startMode, onNavigate, onToast })
 
       // OCR fallback: the barcode identified the item but carried no lot/expiry —
       // read them off the frozen frame, on-device, as a suggestion the drawer fills.
-      const needsLot = !body.lot_number;
-      const needsExp = !body.expiration_date;
-      if (frame && (needsLot || needsExp)) {
-        setOcr({ itemId: item.id, busy: true });
+      const needLot = !body.lot_number;
+      const needExp = !body.expiration_date;
+      if (frame && (needLot || needExp)) {
+        setOcr({ itemId: item.id, busy: true, needLot, needExp });
         try {
           const { ocrLotExpiry } = await import("./ocrLabel");
-          const res = await ocrLotExpiry(frame);
+          // Pass the scanned code so OCR never mistakes its printed digits for a lot.
+          const res = await ocrLotExpiry(frame, { barcode: code });
           setOcr({
             itemId: item.id,
             busy: false,
-            lot: needsLot ? res.lot || null : null,
-            expiry: needsExp ? res.expiry || null : null,
+            needLot,
+            needExp,
+            lot: needLot ? res.lot || null : null,
+            expiry: needExp ? res.expiry || null : null,
           });
         } catch {
           setOcr(null);
@@ -151,22 +205,26 @@ export function ScannerView({ startLocationId, startMode, onNavigate, onToast })
       }
     } catch {
       onToast?.("Scan failed — try again.");
+    } finally {
+      unlock();
     }
-  }, [active, currentLocationId, captureType, isMobile, onToast]);
+  }, [active, currentLocationId, isMobile, onToast]);
 
   // Add an item the buyer picked from search (no barcode).
   const addProduct = useCallback(async (product) => {
     if (!active || !currentLocationId) return;
     try {
-      const body = { location_id: currentLocationId, capture_type: captureType, ...scanLinePayload(null, product, null) };
-      const { item } = await traceApi.createScan(body);
-      const decorated = decorateItem(item, product);
+      const body = { location_id: currentLocationId, capture_type: "receiving", ...scanLinePayload(null, product, null) };
+      const { item, outcome } = await traceApi.createScan(body);
+      const inventory_action = outcome === "merged" ? "confirmed" : "received";
+      const decorated = { ...decorateItem(item, product), inventory_action };
+      pendingItemRef.current = decorated;
       setItems((prev) => [decorated, ...prev.filter((i) => i.id !== decorated.id)]);
       setPendingItem(decorated);
     } catch {
       onToast?.("Couldn't add that item.");
     }
-  }, [active, currentLocationId, captureType, onToast]);
+  }, [active, currentLocationId, onToast]);
 
   const patchItem = useCallback(async (id, body) => {
     try {
@@ -196,17 +254,15 @@ export function ScannerView({ startLocationId, startMode, onNavigate, onToast })
           items={items}
           active={active}
           pendingItem={pendingItem}
-          captureType={captureType}
           ocrBusy={Boolean(ocrMatch?.busy)}
-          ocrSuggestion={ocrMatch && !ocrMatch.busy ? { lot: ocrMatch.lot, expiry: ocrMatch.expiry } : null}
+          ocrSuggestion={ocrMatch && !ocrMatch.busy ? { lot: ocrMatch.lot, expiry: ocrMatch.expiry, needLot: ocrMatch.needLot, needExp: ocrMatch.needExp } : null}
           onScan={handleScan}
           onAddProduct={addProduct}
           onPatchItem={patchItem}
-          onClearPending={() => setPendingItem(null)}
+          onClearPending={() => { setPendingItem(null); pendingItemRef.current = null; }}
           onBack={() => (startLocationId ? onNavigate?.("/app/locations") : setPhase("start"))}
           locations={locations}
-          onSwitchLocation={(loc) => setCurrentLocationId(loc.id)}
-          onSwitchMode={(mode) => setCaptureType(mode)}
+          onSwitchLocation={(loc) => { setCurrentLocationId(loc.id); pendingItemRef.current = null; }}
           onNavigate={onNavigate}
         />
       );
@@ -228,7 +284,6 @@ export function ScannerView({ startLocationId, startMode, onNavigate, onToast })
     return (
       <DesktopScanner
         location={location}
-        captureType={captureType}
         items={items}
         manual={manual}
         setManual={setManual}
@@ -242,17 +297,15 @@ export function ScannerView({ startLocationId, startMode, onNavigate, onToast })
     <DesktopStart
       loading={loading}
       locations={locations}
-      captureType={captureType}
-      onPickMode={setCaptureType}
       onStart={start}
       onNavigate={onNavigate}
     />
   );
 }
 
-// ── Desktop: choose mode + location ───────────────────────────────────
+// ── Desktop: choose a location ────────────────────────────────────────
 
-function DesktopStart({ loading, locations, captureType, onPickMode, onStart, onNavigate }) {
+function DesktopStart({ loading, locations, onStart, onNavigate }) {
   return (
     <div className={s.page}>
       <header className={s.head}>
@@ -264,19 +317,6 @@ function DesktopStart({ loading, locations, captureType, onPickMode, onStart, on
           </p>
         </div>
       </header>
-
-      <div className={s.modeToggle}>
-        {["shelf_audit", "receiving"].map((m) => (
-          <button
-            key={m}
-            type="button"
-            className={`${s.modeToggleBtn} ${captureType === m ? s.modeToggleActive : ""}`}
-            onClick={() => onPickMode(m)}
-          >
-            <Icon name={m === "receiving" ? "icon-package" : "icon-clipboard-check"} /> {MODE_LABEL[m]}
-          </button>
-        ))}
-      </div>
 
       {loading ? (
         <div className={s.empty}>Loading locations…</div>
@@ -294,7 +334,7 @@ function DesktopStart({ loading, locations, captureType, onPickMode, onStart, on
           {locations.map((loc) => {
             const meta = typeMeta(loc.type);
             return (
-              <button key={loc.id} type="button" className={s.pickRow} onClick={() => onStart(loc, captureType)}>
+              <button key={loc.id} type="button" className={s.pickRow} onClick={() => onStart(loc)}>
                 <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
                 <span className={s.pickBody}>
                   <strong>{loc.name}</strong>
@@ -312,9 +352,9 @@ function DesktopStart({ loading, locations, captureType, onPickMode, onStart, on
 
 // ── Desktop: scanning (keypad + phone handoff + run list) ─────────────
 
-function DesktopScanner({ location, captureType, items, manual, setManual, onSubmitManual, onBack, onNavigate }) {
+function DesktopScanner({ location, items, manual, setManual, onSubmitManual, onBack, onNavigate }) {
   const handoffUrl = typeof window !== "undefined" && location
-    ? `${window.location.origin}/app/scan-session?location=${encodeURIComponent(location.id)}&mode=${captureType}`
+    ? `${window.location.origin}/app/scan-session?location=${encodeURIComponent(location.id)}`
     : "";
 
   return (
@@ -331,7 +371,6 @@ function DesktopScanner({ location, captureType, items, manual, setManual, onSub
           <div>
             <div className={s.sessionTitleRow}>
               <h1 className={s.title}>{location?.name || "Location"}</h1>
-              <span className={`${s.badge} ${s.badgeBlue}`}>{MODE_LABEL[captureType]}</span>
             </div>
             <p className={s.subtitle}>Scans land here as you go — lot &amp; expiry are captured when the code carries them.</p>
           </div>

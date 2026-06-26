@@ -662,22 +662,24 @@ export async function lookupScannedProduct(code) {
 // the backend decoded off the package (the `scanned` block). The barcode path
 // carries traceability (GS1 / HIBC); the SKU path is a plain identity fallback.
 export async function scanLookup(code) {
-  if (!code) return { product: null, scanned: null, kind: "none" };
+  if (!code) return { product: null, scanned: null, kind: "none", gtin: null };
   try {
     const response = await fetch(`/api/products/search?barcode=${encodeURIComponent(code)}&limit=1`);
     const data = await response.json();
     const product = data.canonical_products?.[0] || null;
     const scanned = data.scanned || null;
-    if (product || scanned) return { product, scanned, kind: data.kind || "none" };
+    // gtin: the canonical GTIN the backend decoded off the code — present even for
+    // an unmatched read, so a package's 1D + 2D symbologies can be merged by it.
+    if (product || scanned) return { product, scanned, kind: data.kind || "none", gtin: data.gtin || null };
   } catch {
     /* fall through to SKU lookup */
   }
   try {
     const response = await fetch(`/api/products/search?code=${encodeURIComponent(code)}&limit=1`);
     const data = await response.json();
-    return { product: data.canonical_products?.[0] || null, scanned: null, kind: data.kind || "none" };
+    return { product: data.canonical_products?.[0] || null, scanned: null, kind: data.kind || "none", gtin: data.gtin || null };
   } catch {
-    return { product: null, scanned: null, kind: "none" };
+    return { product: null, scanned: null, kind: "none", gtin: null };
   }
 }
 
@@ -703,6 +705,24 @@ export function isQrUrl(code) {
   if (/^www\./i.test(raw)) return true;         // scheme-less URL
   if (/\btracedds\.com\b/i.test(raw)) return true; // our own QR codes
   return false;
+}
+
+// A scanned QR that points back into the app at a specific location — our printed
+// cabinet/shelf placards encode `…/app/scan-session?location=<id>` (see
+// qrlabels.jsx). Scanning one in the scanner switches which location scans file
+// into, so pull the location id back out. Returns null for any other URL/QR.
+export function parseLocationQr(code) {
+  const raw = String(code || "").trim();
+  if (!raw) return null;
+  try {
+    // A base lets scheme-less placards (www.tracedds.com/…) parse too.
+    const url = new URL(raw, "https://tracedds.com");
+    // Match the placard path, singular or plural, with or without a trailing slash.
+    if (!/\/app\/scan-sessions?\/?$/.test(url.pathname)) return null;
+    return url.searchParams.get("location") || null;
+  } catch {
+    return null;
+  }
 }
 
 // Why a scan didn't resolve to a catalog product, phrased for the buyer. Turns a

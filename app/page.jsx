@@ -40,7 +40,6 @@ export default function Home() {
   const [supplierId, setSupplierId] = useState(null);
   const [locationId, setLocationId] = useState(null);
   const [scanLocationId, setScanLocationId] = useState("");
-  const [scanMode, setScanMode] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -430,7 +429,6 @@ export default function Home() {
       setSupplierId(nextRoute.supplierId || null);
       setLocationId(nextRoute.locationId || null);
       setScanLocationId(nextRoute.scanLocationId || "");
-      setScanMode(nextRoute.scanMode || "");
       setSearchQuery(nextRoute.searchQuery || "");
       setMobileAddItemRoute(Boolean(nextRoute.mobileAddItemRoute));
       setMenuOpen(false);
@@ -781,7 +779,6 @@ export default function Home() {
     setSupplierId(next.supplierId || null);
     setLocationId(next.locationId || null);
     setScanLocationId(next.scanLocationId || "");
-    setScanMode(next.scanMode || "");
     setSearchQuery(next.searchQuery || "");
     setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
     setMenuOpen(false);
@@ -1500,7 +1497,6 @@ export default function Home() {
   const scanStartEl = (
     <ScannerView
       startLocationId={scanLocationId}
-      startMode={scanMode}
       onNavigate={navigate}
       onToast={showToast}
     />
