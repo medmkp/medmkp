@@ -311,6 +311,47 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(word ?? [])]).toEqual(["w"])
   })
 
+  it("captures common product colors as hard-conflict attributes", () => {
+    expect([...(extractNumericAttrs("Zirc E-Z ID Tape Teal 70Z300-J").get("color") ?? [])]).toEqual(["teal"])
+    expect([...(extractNumericAttrs("EZ-ID Tape System and Rolls, Roll, 10 ft., Green").get("color") ?? [])]).toEqual(["green"])
+  })
+
+  it("rejects same-SKU color variants instead of merging them", () => {
+    const decision = score(
+      {
+        supplier_id: "msup_dentalcity_com",
+        manufacturer_sku: "70Z300J",
+        brand: "Zirc",
+        name: "Zirc E-Z ID Tape Teal 70Z300-J",
+      },
+      {
+        supplier_id: "msup_darbydental_com",
+        manufacturer_sku: "70Z300J",
+        brand: "Zirc",
+        name: "EZ-ID Tape System and Rolls, Roll, 10 ft., Green",
+      }
+    )
+    expect(decision.status).toBe("reject")
+  })
+
+  it("keeps same-SKU products with matching color mergeable", () => {
+    const decision = score(
+      {
+        supplier_id: "msup_dentalcity_com",
+        manufacturer_sku: "70Z300J",
+        brand: "Zirc",
+        name: "Zirc E-Z ID Tape Teal 70Z300-J",
+      },
+      {
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "605-70Z300J",
+        brand: "Zirc Dental Products",
+        name: "EZ-ID Tape Roll 10' Teal",
+      }
+    )
+    expect(["exact", "variant"]).toContain(decision.status)
+  })
+
   it("rejects non-woven sponges that differ on bare dimension (4x4 vs 2x2)", () => {
     const decision = score(
       { brand: "Henry Schein", name: 'Essentials Rayon/Poly Blend Non-Woven Sponge 4x4" 4 Ply Non-Sterile' },

@@ -66,6 +66,25 @@ const PACK_UNIT_WORDS =
 
 const MEASURE_UNIT_SUFFIX = /^(\d+(\.\d+)?)(MM|CM|ML|CC|OZ|GA|GAUGE|GR|G|L|IN|KG|LB|PCT)$/
 
+const COLOR_WORDS = [
+  "black",
+  "blue",
+  "brown",
+  "clear",
+  "gold",
+  "gray",
+  "green",
+  "grey",
+  "orange",
+  "pink",
+  "purple",
+  "red",
+  "silver",
+  "teal",
+  "white",
+  "yellow",
+]
+
 function stripDiacritics(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 }
@@ -326,6 +345,11 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
   const whiteRe = /\b(?:wb|whb|white)\b/g
   while ((match = whiteRe.exec(lowered))) {
     add("shade", "w")
+  }
+
+  const colorRe = new RegExp(`\\b(${COLOR_WORDS.join("|")})\\b`, "g")
+  while ((match = colorRe.exec(lowered))) {
+    add("color", match[1] === "grey" ? "gray" : match[1])
   }
 
   // Bare dimension "4x4" / "2x2" (sponges, gauze, matrix bands): two small
