@@ -107,6 +107,8 @@ else
   category=""
   for try in $(seq 0 $(( ${#cats[@]} - 1 ))); do
     cand="${cats[$(( (next_idx + try) % ${#cats[@]} ))]}"
+    # A category only runs if it has a playbook (so unknown names in CATEGORIES skip safely).
+    [ -f "$here/playbooks/$cand.md" ] || { log "skip $cand: no playbooks/$cand.md"; continue; }
     case "$cand" in
       clustering)
         [ -z "${LOOP_DATABASE_URL:-}" ] && { log "skip clustering: LOOP_DATABASE_URL unset"; continue; } ;;
@@ -115,6 +117,11 @@ else
         curl -sS -o /dev/null -m 5 "$NET32_HARVESTER_URL" 2>/dev/null \
           || { log "skip pricing: harvester $NET32_HARVESTER_URL unreachable"; continue; } ;;
     esac
+    # Backpressure: skip a category already at its open-PR cap.
+    open_n="$(gh pr list --repo "$LOOP_REPO" --state open --label "eng-loop:$cand" --json number -q 'length' 2>/dev/null || echo 0)"
+    if [ "${open_n:-0}" -ge "${MAX_OPEN_PER_CATEGORY:-2}" ]; then
+      log "skip $cand: ${open_n} open PRs (cap ${MAX_OPEN_PER_CATEGORY:-2})"; continue
+    fi
     category="$cand"; break
   done
   [ -n "$category" ] || { log "no category's prerequisites met this tick — skipping."; exit 0; }
@@ -127,7 +134,7 @@ log "category: $category"
 
 # --- 7. Isolated worktree off origin/main ----------------------------------
 stamp="$(date +%Y%m%d-%H%M%S)"
-branch="eng-loop-${stamp}"          # no slash → clean raw.githubusercontent URLs
+branch="eng-loop-${category}-${stamp}"   # category in name (readable); no slash → clean raw URLs
 wt="$LOOP_HOME/worktrees/$stamp"
 
 cleanup() {
@@ -219,10 +226,12 @@ else
   log "claude run exit=$rc (transcript: logs/run-$stamp.jsonl)"
 fi
 
-# --- 8. Report --------------------------------------------------------------
-pr_url="$(cd "$wt" 2>/dev/null && gh pr view --json url --jq .url 2>/dev/null || true)"
-if [ -n "$pr_url" ]; then
-  log "PR opened: $pr_url"
+# --- 8. Report + label the PR by category (drives the backpressure count) ----
+pr_num="$(cd "$wt" 2>/dev/null && gh pr view --json number -q .number 2>/dev/null || true)"
+if [ -n "$pr_num" ]; then
+  gh label create "eng-loop:$category" --repo "$LOOP_REPO" --color ededed 2>/dev/null || true
+  gh pr edit "$pr_num" --repo "$LOOP_REPO" --add-label "eng-loop:$category" 2>/dev/null || true
+  log "PR opened: https://github.com/$LOOP_REPO/pull/$pr_num (eng-loop:$category)"
 else
   log "no PR this tick (quiet tick, a data-quality issue may have been filed, or aborted for lack of evidence)."
 fi

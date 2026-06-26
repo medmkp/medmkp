@@ -183,8 +183,21 @@ scripts/prompt stay current — though it always branches off fresh `origin/main
   (deduped, at most one per tick) — which then feed back into its own queue.
 - **Tune:** `config.env` — `GATE_THRESHOLD` (Claude %), `CODEX_ENABLED`/`CODEX_THRESHOLD`
   (fallback), `GATE_WINDOW` (`week`/`session`/`both`), `LOOP_LABELS`, `CATEGORIES`
-  (rotation), `BACKEND_TARGET`, `LOOP_DATABASE_URL`, `PRICING_ENABLED`, `RUN_TIMEOUT`,
-  `CLAUDE_MODEL`/`CODEX_MODEL`.
+  (rotation), `MAX_OPEN_PER_CATEGORY` (backpressure cap), `BACKEND_TARGET`,
+  `LOOP_DATABASE_URL`, `PRICING_ENABLED`, `RUN_TIMEOUT`, `CLAUDE_MODEL`/`CODEX_MODEL`.
+
+## Adding a category
+
+A category = a `playbooks/<name>.md` (in the repo) + its name in `CATEGORIES`.
+1. Author `scripts/eng-loop/playbooks/<name>.md` (what to find, how to fix, what
+   evidence to capture) — model it on `clustering.md` (metrics-diff evidence) or
+   `qa-design.md` (screenshot evidence), and commit it.
+2. Add `<name>` to `CATEGORIES` (in `~/.eng-loop.secrets` for a host, or the
+   `config.env` default). A name with no playbook is skipped safely.
+3. UI/browser categories (`qa`, `design`, `scanner`, …) need gstack/`browse` on the
+   host; data categories (`clustering`, `ocr` parser, …) don't.
+Each category is independently capped at `MAX_OPEN_PER_CATEGORY` open PRs (tracked
+by the `eng-loop:<category>` label).
 
 ## Notes / limitations
 
