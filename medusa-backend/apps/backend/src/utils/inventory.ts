@@ -39,17 +39,34 @@ export function deriveLifecycle(
   return "active"
 }
 
-// An item needs attention when it's expiring or already expired (and not yet
-// pulled), or when it's missing the traceability an audit requires (lot +
-// expiration). Par level no longer drives this: there is no live on-hand count
-// to compare against — reorder timing is handled separately by the reorder
-// ladder, not by treating inventory as a census.
-export function needsAttention(item: any, now: Date = new Date()): boolean {
-  if (item.pulled_at) return false
+// A scan that resolved to no catalog product — filed as a placeholder so the
+// evidence still lands at its location, and surfaced in Needs Attention until a
+// human links the right product.
+export function isUnidentified(item: any): boolean {
+  return !item.canonical_product_id && !item.supplier_product_id
+}
+
+// Why an item needs attention (or null when it doesn't). Ordered by what to act
+// on first: a pulled lot is settled; an unidentified scan blocks everything else
+// (you can't trust its expiry until you know what it is); then expiry escalation;
+// then the missing lot/expiry an audit requires. Par level no longer drives this:
+// there is no live on-hand count to compare against — reorder timing is handled
+// separately by the reorder ladder, not by treating inventory as a census.
+export function attentionReason(
+  item: any,
+  now: Date = new Date()
+): "unidentified" | "expired" | "expiring" | "missing_trace" | null {
+  if (item.pulled_at) return null
+  if (isUnidentified(item)) return "unidentified"
   const lifecycle = deriveLifecycle(item, now)
-  if (lifecycle === "expired" || lifecycle === "expiring") return true
-  if (!item.lot_number || !item.expiration_date) return true
-  return false
+  if (lifecycle === "expired") return "expired"
+  if (lifecycle === "expiring") return "expiring"
+  if (!item.lot_number || !item.expiration_date) return "missing_trace"
+  return null
+}
+
+export function needsAttention(item: any, now: Date = new Date()): boolean {
+  return attentionReason(item, now) !== null
 }
 
 // Opaque token printed on a location's QR / cabinet label.
@@ -170,6 +187,103 @@ export async function attachInventoryPrices(
     ...i,
     price_range_cents: (i.canonical_product_id && rangeByCanonical.get(i.canonical_product_id)) || null,
   }))
+}
+
+// Same (item, lot) identity at the lot-at-location grain: lot must match, then
+// the product identity the scan carries (canonical preferred, else supplier). An
+// UNIDENTIFIED scan (no product) instead matches another unidentified record
+// sharing its raw barcode, so re-scanning an unknown code refreshes the
+// placeholder rather than stacking duplicates. A different lot of the same
+// product never matches — distinct lots coexist (FEFO / traceability).
+export function scanMatchesItem(scan: any, item: any): boolean {
+  if ((item.lot_number ?? null) !== (scan.lot_number ?? null)) return false
+  if (scan.canonical_product_id) return item.canonical_product_id === scan.canonical_product_id
+  if (scan.supplier_product_id) return item.supplier_product_id === scan.supplier_product_id
+  if (scan.barcode) {
+    return isUnidentified(item) && (item.barcode ?? null) === scan.barcode
+  }
+  return false
+}
+
+export type ScanOutcome = "added" | "merged" | "unmatched"
+
+// Upsert the lot-at-location evidence record for one scan — the single write path
+// the scanner uses. The grain is one record per (item, lot, location):
+// re-scanning the same lot refreshes the existing active record (no duplicate); a
+// different lot of the same product coexists (FEFO). A pulled lot stays as
+// history — a fresh scan starts a new active record rather than reviving it.
+//
+// EVERY scan lands at its location: an identified scan as matched evidence, an
+// unidentified scan (no catalog match) as a placeholder row deduped by barcode
+// that surfaces in Needs Attention until a product is linked. On merge, fields
+// coalesce (incoming ?? existing) so a later scan can fill in a lot or expiry the
+// first read missed but never wipes one the record already had.
+export async function upsertScanEvidence(
+  medmkp: MedMKPModuleService,
+  scan: {
+    canonical_product_id?: string | null
+    supplier_product_id?: string | null
+    barcode?: string | null
+    name?: string | null
+    quantity?: number | null
+    shelf_area?: string | null
+    lot_number?: string | null
+    expiration_date?: Date | string | null
+    package_condition?: string | null
+    received_date?: Date | string | null
+  },
+  locationId: string,
+  actor: string | null,
+  captureType: string | null = null
+): Promise<{ item: any; outcome: ScanOutcome }> {
+  const identified = Boolean(scan.canonical_product_id || scan.supplier_product_id)
+  const atLocation = (await medmkp.listInventoryItems({ location_id: locationId })) as any[]
+  const match = atLocation.find((it) => !it.pulled_at && scanMatchesItem(scan, it))
+
+  const fields: Record<string, any> = {
+    canonical_product_id: scan.canonical_product_id ?? null,
+    supplier_product_id: scan.supplier_product_id ?? null,
+    barcode: scan.barcode ?? null,
+    name: scan.name || scan.barcode || "Unidentified item",
+    // Quantity is an estimate, not a maintained count (is_estimated).
+    quantity_on_hand: scan.quantity ?? 1,
+    is_estimated: true,
+    shelf_area: scan.shelf_area ?? null,
+    lot_number: scan.lot_number ?? null,
+    expiration_date: scan.expiration_date ?? null,
+    package_condition: scan.package_condition ?? null,
+    capture_type: captureType,
+    received_date: scan.received_date ?? null,
+    last_counted_at: new Date(),
+    counted_by: actor,
+  }
+
+  if (match) {
+    // Coalesce: a later scan fills in a lot/expiry/identity the first read missed
+    // but never wipes one the record already had with a bare re-scan.
+    const merged: Record<string, any> = {
+      id: match.id,
+      canonical_product_id: fields.canonical_product_id ?? match.canonical_product_id,
+      supplier_product_id: fields.supplier_product_id ?? match.supplier_product_id,
+      barcode: fields.barcode ?? match.barcode,
+      name: scan.name || match.name,
+      quantity_on_hand: scan.quantity ?? match.quantity_on_hand,
+      is_estimated: true,
+      shelf_area: fields.shelf_area ?? match.shelf_area,
+      lot_number: fields.lot_number ?? match.lot_number,
+      expiration_date: fields.expiration_date ?? match.expiration_date,
+      package_condition: fields.package_condition ?? match.package_condition,
+      capture_type: captureType ?? match.capture_type,
+      received_date: fields.received_date ?? match.received_date,
+      last_counted_at: fields.last_counted_at,
+      counted_by: actor,
+    }
+    const saved = await medmkp.updateInventoryItems(merged)
+    return { item: saved, outcome: identified ? "merged" : "unmatched" }
+  }
+
+  const created = await medmkp.createInventoryItems({ location_id: locationId, ...fields })
+  return { item: created, outcome: identified ? "added" : "unmatched" }
 }
 
 // Same, for an inventory item (ownership is via its location's practice).

@@ -16,6 +16,10 @@ const InventoryItem = model.define("medmkp_inventory_item", {
   location_id: model.text(),
   canonical_product_id: model.text().nullable(),
   supplier_product_id: model.text().nullable(),
+  // The raw code scanned. Carried so an UNIDENTIFIED scan (no catalog match) can
+  // still be filed as evidence and deduped by barcode-at-location, then linked to
+  // a product later. Null for manually-added or already-identified items.
+  barcode: model.text().nullable(),
   name: model.text(),
   // Estimate only (is_estimated): for reorder timing, never an exact count.
   quantity_on_hand: model.number().default(0),
@@ -27,6 +31,9 @@ const InventoryItem = model.define("medmkp_inventory_item", {
   package_condition: model.text().nullable(),
   // receiving | shelf_audit — how this record was last captured.
   capture_type: model.text().nullable(),
+  // When a receiving scan logged the delivery arriving (distinct from
+  // last_counted_at, which is when the record was last scanned/touched).
+  received_date: model.dateTime().nullable(),
   // Set only when a human confirms the lot was physically pulled (reason:
   // expiry | recall | manual). Until then an expired lot stays loudly visible.
   pulled_at: model.dateTime().nullable(),

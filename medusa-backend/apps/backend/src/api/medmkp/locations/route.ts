@@ -4,8 +4,9 @@ import type MedMKPModuleService from "../../../modules/medmkp/service"
 import { requirePractice } from "../../../utils/practice"
 import { LOCATION_TYPES, needsAttention, mintQrCode } from "../../../utils/inventory"
 
-// GET /medmkp/locations — the practice's locations, each with item_count and
-// needs_attention_count rolled on for the Location Board.
+// GET /medmkp/locations — the practice's locations, each with item_count,
+// needs_attention_count, and last_scanned_at rolled on for the Location Board
+// (the board derives coverage from the evidence itself, not from scan sessions).
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   const practiceId = await requirePractice(req, res)
   if (!practiceId) return
@@ -19,11 +20,17 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     : []
 
   const now = new Date()
-  const counts = new Map<string, { item_count: number; needs_attention_count: number }>()
+  const counts = new Map<
+    string,
+    { item_count: number; needs_attention_count: number; last_scanned_at: Date | null }
+  >()
   for (const it of items as any[]) {
-    const c = counts.get(it.location_id) ?? { item_count: 0, needs_attention_count: 0 }
+    const c =
+      counts.get(it.location_id) ?? { item_count: 0, needs_attention_count: 0, last_scanned_at: null }
     c.item_count++
     if (needsAttention(it, now)) c.needs_attention_count++
+    const scannedAt = it.last_counted_at ? new Date(it.last_counted_at) : null
+    if (scannedAt && (!c.last_scanned_at || scannedAt > c.last_scanned_at)) c.last_scanned_at = scannedAt
     counts.set(it.location_id, c)
   }
 
@@ -32,6 +39,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       ...l,
       item_count: counts.get(l.id)?.item_count ?? 0,
       needs_attention_count: counts.get(l.id)?.needs_attention_count ?? 0,
+      last_scanned_at: counts.get(l.id)?.last_scanned_at ?? null,
     })),
   })
 }
