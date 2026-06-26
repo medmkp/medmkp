@@ -251,7 +251,7 @@ function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage 
 
 export function MobileScanSession({
   session, lines, counts, active,
-  pendingLine, ocrBusy, ocrSuggestion,
+  pendingLine,
   onScan, onAddProduct, onPatchLine, onRemoveLine, onComplete, onBack, onClearPending,
   locations, onSwitchLocation, onNavigate,
 }) {
@@ -261,14 +261,18 @@ export function MobileScanSession({
   const [sheet, setSheet] = useState(null); // manual | search | help | location
   const pulseTimer = useRef();
   const [captured, setCaptured] = useState(false);
+  // OCR read off the label for the pending line: { lineId, busy, needLot,
+  // needExp, lot, expiry }. Driven by the loop below, which keeps reading fresh
+  // camera frames while the buyer holds the label, not a single frozen shot.
+  const [ocr, setOcr] = useState(null);
 
   // The post-scan drawer floats over a LIVE camera (like the reorder scanner),
   // so the next item can be aimed and scanned without dismissing it first.
   const cameraActive = active && viewMode === "scan" && !detail && !link;
 
-  const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
+  const { videoRef, cameraStatus, autoDetect, grabFrame, retry } = useBarcodeScanner({
     active: cameraActive,
-    onScan: (code, getShot) => {
+    onScan: (code) => {
       // A printed location placard QR (our cabinet labels) carries a location id —
       // scanning one switches which location scans file into, rather than being
       // filed as a non-product. It's not an item, so don't run the scan handler or
@@ -281,7 +285,7 @@ export function MobileScanSession({
         if (loc) onSwitchLocation(loc);
         return;
       }
-      onScan(code, getShot);
+      onScan(code);
       // A website QR isn't a product — the parent shows a "not a product" toast.
       // Skip the green "captured" pulse so pointing at one mid-scan doesn't strobe
       // the viewfinder.
@@ -293,6 +297,62 @@ export function MobileScanSession({
   });
 
   const locName = session.location_name || "Location";
+
+  // Read lot/expiry off the label by OCR — but as a LOOP over fresh camera frames
+  // while the buyer holds the package, not one frozen shot. A barcode often
+  // carries no lot/expiry (an HIBC primary code, a bare UPC); those live only in
+  // the printed text, and a single frame is frequently lost to glare on foil
+  // labels. So each ~0.8s we grab the current frame and OCR it, keeping whichever
+  // field a frame manages to read, until both are found or we hit the attempt
+  // cap (then the buyer types what's missing). Lazy-imported so Tesseract stays
+  // out of the bundle. Re-runs per pending line (keyed by id); cancels on change.
+  const lineId = pendingLine?.id;
+  useEffect(() => {
+    if (!pendingLine) { setOcr(null); return undefined; }
+    const needLot = !pendingLine.lot_number;
+    const needExp = !pendingLine.expiration_date;
+    if (!needLot && !needExp) { setOcr(null); return undefined; }
+
+    let cancelled = false;
+    let foundLot = null;
+    let foundExp = null;
+    setOcr({ lineId, busy: true, needLot, needExp, lot: null, expiry: null });
+
+    (async () => {
+      const { ocrLotExpiry } = await import("./ocrLabel");
+      const MAX_ATTEMPTS = 8; // ~0.8s apart + OCR time ⇒ a ~15–20s budget
+      for (let attempt = 0; attempt < MAX_ATTEMPTS && !cancelled; attempt++) {
+        const frame = grabFrame();
+        if (frame) {
+          let res = {};
+          try { res = await ocrLotExpiry(frame); } catch { res = {}; }
+          if (cancelled) return;
+          if (needLot && !foundLot && res.lot) foundLot = res.lot;
+          if (needExp && !foundExp && res.expiry) foundExp = res.expiry;
+          const done = (!needLot || foundLot) && (!needExp || foundExp);
+          setOcr({ lineId, busy: !done, needLot, needExp, lot: foundLot, expiry: foundExp });
+          if (done) return;
+        }
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      if (!cancelled) {
+        setOcr((o) => (o && o.lineId === lineId ? { ...o, busy: false } : o));
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // grabFrame is stable (useCallback); re-run only when the pending line changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineId]);
+
+  // The OCR result, only while it belongs to the line currently in the drawer.
+  const ocrForPending = ocr && ocr.lineId === lineId ? ocr : null;
+  const ocrBusy = Boolean(ocrForPending?.busy);
+  // Suggestion drives both the drawer field fill and the hint pill; carry the
+  // need flags so the pill can say which field still has to be typed in.
+  const ocrSuggestion = ocrForPending
+    ? { lot: ocrForPending.lot, expiry: ocrForPending.expiry, needLot: ocrForPending.needLot, needExp: ocrForPending.needExp }
+    : null;
 
   // ----- Shelf details (deep edit) -----
   if (detail) {
@@ -801,30 +861,37 @@ function ReorderScanSheet({ result, onPersist, onDismiss }) {
 
 // ── OCR read-off-the-label hint pill ──────────────────────────────────
 // Shown under the location pill while the post-scan drawer is up: a "reading…"
-// note while OCR runs, then a confirm-it note once it's pre-filled the lot/expiry
-// fields below. Assistive — the values land in the editable fields, never
-// silently — and it lives in the top strip, not on the drawer, so it doesn't
-// crowd the captured fields.
+// note (which tells the buyer to hold steady — the OCR loop reads fresh frames
+// until it gets a clean one), then, once it stops, a note naming exactly which
+// field it filled and which still has to be typed. Assistive — the values land in
+// the editable fields, never silently — and it lives in the top strip, not on the
+// drawer, so it doesn't crowd the captured fields.
 function OcrHintPill({ ocrBusy, suggestion }) {
   if (ocrBusy) {
     return (
       <div className={s.ocrPill} aria-live="polite">
         <Icon name="icon-scan" />
-        <span className={s.ocrPillText}>Reading lot &amp; expiry off the label…</span>
+        <span className={s.ocrPillText}>Reading the label — hold steady over the lot &amp; expiry…</span>
       </div>
     );
   }
-  // suggestion is null until OCR has run (it doesn't run when the barcode already
-  // carried lot + expiry); once it has, name exactly what was filled so a blank
-  // field reads as "type this in", not a silent miss.
   if (!suggestion) return null;
-  const { lot, expiry } = suggestion;
+  // Name what was filled vs. what's still missing, scoped to the fields the
+  // barcode didn't already carry, so a blank field reads as "type this in" rather
+  // than a silent miss.
+  const got = [suggestion.needLot && suggestion.lot && "lot", suggestion.needExp && suggestion.expiry && "expiry"].filter(Boolean);
+  const miss = [suggestion.needLot && !suggestion.lot && "lot", suggestion.needExp && !suggestion.expiry && "expiry"].filter(Boolean);
+  if (!got.length && !miss.length) return null;
   let msg;
   let icon = "icon-check-circle";
-  if (lot && expiry) msg = "Filled lot & expiry from the label — check they’re right.";
-  else if (lot) msg = "Filled the lot from the label — check it’s right.";
-  else if (expiry) msg = "Filled the expiry from the label — check it’s right.";
-  else { msg = "Couldn’t read lot or expiry — enter them below."; icon = "icon-scan"; }
+  if (got.length && !miss.length) {
+    msg = `Filled ${got.join(" & ")} from the label — check ${got.length > 1 ? "they’re" : "it’s"} right.`;
+  } else if (got.length) {
+    msg = `Filled the ${got.join(" & ")} — couldn’t read the ${miss.join(" & ")}, enter ${miss.length > 1 ? "them" : "it"} below.`;
+  } else {
+    icon = "icon-scan";
+    msg = `Couldn’t read the ${miss.join(" & ")} off the label — enter ${miss.length > 1 ? "them" : "it"} below.`;
+  }
   return (
     <div className={s.ocrPill} aria-live="polite">
       <Icon name={icon} />

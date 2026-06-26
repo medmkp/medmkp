@@ -268,11 +268,12 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
   const [isMobile, setIsMobile] = useState(false);
   const [manual, setManual] = useState("");
   const [pendingLine, setPendingLine] = useState(null);
-  // OCR suggestion for the pending line: { lineId, busy, lot?, expiry? }. Set
-  // when a scanned code identifies an item but carries no lot/expiry, so we read
-  // them off the package text. Matched to the pending line by id before display.
-  const [ocr, setOcr] = useState(null);
   const flashTimer = useRef();
+  // The current pending line, mirrored into a ref so the scan handler can tell a
+  // genuine new scan from the camera re-firing a barcode that flickered out and
+  // back (glare on a foil label) — without re-creating the handler every scan.
+  const pendingLineRef = useRef(null);
+  pendingLineRef.current = pendingLine;
 
   useEffect(() => { setIsMobile(window.matchMedia("(max-width: 900px)").matches); }, []);
 
@@ -291,7 +292,7 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
 
   const active = session?.status === "active";
 
-  const handleScan = useCallback(async (code, getShot) => {
+  const handleScan = useCallback(async (code) => {
     if (!code || !active) return;
     // A website QR — our own tracedds.com codes or any URL — isn't a product.
     // Never file it as a review line (same guard as the reorder scanner): buzz +
@@ -301,11 +302,12 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       onToast?.("Skipped a website QR code — that's not a product barcode.");
       return;
     }
-    // Freeze the scanned frame now, while the package is still in view — OCR (if
-    // the code carried no lot/expiry) runs after the lookup, by which point the
-    // phone has moved. getShot is only supplied by the mobile camera path.
-    const frame = typeof getShot === "function" ? getShot() : null;
-    setOcr(null);
+    // The camera re-fires a barcode that flickers out of and back into frame
+    // (glare on a foil label, focus hunting). The item it resolves to is already
+    // in the post-scan drawer, so don't re-add it (churns the list) or re-chime
+    // on every flicker — just ignore it. OCR keeps reading the held label on its
+    // own (see MobileScanSession's OCR loop), so nothing is lost by skipping.
+    if (pendingLineRef.current && code === pendingLineRef.current.barcode) return;
     try {
       const { product, scanned, kind } = await scanLookup(code);
       const payload = scanLinePayload(code, product, scanned);
@@ -330,33 +332,11 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
         window.clearTimeout(flashTimer.current);
         flashTimer.current = window.setTimeout(() => setPendingLine(null), 2600);
       }
-      // Same scan feedback as the reorder scanner: a chime when the code resolves
-      // to a product, a buzz when it doesn't.
+      // Scan feedback, once per new item (the guard above stops a flickering
+      // barcode re-chiming): a chime when it resolves to a product, a buzz when
+      // it doesn't. The lot/expiry OCR runs in MobileScanSession off live frames.
       if (product) playMatchChime();
       else vibrateNoMatch();
-
-      // OCR fallback: the barcode may have identified the item but carried no
-      // lot/expiry (an HIBC *primary* code, a bare UPC) — those live only in the
-      // printed text. Read them off the frozen frame, on-device, and surface as a
-      // suggestion the user confirms. Lazy-imported so Tesseract stays out of the
-      // bundle. (Website QRs already returned early above.)
-      const needsLot = !payload.lot_number;
-      const needsExp = !payload.expiration_date;
-      if (frame && (needsLot || needsExp)) {
-        setOcr({ lineId: line.id, busy: true });
-        try {
-          const { ocrLotExpiry } = await import("./ocrLabel");
-          const res = await ocrLotExpiry(frame);
-          setOcr({
-            lineId: line.id,
-            busy: false,
-            lot: needsLot ? res.lot || null : null,
-            expiry: needsExp ? res.expiry || null : null,
-          });
-        } catch {
-          setOcr(null);
-        }
-      }
     } catch {
       onToast?.("Scan failed — try again.");
     }
@@ -439,9 +419,6 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
   );
   const visible = filter === "all" ? lines : lines.filter((l) => l.status === filter);
 
-  // Only attach the OCR suggestion to the line it was read for.
-  const ocrMatch = ocr && pendingLine && ocr.lineId === pendingLine.id ? ocr : null;
-
   if (loading) return <div className={s.page}><div className={s.empty}>Loading session…</div></div>;
   if (!session) return <div className={s.page}><div className={s.empty}>Session not found.</div></div>;
 
@@ -453,8 +430,6 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
         counts={counts}
         active={active}
         pendingLine={pendingLine}
-        ocrBusy={Boolean(ocrMatch?.busy)}
-        ocrSuggestion={ocrMatch && !ocrMatch.busy ? { lot: ocrMatch.lot, expiry: ocrMatch.expiry } : null}
         onScan={handleScan}
         onAddProduct={addProduct}
         onPatchLine={patchLine}

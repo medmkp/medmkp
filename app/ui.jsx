@@ -12,6 +12,7 @@ export function useBarcodeScanner({ active, onScan }) {
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
   const captureRef = useRef(() => {});
+  const grabRef = useRef(() => null);
 
   useEffect(() => {
     if (!active) {
@@ -137,6 +138,11 @@ export function useBarcodeScanner({ active, onScan }) {
       fire(hit?.value || null, hit?.box || null);
     };
 
+    // Grab a fresh snapshot of the LIVE frame on demand. The post-scan OCR loop
+    // calls this repeatedly while the buyer holds the label in view, so a later,
+    // glare-free frame can read the lot/expiry the first frame missed.
+    grabRef.current = () => snapshotAround(null);
+
     async function openCamera() {
       if (!navigator.mediaDevices?.getUserMedia) {
         setCameraStatus("unsupported");
@@ -225,12 +231,14 @@ export function useBarcodeScanner({ active, onScan }) {
       window.clearTimeout(cooldownId);
       stream?.getTracks().forEach((track) => track.stop());
       captureRef.current = () => {};
+      grabRef.current = () => null;
     };
   }, [active, retryNonce]);
 
   const capture = useCallback(() => captureRef.current(), []);
+  const grabFrame = useCallback(() => grabRef.current(), []);
   const retry = useCallback(() => setRetryNonce((nonce) => nonce + 1), []);
-  return { videoRef, cameraStatus, autoDetect, capture, retry };
+  return { videoRef, cameraStatus, autoDetect, capture, grabFrame, retry };
 }
 
 // Phone-handoff QR: encodes an absolute scan URL so the buyer can point their
