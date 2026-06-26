@@ -659,22 +659,26 @@ export async function lookupScannedProduct(code) {
 // the backend decoded off the package (the `scanned` block). The barcode path
 // carries traceability (GS1 / HIBC); the SKU path is a plain identity fallback.
 export async function scanLookup(code) {
-  if (!code) return { product: null, scanned: null, kind: "none" };
+  if (!code) return { product: null, scanned: null, kind: "none", gtin: null };
   try {
     const response = await fetch(`/api/products/search?barcode=${encodeURIComponent(code)}&limit=1`);
     const data = await response.json();
     const product = data.canonical_products?.[0] || null;
     const scanned = data.scanned || null;
-    if (product || scanned) return { product, scanned, kind: data.kind || "none" };
+    // gtin is returned even when nothing matched (kind "none"), so an unmatched
+    // 1D + 2D pair of one package can still be recognized as the same item.
+    if (product || scanned || data.gtin) {
+      return { product, scanned, kind: data.kind || "none", gtin: data.gtin || null };
+    }
   } catch {
     /* fall through to SKU lookup */
   }
   try {
     const response = await fetch(`/api/products/search?code=${encodeURIComponent(code)}&limit=1`);
     const data = await response.json();
-    return { product: data.canonical_products?.[0] || null, scanned: null, kind: data.kind || "none" };
+    return { product: data.canonical_products?.[0] || null, scanned: null, kind: data.kind || "none", gtin: null };
   } catch {
-    return { product: null, scanned: null, kind: "none" };
+    return { product: null, scanned: null, kind: "none", gtin: null };
   }
 }
 

@@ -1,4 +1,4 @@
-import { gtinVariants, isValidGtin, baseUnitGtinVariants } from "../gtin"
+import { gtinVariants, isValidGtin, baseUnitGtinVariants, canonicalGtin } from "../gtin"
 
 // A real, check-digit-valid UPC-A and its wider GTIN representations (the same
 // number with leading-zero padding). DC Dental stores the 12-digit UPC-A.
@@ -78,5 +78,25 @@ describe("baseUnitGtinVariants", () => {
     expect(baseUnitGtinVariants("036000291452")).toEqual([]) // UPC-A, not a GTIN-14
     expect(baseUnitGtinVariants("30884522026720")).toEqual([]) // bad check digit
     expect(baseUnitGtinVariants("")).toEqual([])
+  })
+})
+
+describe("canonicalGtin", () => {
+  // The same item's 1D barcode (UPC-A) and 2D GS1 Data Matrix (GTIN-14 in AI 01)
+  // must reduce to one identity so the scanner can merge the two reads.
+  it("reduces every padding of one GTIN to the same core", () => {
+    expect(canonicalGtin(UPC_A)).toBe("36000291452")
+    expect(canonicalGtin(EAN_13)).toBe("36000291452")
+    expect(canonicalGtin(GTIN_14)).toBe("36000291452")
+  })
+
+  it("ignores non-digit formatting (the HRI's spacing)", () => {
+    expect(canonicalGtin("0 36000 29145 2")).toBe("36000291452")
+  })
+
+  it("returns null for anything that isn't a valid GTIN", () => {
+    expect(canonicalGtin("036000291453")).toBeNull() // bad check digit
+    expect(canonicalGtin("ER24")).toBeNull() // an HIBC PCN / SKU
+    expect(canonicalGtin("")).toBeNull()
   })
 })

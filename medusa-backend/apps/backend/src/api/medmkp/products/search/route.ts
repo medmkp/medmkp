@@ -4,7 +4,7 @@ import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { tokenizeName } from "../../../../matching/normalize"
 import { nameSimilarity, trigrams } from "../../../../matching/search"
-import { gtinVariants, baseUnitGtinVariants } from "../../../../matching/gtin"
+import { gtinVariants, baseUnitGtinVariants, canonicalGtin } from "../../../../matching/gtin"
 import { parseGs1 } from "../../../../matching/gs1"
 import { parseHibc } from "../../../../matching/hibc"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
@@ -60,6 +60,14 @@ function scanMeta(lot?: string, expiry?: string, productionDate?: string): ScanM
 
 function withScanned<T extends object>(resp: T, scanned?: ScanMeta): T {
   return scanned ? { ...resp, scanned } : resp
+}
+
+// The normalized GTIN a barcode scan resolved to, surfaced so the client can tell
+// that a package's 1D barcode and its 2D GS1 Data Matrix are the same physical
+// item even when neither is in our catalog (both decode to one GTIN) — and so it
+// merges them into one review line instead of two. Omitted for non-GTIN scans.
+function withGtin<T extends object>(resp: T, gtin: string | null): T {
+  return gtin ? { ...resp, gtin } : resp
 }
 
 // Reverse GUDID lookup: resolve a scanned GTIN to supplier products via the
@@ -425,13 +433,14 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   if (barcode) {
     const gs1 = parseGs1(barcode)
     const variants = gtinVariants(gs1.gtin || barcode)
+    const gtin = canonicalGtin(gs1.gtin || barcode)
     let scanned = scanMeta(gs1.lot, gs1.expiry, gs1.productionDate)
     const hits = variants.length
       ? dedupeById(await medmkp.listSupplierProducts({ barcode: variants }))
       : []
 
     if (hits.length) {
-      res.json(withScanned(await scanResponse(medmkp, barcode, "barcode", hits, "barcode", limit), scanned))
+      res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "barcode", hits, "barcode", limit), scanned), gtin))
       return
     }
 
@@ -449,7 +458,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       ])
       const hibcHits = dedupeById([...bySku, ...byMfrSku])
       if (hibcHits.length) {
-        res.json(withScanned(await scanResponse(medmkp, barcode, "hibc", hibcHits, "sku", limit), scanned))
+        res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "hibc", hibcHits, "sku", limit), scanned), gtin))
         return
       }
     }
@@ -461,7 +470,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       if (refIds.length) {
         const refHits = dedupeById(await medmkp.listSupplierProducts({ id: refIds }))
         if (refHits.length) {
-          res.json(withScanned(await scanResponse(medmkp, barcode, "barcode", refHits, "barcode", limit), scanned))
+          res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "barcode", refHits, "barcode", limit), scanned), gtin))
           return
         }
       }
@@ -476,12 +485,12 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     if (packVariants.length) {
       const packHits = dedupeById(await medmkp.listSupplierProducts({ barcode: packVariants }))
       if (packHits.length) {
-        res.json(withScanned(await scanResponse(medmkp, barcode, "barcode_pack", packHits, "barcode", limit), scanned))
+        res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "barcode_pack", packHits, "barcode", limit), scanned), gtin))
         return
       }
     }
 
-    res.json(withScanned({ query: barcode, kind: "none", count: 0, products: [] }, scanned))
+    res.json(withGtin(withScanned({ query: barcode, kind: "none", count: 0, products: [] }, scanned), gtin))
     return
   }
 
