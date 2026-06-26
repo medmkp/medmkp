@@ -35,6 +35,30 @@ test("keyword path: plain LOT, NO. variant, and alphanumeric value", () => {
   assert.equal(parseLotExpiry("LOT: A219").lot, "A219");
 });
 
+test("does not read a barcode's printed digits as a lot (generated UPC HRI)", () => {
+  // The human-readable line under a 1D barcode (here 785306841174, a valid UPC-A)
+  // OCRs as a bare digit run with no LOT marker. It's the scanned code, not a lot:
+  // rejected as a self-validating GTIN even when no barcode is supplied...
+  assert.equal(parseLotExpiry("785306841174").lot, undefined);
+  // ...and rejected outright when we pass the code that was scanned (incl. the
+  // 13-digit EAN-13 "0"-padded form of the same UPC).
+  assert.equal(parseLotExpiry("785306841174", { barcode: "785306841174" }).lot, undefined);
+  assert.equal(parseLotExpiry("785306841174", { barcode: "0785306841174" }).lot, undefined);
+});
+
+test("scanned code is excluded but a real lot beside it still reads", () => {
+  // Both the barcode HRI and a genuine numeric lot are in frame; the lot wins.
+  assert.equal(
+    parseLotExpiry("785306841174 LOT 24015414", { barcode: "785306841174" }).lot,
+    "24015414",
+  );
+  // Even with no LOT marker, the non-GTIN batch is taken and the barcode dropped.
+  assert.equal(
+    parseLotExpiry("785306841174 24015414", { barcode: "785306841174" }).lot,
+    "24015414",
+  );
+});
+
 test("numeric fallback: stamped letter+digits batch, but not a REF number", () => {
   assert.equal(parseLotExpiry("A00626\nREF: 112-6757").lot, "A00626");
   assert.equal(parseLotExpiry("REF 112-6830").lot, undefined);

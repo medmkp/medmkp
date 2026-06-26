@@ -15,6 +15,7 @@ import {
 } from "./lib";
 import { ScanHandoffQr, useProductSearch, ProductSearchResults } from "./ui";
 import { MobileScanStart, MobileScanSession } from "./scanmobile";
+import { planScanMerge } from "./scanMerge";
 import { playMatchChime, vibrateNoMatch } from "./scanSound";
 import s from "./scansessions.module.css";
 
@@ -274,6 +275,10 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
   // back (glare on a foil label) — without re-creating the handler every scan.
   const pendingLineRef = useRef(null);
   pendingLineRef.current = pendingLine;
+  // Scans are processed one at a time. A package carrying both a 1D barcode and a
+  // 2D GS1 code fires the two reads ~1s apart; serializing lets the second read see
+  // the line the first one created, so it merges onto it instead of duplicating.
+  const scanLock = useRef(Promise.resolve());
 
   useEffect(() => { setIsMobile(window.matchMedia("(max-width: 900px)").matches); }, []);
 
@@ -302,24 +307,63 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       onToast?.("Skipped a website QR code — that's not a product barcode.");
       return;
     }
-    // The camera re-fires a barcode that flickers out of and back into frame
-    // (glare on a foil label, focus hunting). The item it resolves to is already
-    // in the post-scan drawer, so don't re-add it (churns the list) or re-chime
-    // on every flicker — just ignore it. OCR keeps reading the held label on its
-    // own (see MobileScanSession's OCR loop), so nothing is lost by skipping.
-    if (pendingLineRef.current && code === pendingLineRef.current.barcode) return;
+    // Serialize scan processing (see scanLock): one package's 1D and 2D codes fire
+    // ~1s apart, and the later read must see the line the first one created so it
+    // can merge onto it rather than racing ahead and duplicating it.
+    const prev = scanLock.current;
+    let unlock;
+    scanLock.current = new Promise((r) => { unlock = r; });
     try {
-      const { product, scanned, kind } = await scanLookup(code);
+      await prev;
+      const pending = pendingLineRef.current;
+      // The camera re-fires a barcode that flickers out of and back into frame
+      // (glare on a foil label, focus hunting). The item it resolves to is already
+      // in the post-scan drawer, so don't re-add it (churns the list) or re-chime
+      // on every flicker — just ignore it. OCR keeps reading the held label on its
+      // own (see MobileScanSession's OCR loop), so nothing is lost by skipping.
+      if (pending && code === pending.barcode) return;
+
+      const { product, scanned, kind, gtin } = await scanLookup(code);
       const payload = scanLinePayload(code, product, scanned);
+
+      // One package, two symbologies: a 1D barcode (GTIN only) and a 2D GS1 code
+      // (GTIN + lot + expiry) read a beat apart resolve to the same item — by GTIN
+      // even when it isn't in the catalog. Rather than stack a duplicate review
+      // line, fold the richer read's lot/expiry onto the line still pending — or
+      // drop the read entirely when it adds nothing (the bare GTIN arriving after
+      // the GS1 read). gtin rides on the in-memory line only (not persisted); it's
+      // all the merge needs within the held-item window. See planScanMerge.
+      const plan = planScanMerge(pending, { ...payload, gtin });
+      if (plan.merge) {
+        if (plan.patch) {
+          const { line, counts, inventory_action } = await traceApi.updateLine(pending.id, plan.patch);
+          // Keep _offer (render data) + gtin (the in-memory merge key) and refresh
+          // inventory_action — folding in the lot may re-file the evidence under a
+          // new lot-at-location record.
+          const merged = { ...pending, ...line, gtin: pending.gtin, inventory_action: inventory_action ?? pending.inventory_action };
+          pendingLineRef.current = merged; // mirror now so a racing follow-up scan sees it
+          setLines((prevLines) => [merged, ...prevLines.filter((l) => l.id !== merged.id)]);
+          setSession((prevS) => (prevS ? { ...prevS, counts } : prevS));
+          setPendingLine(merged);
+        }
+        playMatchChime();
+        return;
+      }
+
       const { line, counts, inventory_action } = await traceApi.addLine(sessionId, payload);
       // inventory_action ("received" | "confirmed") drives the post-scan drawer
       // header so it can say what the scan did without the buyer choosing a mode.
-      const merged = { ...line, inventory_action, _offer: product?.best_offer || product?.offers?.[0] || null };
+      // gtin rides along in memory (not a persisted column) so the next read of this
+      // package's other symbology can match it even when the item isn't in catalog.
+      const merged = { ...line, inventory_action, gtin, _offer: product?.best_offer || product?.offers?.[0] || null };
+      // Mirror into the ref immediately, ahead of the render that sets it, so a
+      // dual-symbology follow-up scan merges onto this line instead of duplicating.
+      pendingLineRef.current = merged;
       // A shelf-audit re-scan returns the existing line (the backend dedups the
       // same item+lot), so replace it in place and float it to the top rather
       // than stacking a duplicate row; a fresh item just prepends.
-      setLines((prev) => [merged, ...prev.filter((l) => l.id !== merged.id)]);
-      setSession((prev) => (prev ? { ...prev, counts } : prev));
+      setLines((prevLines) => [merged, ...prevLines.filter((l) => l.id !== merged.id)]);
+      setSession((prevS) => (prevS ? { ...prevS, counts } : prevS));
       setPendingLine(merged);
       // Tell the buyer why an unmatched scan landed in review (marketing QR,
       // uncarried barcode, non-product code) rather than leaving it unexplained;
@@ -339,6 +383,8 @@ export function ScanSessionView({ sessionId, onBack, onNavigate, onToast }) {
       else vibrateNoMatch();
     } catch {
       onToast?.("Scan failed — try again.");
+    } finally {
+      unlock();
     }
   }, [active, sessionId, onToast, isMobile]);
 

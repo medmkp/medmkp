@@ -42,6 +42,17 @@ export function gtinVariants(scanned: string | number): string[] {
   ])]
 }
 
+// The leading-zero-stripped significant digits of a GTIN — its identity across
+// the GTIN-8/12/13/14 paddings, so a UPC-A and its "00"-padded GTIN-14 form (the
+// same item's 1D barcode vs its GS1 Data Matrix AI 01) compare equal. null when
+// the value isn't a valid GTIN (an HIBC code, a SKU, OCR garble), so callers can
+// tell "no GTIN here" from a real one.
+export function canonicalGtin(value: string | number): string | null {
+  const digits = String(value ?? "").replace(/\D/g, "")
+  if (!isValidGtin(digits)) return null
+  return digits.replace(/^0+/, "") || "0"
+}
+
 // A GTIN-14 with a non-zero indicator digit (1–8) is a packaging level — a case
 // or inner pack — of a base unit that shares the same 12-digit item reference.
 // Derive the base unit's GTIN (indicator 0, check digit recomputed) so a scanned

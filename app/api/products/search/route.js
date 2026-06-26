@@ -31,6 +31,10 @@ export async function GET(request) {
       // (GS1 / HIBC). Present only on barcode scans that carry traceability.
       ...(body.scanned ? { scanned: body.scanned } : {}),
       ...(body.identified ? { identified: body.identified } : {}),
+      // Normalized GTIN the scan resolved to — lets the scanner tell a package's
+      // 1D barcode and 2D GS1 code apart as one item even when it's not in the
+      // catalog, so the two reads merge into one line instead of duplicating.
+      ...(body.gtin ? { gtin: body.gtin } : {}),
     });
   } catch {
     return NextResponse.json({

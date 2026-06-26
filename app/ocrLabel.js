@@ -78,19 +78,47 @@ function isDateLikeDigits(d) {
   return false;
 }
 
+// True when a digit run is a self-validating GTIN — a UPC-A (12), EAN-13 (13) or
+// GTIN-14 (14) whose trailing GS1 mod-10 check digit holds. The human-readable
+// digits printed under a 1D barcode always are one (it's the scanned code spelled
+// out); a real numeric lot of that length almost never passes the check, so a
+// passing check marks the token as barcode print, not a batch number.
+function isGtin(d) {
+  if (!/^\d{12,14}$/.test(d)) return false;
+  let sum = 0;
+  for (let i = 0; i < d.length - 1; i++) {
+    const n = d.charCodeAt(d.length - 2 - i) - 48; // data digits, right→left from the check
+    sum += i % 2 === 0 ? n * 3 : n;
+  }
+  return (10 - (sum % 10)) % 10 === d.charCodeAt(d.length - 1) - 48;
+}
+
+// Whether two strings name the same scanned code, ignoring formatting and the
+// UPC-A↔EAN-13 leading zero (a 12-digit UPC and its 13-digit "0"-padded form are
+// one barcode). Used to drop an OCR token that's just the code we already scanned,
+// printed as the human-readable line under its bars.
+function sameCode(a, b) {
+  const norm = (x) => String(x || "").replace(/\D/g, "").replace(/^0+/, "");
+  const da = norm(a);
+  return da.length >= 6 && da === norm(b);
+}
+
 // Find a batch/lot token in OCR text when there's no readable "LOT" marker.
 // Conservative on purpose — a wrong lot on a recall pull-list is worse than a
 // blank one — so it walks the whitespace tokens in reading order and takes the
 // first that has a batch shape and survives every exclusion:
 //   • barcode / HIBC / GS1 prints (a token carrying + * $, or a digit run wrapped
 //     by GS1 AI parens) are never a lot;
+//   • the human-readable digits under a 1D barcode: the code we just scanned
+//     (`barcode`), or any self-validating GTIN (a 12–14 digit run whose check
+//     digit holds), which is what a UPC/EAN line always is;
 //   • catalog / reference / revision numbers (a REF/CAT/MODEL/SKU/REV neighbour,
 //     or the dashed xxx-xxxx shape REF numbers print as) are excluded;
 //   • bare dates / years are excluded.
 // Two accepted shapes: a letter + 5–8 digits (A00626, M607840 — the classic
 // stamped batch), and a run of 6–14 bare digits (24015414, 13593092 — the common
 // numeric lot; the dash exclusion keeps REF numbers like 112-6830 out).
-function findBatchToken(flat) {
+function findBatchToken(flat, barcode) {
   const tokens = flat.split(/\s+/);
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i];
@@ -100,15 +128,21 @@ function findBatchToken(flat) {
     if (/(?:^|\b)(?:REF|REORDER|CAT|CATALOG|MODEL|SKU|REV)\b/.test(prev)) continue;
     if (/^[A-Z]\d{5,8}$/.test(tok)) return tok; // letter + digits stamp (A00626)
     const run = tok.match(/(?:^|[^0-9A-Z])(\d{6,14})(?:$|[^0-9A-Z])/);
-    if (run && !isDateLikeDigits(run[1]) && !/\d-\d/.test(tok)) return run[1];
+    if (run && !isDateLikeDigits(run[1]) && !/\d-\d/.test(tok)) {
+      if (barcode && sameCode(run[1], barcode)) continue; // the scanned code's printed line
+      if (isGtin(run[1])) continue;                       // any UPC/EAN print, not a lot
+      return run[1];
+    }
   }
   return undefined;
 }
 
 // Pull lot + expiry out of raw OCR text. Returns { lot, expiry, raw } with
 // either field possibly undefined — partial reads are useful (a lot with no
-// expiry still pre-fills half the form).
-export function parseLotExpiry(text) {
+// expiry still pre-fills half the form). `barcode` is the code that was scanned
+// for this item, if any: its human-readable line is printed right under the bars
+// and OCRs as a digit run, so we exclude it from ever becoming the lot.
+export function parseLotExpiry(text, { barcode } = {}) {
   const raw = String(text || "");
   // Collapse newlines so a "LOT" label and its value on a wrapped line still
   // associate; the regexes only ever grab the *next* token, so this stays tight.
@@ -124,13 +158,17 @@ export function parseLotExpiry(text) {
   const lotMatch = flat.match(
     /\bL[O0D][T1I]\b[\s.:#)\]\[|]*(?:N[O0]\.?|NUMBER)?[\s.:#)\]\[|]*([A-Z0-9][A-Z0-9\-/]{2,19})/,
   );
-  if (lotMatch && !/^(?:N[O0]|NUMBER|NUM)$/.test(lotMatch[1])) {
+  if (
+    lotMatch &&
+    !/^(?:N[O0]|NUMBER|NUM)$/.test(lotMatch[1]) &&
+    !(barcode && sameCode(lotMatch[1], barcode)) // not the scanned code mis-tagged as LOT
+  ) {
     lot = lotMatch[1];
   } else {
     // No usable "LOT" marker — the box edges defeated the classifier entirely (on
     // a real Patterson label "LOT" read as "[ETI"), or the batch is printed bare.
     // Fall back to a batch-number SHAPE among the tokens. See findBatchToken.
-    lot = findBatchToken(flat);
+    lot = findBatchToken(flat, barcode);
   }
 
   let expiry;
@@ -286,7 +324,7 @@ function preprocess(source) {
 // and drop it — while AUTO recovers low-contrast foil that sparse mode misses
 // entirely. Run sparse first, only fall back to AUTO for a field it didn't get,
 // then keep each field from whichever pass found it.
-export async function ocrLotExpiry(source) {
+export async function ocrLotExpiry(source, { barcode } = {}) {
   if (!source) return {};
   try {
     const [{ PSM }, worker] = await Promise.all([getModule(), getWorker()]);
@@ -294,7 +332,7 @@ export async function ocrLotExpiry(source) {
     const read = async (psm) => {
       await worker.setParameters({ tessedit_pageseg_mode: psm });
       const { data } = await worker.recognize(image);
-      return parseLotExpiry(data?.text || "");
+      return parseLotExpiry(data?.text || "", { barcode });
     };
     let { lot, expiry } = await read(PSM.SPARSE_TEXT);
     if (!lot || !expiry) {

@@ -339,6 +339,9 @@ export function MobileScanSession({
     const needLot = !pendingLine.lot_number;
     const needExp = !pendingLine.expiration_date;
     if (!needLot && !needExp) { setOcr(null); return undefined; }
+    // The scanned code is printed as the human-readable line under its barcode, so
+    // OCR reads it as a digit run; pass it down so it's never mistaken for the lot.
+    const barcode = pendingLine.barcode;
 
     let cancelled = false;
     let foundLot = null;
@@ -352,7 +355,7 @@ export function MobileScanSession({
         const frame = grabFrame();
         if (frame) {
           let res = {};
-          try { res = await ocrLotExpiry(frame); } catch { res = {}; }
+          try { res = await ocrLotExpiry(frame, { barcode }); } catch { res = {}; }
           if (cancelled) return;
           if (needLot && !foundLot && res.lot) foundLot = res.lot;
           if (needExp && !foundExp && res.expiry) foundExp = res.expiry;
