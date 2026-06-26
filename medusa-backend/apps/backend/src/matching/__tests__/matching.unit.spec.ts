@@ -557,6 +557,69 @@ describe("name+brand matching (no shared catalog code)", () => {
     )
     expect(["exact", "variant"]).toContain(decision.status)
   })
+
+  it("does not auto-merge different bur product lines that share only an ISO shape code", () => {
+    // 801-016M is a generic bur geometry. Dental City's house-label brand used
+    // to make it look brand-unknown, so this Piranha row accepted against Alpen
+    // and bridged several distinct makers into one canonical.
+    const decision = score(
+      {
+        supplier_id: "msup_dentalcity_com",
+        manufacturer_sku: "801-016M",
+        brand: "Dental City",
+        name: "Piranha Round 801-016M FG 25/Box",
+        pack_size: "25/Box",
+      },
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "X801M016",
+        brand: "Coltene Inc",
+        name: "Alpen x1 Diamond Bur Friction Grip Medium 801-016M 25/Bx",
+        pack_size: "25/Bx",
+      }
+    )
+    expect(["exact", "variant"]).not.toContain(decision.status)
+  })
+
+  it("does not treat an embedded generic bur code as enough to bridge house-label lines", () => {
+    const decision = score(
+      {
+        supplier_id: "msup_dentalcity_com",
+        manufacturer_sku: "1801016M",
+        brand: "Dental City",
+        name: "Midwest Once Diamonds Round 801-016M 25/Box 1801016M",
+        pack_size: "25/Box",
+      },
+      {
+        supplier_id: "msup_dentalcity_com",
+        manufacturer_sku: "801-016M",
+        brand: "Dental City",
+        name: "Piranha Round 801-016M FG 25/Box",
+        pack_size: "25/Box",
+      }
+    )
+    expect(["exact", "variant"]).not.toContain(decision.status)
+  })
+
+  it("still merges generic bur-code rows when the product line is shared in the names", () => {
+    const decision = score(
+      {
+        supplier_id: "msup_dentalcity_com",
+        manufacturer_sku: "801-016M",
+        brand: "Dental City",
+        name: "Piranha Round 801-016M FG 25/Box",
+        pack_size: "25/Box",
+      },
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "801-016M",
+        brand: "S S White Dental Inc.",
+        name: "Piranha Diamond Bur Friction Grip Medium Round 801-016M 25/Pk",
+        pack_size: "25/Pk",
+      }
+    )
+    expect(["exact", "variant"]).toContain(decision.status)
+  })
 })
 
 describe("end-to-end clustering", () => {

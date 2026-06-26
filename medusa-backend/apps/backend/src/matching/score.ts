@@ -93,9 +93,9 @@ export function compareNumericAttrs(a: NormalizedProduct, b: NormalizedProduct):
   return { hardConflict, agreements, bareConflict }
 }
 
-export function skuEvidence(a: NormalizedProduct, b: NormalizedProduct): { score: number; kind: string } {
+export function skuEvidence(a: NormalizedProduct, b: NormalizedProduct): { score: number; kind: string; code: string } {
   if (a.mfrSku && a.mfrSku === b.mfrSku) {
-    return { score: Math.min(a.skuStrength, b.skuStrength), kind: "mfr-sku" }
+    return { score: Math.min(a.skuStrength, b.skuStrength), kind: "mfr-sku", code: a.mfrSku }
   }
   // Distributor vendor-prefix bridge: one side hides the shared maker model
   // behind an internal line code (DC Dental "219-4302" vs Henry Schein "4302").
@@ -113,20 +113,20 @@ export function skuEvidence(a: NormalizedProduct, b: NormalizedProduct): { score
     core = b.skuCore
   }
   if (core && brandsAgree(a, b) === "match") {
-    return { score: skuStrength(core), kind: "mfr-sku-core" }
+    return { score: skuStrength(core), kind: "mfr-sku-core", code: core }
   }
   const aInB = a.mfrSku.length >= 5 && b.skuLikeTokens.includes(a.mfrSku)
   const bInA = b.mfrSku.length >= 5 && a.skuLikeTokens.includes(b.mfrSku)
   if (aInB || bInA) {
     const sku = aInB ? a.mfrSku : b.mfrSku
-    return { score: Math.min(0.9, skuStrengthOf(a, b, sku) * 0.95), kind: "name-embedded-sku" }
+    return { score: Math.min(0.9, skuStrengthOf(a, b, sku) * 0.95), kind: "name-embedded-sku", code: sku }
   }
   for (const token of a.skuLikeTokens) {
     if (token.length >= 6 && b.skuLikeTokens.includes(token)) {
-      return { score: 0.55, kind: "shared-name-code" }
+      return { score: 0.55, kind: "shared-name-code", code: token }
     }
   }
-  return { score: 0, kind: "none" }
+  return { score: 0, kind: "none", code: "" }
 }
 
 function skuStrengthOf(a: NormalizedProduct, b: NormalizedProduct, sku: string): number {
@@ -140,6 +140,49 @@ export function packRelation(a: NormalizedProduct, b: NormalizedProduct): "same"
     return "unknown"
   }
   return a.packQty === b.packQty ? "same" : "differs"
+}
+
+function isGenericDentalBurCode(code: string): boolean {
+  // ISO bur shape + diameter + optional grit (e.g. 801-016M -> 801016M).
+  // These codes describe geometry shared by many makers, not a product line.
+  return /^(?:\d{3,4}|[A-Z]\d{3}|[A-Z]{1,2}\d{3,4})\d{3}(?:F|M|C|SC|UF)?$/.test(code)
+}
+
+const GENERIC_BUR_TOKENS = new Set([
+  "bur",
+  "box",
+  "carbide",
+  "coarse",
+  "diamond",
+  "diameter",
+  "end",
+  "fg",
+  "fine",
+  "friction",
+  "grit",
+  "grip",
+  "head",
+  "length",
+  "medium",
+  "mm",
+  "pack",
+  "pk",
+  "round",
+  "shape",
+  "single",
+  "sterile",
+  "super",
+  "taper",
+  "use",
+])
+
+function hasSharedSpecificBurLineToken(a: NormalizedProduct, b: NormalizedProduct): boolean {
+  const tokensA = new Set(
+    a.nameTokens.filter((token) => /^[a-z]+$/.test(token) && token.length > 2 && !GENERIC_BUR_TOKENS.has(token))
+  )
+  return b.nameTokens.some(
+    (token) => /^[a-z]+$/.test(token) && token.length > 2 && !GENERIC_BUR_TOKENS.has(token) && tokensA.has(token)
+  )
 }
 
 /**
@@ -195,10 +238,18 @@ export function scorePair(a: NormalizedProduct, b: NormalizedProduct): PairDecis
     return reject("numeric-attribute-conflict")
   }
 
+  const genericBurCodeNeedsLineEvidence =
+    sku.score >= 0.55 &&
+    isGenericDentalBurCode(sku.code) &&
+    brandRel !== "match" &&
+    !hasSharedSpecificBurLineToken(a, b)
+
   let accepted = false
   let review = false
 
-  if (sku.score >= 0.55) {
+  if (genericBurCodeNeedsLineEvidence) {
+    review = nameSim >= 0.5
+  } else if (sku.score >= 0.55) {
     if (brandRel === "conflict") {
       review = nameSim >= 0.5
     } else if (nameSim >= 0.45) {
