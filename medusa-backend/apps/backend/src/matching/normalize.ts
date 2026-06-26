@@ -371,6 +371,16 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     add("#", match[1])
   }
 
+  // Sutures are differentiated by USP size ("4-0", "5/0", sometimes copied
+  // with an en dash). That pattern is otherwise too generic to trust, so only
+  // promote it to a hard-conflict axis when the name is explicitly a suture.
+  if (/\bsutures?\b/.test(lowered)) {
+    const sutureSizeRe = /\b(\d{1,2})\s*[-–/]\s*0\b/g
+    while ((match = sutureSizeRe.exec(lowered))) {
+      add("suture_size", `${match[1]}-0`)
+    }
+  }
+
   // Apparel/glove sizing (gloves, gowns, masks, lab coats are size-differentiated
   // but carry no measured unit). Disjoint sizes are a hard conflict, like 25mm
   // vs 31mm. Only worded forms and the X-prefixed family are matched; bare

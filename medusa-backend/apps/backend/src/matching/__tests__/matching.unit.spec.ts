@@ -316,6 +316,13 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(extractNumericAttrs("EZ-ID Tape System and Rolls, Roll, 10 ft., Green").get("color") ?? [])]).toEqual(["green"])
   })
 
+  it("captures USP suture sizes as hard-conflict attributes", () => {
+    expect([...(extractNumericAttrs('Look Nylon Monofilament Sutures, 4-0, 18", 12/Box').get("suture_size") ?? [])]).toEqual(["4-0"])
+    expect([...(extractNumericAttrs("LOOK Nylon Black Monofilament Sutures - C6, 5–0").get("suture_size") ?? [])]).toEqual(["5-0"])
+    expect([...(extractNumericAttrs('Chromic Gut Sutures, X-1, 4/0, 12/Box, 18"').get("suture_size") ?? [])]).toEqual(["4-0"])
+    expect(extractNumericAttrs("Bracket Hook 5-0 Trial").get("suture_size")).toBeUndefined()
+  })
+
   it("rejects same-SKU color variants instead of merging them", () => {
     const decision = score(
       {
@@ -329,6 +336,24 @@ describe("identity matching (golden pairs from production data)", () => {
         manufacturer_sku: "70Z300J",
         brand: "Zirc",
         name: "EZ-ID Tape System and Rolls, Roll, 10 ft., Green",
+      }
+    )
+    expect(decision.status).toBe("reject")
+  })
+
+  it("rejects suture variants that differ on USP size", () => {
+    const decision = score(
+      {
+        supplier_id: "msup_darbydental_com",
+        manufacturer_sku: "922B",
+        brand: "Surgical Specialties",
+        name: 'Look Nylon Monofilament Sutures, 4-0, 18", 12/Box, Black, C6',
+      },
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "913B",
+        brand: "Surgical Specialties Corp",
+        name: 'Suture 5-0 10" Nylon Monofilament C-17 Black 12/Bx',
       }
     )
     expect(decision.status).toBe("reject")
