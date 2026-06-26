@@ -735,6 +735,44 @@ describe("end-to-end clustering", () => {
     expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 2])
   })
 
+  it("does not let same-supplier disjoint catalog SKUs weld similar product lines", () => {
+    // Real prod shape: one supplier carries Richmond Econo and Braided cotton
+    // rolls with near-identical size/pack text. Those same-supplier rows should
+    // not bridge the two SKU-specific cross-supplier matches into one canonical.
+    const rows = [
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "216206",
+        brand: "Richmond Dental",
+        name: 'Econo Cotton Rolls - Medium, 1-1/2" x 3/8", Nonsterile, 2000/Pkg',
+        pack_size: "2000/Pkg",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "200204",
+        brand: "Richmond Dental",
+        name: 'Braided Cotton Rolls - Medium, 1-1/2" x 3/8", Nonsterile, 2000/Pkg',
+        pack_size: "2000/Pkg",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        manufacturer_sku: "216206",
+        brand: "Richmond Dental",
+        name: 'Econo Rolls, 3/8" x 1 1/2", Medium, 2000/Box, NonSterile',
+        pack_size: "2000/Box",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        manufacturer_sku: "200204",
+        brand: "Richmond Dental",
+        name: 'Braided Cotton Rolls, Medium Dia. Junior Pack, 1 1/2", 2000/Pkg',
+        pack_size: "2000/Pkg",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 2])
+  })
+
   it("does not let a size-less bridge collapse Small and X-Small into one canonical", () => {
     // The family code UF524 sits in every name so the size-less "parent"
     // listing matches both sizes (name-embedded-SKU); transitively unioning

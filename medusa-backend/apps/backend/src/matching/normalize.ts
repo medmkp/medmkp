@@ -352,6 +352,22 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     add("color", match[1] === "grey" ? "gray" : match[1])
   }
 
+  // Cotton roll listings share size, pack, and generic "cotton roll" tokens,
+  // but product lines such as Econo/Economy, Braided, and Wrapped are distinct
+  // catalog items. Capture that style axis so near-identical line variants do
+  // not become transitive bridges.
+  if (/\b(?:cotton\s+)?rolls?\b/.test(lowered)) {
+    if (/\b(?:(?:econo|economy)\s+(?:cotton\s+)?rolls?|(?:cotton\s+)?rolls?\s+(?:econo|economy))\b/.test(lowered)) {
+      add("cotton_roll_style", "econo")
+    }
+    if (/\bbraided\b/.test(lowered)) {
+      add("cotton_roll_style", "braided")
+    }
+    if (/\bwrapped\b/.test(lowered)) {
+      add("cotton_roll_style", "wrapped")
+    }
+  }
+
   // Bare dimension "4x4" / "2x2" (sponges, gauze, matrix bands): two small
   // integers joined by x with no measure unit. Disjoint dimensions are a hard
   // conflict, like 25mm vs 31mm. Excludes decimals and unit-suffixed forms so
