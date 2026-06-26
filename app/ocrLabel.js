@@ -163,13 +163,16 @@ export function parseLotExpiry(text, { barcode } = {}) {
   // on medical labels: its frame OCRs as bracket/pipe junk glued to the value, so
   // Tesseract reads "[LoT]|260212" or "LOT] 24015414". The separator between the
   // marker and the value therefore allows those box glyphs, not just spaces and
-  // colons. Value allows common batch separators (A-219, 13593092, M607840).
+  // colons. Some labels spell the descriptor as "LOT Batch Code <value>", and
+  // OCR can drop "Batch" and leave "LOT Code <value>", so skip that wording
+  // before taking the value. Value allows common batch separators (A-219,
+  // 13593092, M607840).
   const lotMatch = flat.match(
-    /\bL[O0D][T1I]\b[\s.:#)\]\[|]*(?:N[O0]\.?|NUMBER)?[\s.:#)\]\[|]*([A-Z0-9][A-Z0-9\-/]{2,19})/,
+    /\bL[O0D][T1I]\b[\s.:#)\]\[|]*(?:(?:N[O0]\.?|NUMBER|BATCH(?:\s+CODE)?|CODE)[\s.:#)\]\[|]*)?([A-Z0-9][A-Z0-9\-/]{2,19})/,
   );
   if (
     lotMatch &&
-    !/^(?:N[O0]|NUMBER|NUM)$/.test(lotMatch[1]) &&
+    !/^(?:N[O0]|NUMBER|NUM|BATCH|CODE)$/.test(lotMatch[1]) &&
     !(barcode && sameCode(lotMatch[1], barcode)) // not the scanned code mis-tagged as LOT
   ) {
     lot = lotMatch[1];
