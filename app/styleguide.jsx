@@ -59,7 +59,7 @@ const ICONS = [
   "icon-clock", "icon-bell", "icon-search", "icon-settings", "icon-users",
   "icon-check-circle", "icon-alert-triangle", "icon-x-circle", "icon-plus",
   "icon-trash", "icon-edit", "icon-arrow-right", "icon-microscope", "icon-cabinet",
-  "icon-handshake",
+  "icon-dental-chair", "icon-handshake",
 ];
 
 // Location / room-type icon family, with the semantic tint each one carries on

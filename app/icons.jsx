@@ -230,10 +230,13 @@ export function IconSprite() {
         <rect x="13" y="13" width="7" height="7" rx="1.4" />
       </symbol>
       <symbol id="icon-dental-chair" viewBox="0 0 24 24">
-        {/* Operatory = a clean exam/dental chair: arched backrest, seat, pedestal. */}
-        <path d="M6 11V6.4A1.9 1.9 0 0 1 7.9 4.5 1.9 1.9 0 0 1 9.8 6.4V11" />
-        <path d="M6 11h6.7a1.9 1.9 0 0 1 0 3.8H8.1" />
-        <path d="M8.1 14.8V18.8M5.5 18.8h6.6" />
+        {/* Operatory = a dental chair (side profile). The padded backrest, seat
+            and footrest are one heavy round-stroke ribbon; the armrest seam,
+            post and flared pedestal foot are the lighter frame. */}
+        <path strokeWidth="2.1" d="M7.2 5.6C6.9 8 7.6 10.6 8.7 11.9c.3.4.9.7 1.7.7l2.4.1c1.7.1 4 1.3 5.8 3.1" />
+        <path strokeWidth="1.4" d="M9.7 10.3h4.3" />
+        <path strokeWidth="1.8" d="M11.5 14v3.9" />
+        <path d="M9.1 20.3 10.5 18.1h2l1.4 2.2Z" fill="currentColor" strokeWidth="1.2" />
       </symbol>
       <symbol id="icon-flask" viewBox="0 0 24 24">
         <path d="M14 3v6a2 2 0 0 0 .24.96l5.51 9.58A2 2 0 0 1 18 22.5H6a2 2 0 0 1-1.75-2.96L9.76 9.96A2 2 0 0 0 10 9V3" />
