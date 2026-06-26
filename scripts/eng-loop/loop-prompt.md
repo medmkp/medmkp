@@ -32,6 +32,12 @@ its binary directly (e.g. the gstack `browse` binary) — the procedure is the s
 5. **Never commit test/debug hacks** (e.g. auth-gate neutering). Revert before committing.
 6. **Never merge, force-push, or touch `main`.** Work only on the branch already
    checked out for you.
+7. **Backend changes are additive / non-breaking only.** A merged backend PR deploys
+   to prod (Render) while the *current live frontend* is still the old one — so never
+   remove/rename API fields or change response shapes the frontend relies on; only add.
+   Keep backend and frontend changes in **separate PRs** (merge backend first). A
+   genuinely breaking API change is a coordinated FE+BE change → open a `needs-design`
+   issue, don't ship it as a solo loop PR.
 
 ## Open a PR (playbook produced a code fix)
 - Commit the fix **and** its evidence in a focused commit with a clear message.
