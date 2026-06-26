@@ -6,9 +6,11 @@ reference an exact visual target (see the "Visual fidelity" protocol in
 rendered in **our tokens** (`styles.css` / `DESIGN.md`) — don't pixel-copy the raster (it
 has placeholder text + loose grids).
 
-**Only wireframes an issue references are committed here** (downscaled, to keep the repo
-lean). The full-res originals live locally in the gitignored `wireframes/` dir; add more
-here per surface as issues are created.
+The **full-res originals are committed in-repo at `wireframes/`** (`TraceDDS (New)/` +
+`Updated Screen Frames/`) — they are the source of truth for all UI work (see the repo
+root `CLAUDE.md`). The downscaled JPEGs in *this* dir are just lean copies of the frames a
+specific issue references, for compact issue bodies; add more here per surface as issues
+are created.
 
 | File (committed) | Wireframe | Surface | Current view |
 |---|---|---|---|

@@ -5,7 +5,6 @@ node_modules/
 .data/
 logo/
 research/
-wireframes/
 .env*
 __pycache__/
 .barcode-venv/
