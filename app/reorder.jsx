@@ -240,14 +240,44 @@ export function ScanModal({ onScan, scanResult, scanCount = 0, itemCount = 0, on
 // Status pills. "Matched" is our auto match; "Needs review" flags a
 // low-confidence match (informational — there's no user "verify" step).
 
+function offerBestPriceValue(candidate) {
+  if (!candidate || !isOrderable(candidate)) return Infinity;
+  if (candidate.price != null && candidate.price > 0) return candidate.price;
+  if (candidate.perEa != null && candidate.perEa > 0) return candidate.perEa;
+  return Infinity;
+}
+
+function bestOrderableOfferIndex(candidates) {
+  let bestIndex = -1;
+  let bestValue = Infinity;
+  candidates.forEach((candidate, index) => {
+    const value = offerBestPriceValue(candidate);
+    if (value < bestValue) {
+      bestValue = value;
+      bestIndex = index;
+    }
+  });
+  if (bestIndex >= 0) return bestIndex;
+  return candidates.findIndex((candidate) => isOrderable(candidate));
+}
+
+function BestPriceStock({ candidate }) {
+  if (candidate?.availability !== "limited" && candidate?.liveAvailable === true) {
+    return <span className="crl-cand-stock stock-good">In stock</span>;
+  }
+  return <CandidateStock availability={candidate?.availability} liveAvailable={candidate?.liveAvailable} />;
+}
+
 export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate }) {
   const isResolve = mode === "resolve";
   const isView = mode === "view";
   const candidates = isResolve ? [] : collapseOffersBySupplier(offerCandidates(row), row.selectedOfferKey);
-  // Start on the buyer's current selection (falls back to our recommendation).
+  // Start on the lowest priced orderable offer so the drawer leads with the
+  // buyer's best available price. If no price is known, fall back gracefully.
+  const bestPriceIndex = bestOrderableOfferIndex(candidates);
   const selectedIndex = candidates.findIndex((candidate) => candidate.key === row.selectedOfferKey);
   const recommendedIndex = candidates.findIndex((candidate) => candidate.recommended);
-  const [selected, setSelected] = useState(selectedIndex >= 0 ? selectedIndex : Math.max(0, recommendedIndex));
+  const [selected, setSelected] = useState(bestPriceIndex >= 0 ? bestPriceIndex : selectedIndex >= 0 ? selectedIndex : Math.max(0, recommendedIndex));
   const [qty] = useState(row.qty || 1);
   const [notes, setNotes] = useState(row.note || "");
   // What the practice currently pays per pack — the savings anchor. Editable
@@ -395,7 +425,32 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
               </button>
             )}
             <div className="crl-cand-list">
+              {bestPriceIndex >= 0 && (() => {
+                const candidate = candidates[bestPriceIndex];
+                const oos = !isOrderable(candidate);
+                return (
+                  <label key={`best-${candidate.key ?? bestPriceIndex}`} className={`crl-cand crl-cand-hero ${selected === bestPriceIndex ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos}>
+                    <input type="radio" name="crl-cand" checked={selected === bestPriceIndex} disabled={oos} onChange={() => setSelected(bestPriceIndex)} />
+                    <ProductThumb image={candidate.image} alt={candidate.name} />
+                    <span className="crl-cand-info">
+                      <span className="crl-cand-hero-kicker">Best price</span>
+                      <CandidateName supplier={candidate.supplier} name={candidate.name} canonicalName={row.canonicalName} productUrl={candidate.productUrl} />
+                      {candidate.packLabel && <small>{candidate.packLabel}</small>}
+                      <BestPriceStock candidate={candidate} />
+                    </span>
+                    <span className="crl-cand-right">
+                      <strong>{mrPriceLabel(candidate.price)}</strong>
+                      {showPerEa(candidate.perEa, candidate.price) && <span className="crl-cand-per">${mrEa(candidate.perEa)} / ea</span>}
+                      <span className="crl-cand-tags">
+                        {candidate.recommended && <span className="crl-cand-rec">Recommended</span>}
+                        {selected === bestPriceIndex && !candidate.recommended && <span className="crl-cand-sel">Selected</span>}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })()}
               {candidates.map((candidate, index) => {
+                if (index === bestPriceIndex) return null;
                 const oos = !isOrderable(candidate);
                 return (
                 <label key={candidate.key ?? index} className={`crl-cand ${selected === index ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos}>
@@ -691,10 +746,10 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
     const fallbackSupplier = row.supplier && row.supplier !== "—" ? row.supplier : row.matchBrand || row.supplier;
     candidates.push({ key: row.selectedOfferKey || null, name: row.matchName, supplier: fallbackSupplier, sub: row.matchSub, packLabel: row.packLabel, price: row.price, perEa: row.perEa, image: row.image, recommended: true, confidence: row.confidence, availability: row.availability, liveAvailable: row.liveAvailable, productUrl: row.productUrl || "" });
   }
-  const recIdx = candidates.findIndex((candidate) => candidate.recommended);
-  if (recIdx > 0) candidates.unshift(...candidates.splice(recIdx, 1));
+  const bestPriceIndex = bestOrderableOfferIndex(candidates);
+  const bestPriceHeroIndex = bestPriceIndex >= 0 ? bestPriceIndex : 0;
   const initialSel = candidates.findIndex((candidate) => candidate.key === row.selectedOfferKey);
-  const [selected, setSelected] = useState(initialSel < 0 ? 0 : initialSel);
+  const [selected, setSelected] = useState(bestPriceIndex >= 0 ? bestPriceIndex : initialSel < 0 ? 0 : initialSel);
   const [notes, setNotes] = useState(row.note || "");
   const [paid, setPaid] = useState(row.paidUnitPrice != null ? String(row.paidUnitPrice) : "");
   const [searching, setSearching] = useState(isResolve);
@@ -788,22 +843,23 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
         ) : candidates.length ? (
           <>
             <section className="m-detail-sec">
-              <span className="m-detail-label">Recommended</span>
-              <label className={`m-match best ${selected === 0 ? "active" : ""} ${!isOrderable(candidates[0]) ? "oos" : ""}`} aria-disabled={!isOrderable(candidates[0])}>
-                <input type="radio" name="m-cand" checked={selected === 0} disabled={!isOrderable(candidates[0])} onChange={() => setSelected(0)} />
-                <ProductThumb image={candidates[0].image} alt={candidates[0].name} />
-                <span className="m-match-info"><CandidateName supplier={candidates[0].supplier} name={candidates[0].name} canonicalName={row.canonicalName} productUrl={candidates[0].productUrl} />{candidates[0].packLabel && <small>{candidates[0].packLabel}</small>}<CandidateStock availability={candidates[0].availability} liveAvailable={candidates[0].liveAvailable} /></span>
-                <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidates[0].confidence)}`}>{candidates[0].confidence}%</em><strong>{mrPriceLabel(candidates[0].price)}</strong>{showPerEa(candidates[0].perEa, candidates[0].price) ? <small>${mrEa(candidates[0].perEa)} / ea</small> : (!(candidates[0].price > 0) && candidates[0].supplier && candidates[0].supplier !== "—" && <small>Login required</small>)}</span>
+              <span className="m-detail-label">Best price</span>
+              <label className={`m-match best m-match-hero ${selected === bestPriceHeroIndex ? "active" : ""} ${!isOrderable(candidates[bestPriceHeroIndex]) ? "oos" : ""}`} aria-disabled={!isOrderable(candidates[bestPriceHeroIndex])}>
+                <input type="radio" name="m-cand" checked={selected === bestPriceHeroIndex} disabled={!isOrderable(candidates[bestPriceHeroIndex])} onChange={() => setSelected(bestPriceHeroIndex)} />
+                <ProductThumb image={candidates[bestPriceHeroIndex].image} alt={candidates[bestPriceHeroIndex].name} />
+                <span className="m-match-info"><CandidateName supplier={candidates[bestPriceHeroIndex].supplier} name={candidates[bestPriceHeroIndex].name} canonicalName={row.canonicalName} productUrl={candidates[bestPriceHeroIndex].productUrl} />{candidates[bestPriceHeroIndex].packLabel && <small>{candidates[bestPriceHeroIndex].packLabel}</small>}<BestPriceStock candidate={candidates[bestPriceHeroIndex]} /></span>
+                <span className="m-match-right"><strong>{mrPriceLabel(candidates[bestPriceHeroIndex].price)}</strong>{showPerEa(candidates[bestPriceHeroIndex].perEa, candidates[bestPriceHeroIndex].price) ? <small>${mrEa(candidates[bestPriceHeroIndex].perEa)} / ea</small> : (!(candidates[bestPriceHeroIndex].price > 0) && candidates[bestPriceHeroIndex].supplier && candidates[bestPriceHeroIndex].supplier !== "—" && <small>Login required</small>)}</span>
               </label>
             </section>
             {candidates.length > 1 && (
               <section className="m-detail-sec">
                 <span className="m-detail-label">Other possible matches</span>
-                {candidates.slice(1).map((candidate, index) => {
+                {candidates.map((candidate, index) => {
+                  if (index === bestPriceHeroIndex) return null;
                   const oos = !isOrderable(candidate);
                   return (
-                  <label className={`m-match ${selected === index + 1 ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos} key={candidate.key ?? index + 1}>
-                    <input type="radio" name="m-cand" checked={selected === index + 1} disabled={oos} onChange={() => setSelected(index + 1)} />
+                  <label className={`m-match ${selected === index ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos} key={candidate.key ?? index}>
+                    <input type="radio" name="m-cand" checked={selected === index} disabled={oos} onChange={() => setSelected(index)} />
                     <span className="m-match-info"><CandidateName supplier={candidate.supplier} name={candidate.name} canonicalName={row.canonicalName} productUrl={candidate.productUrl} />{candidate.packLabel && <small>{candidate.packLabel}</small>}<CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} /></span>
                     <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrPriceLabel(candidate.price)}</strong>{showPerEa(candidate.perEa, candidate.price) && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
                   </label>

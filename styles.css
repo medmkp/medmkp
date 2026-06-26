@@ -9134,6 +9134,55 @@ th {
 .crl-cand input { accent-color: var(--blue); width: 16px; height: 16px; }
 .crl-cand.oos { cursor: not-allowed; background: var(--bg, #fafafa); }
 .crl-cand.oos .crl-thumb, .crl-cand.oos .crl-cand-info, .crl-cand.oos .crl-cand-right { opacity: 0.55; }
+.crl-cand-hero {
+  grid-template-columns: 18px 92px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px;
+  border-color: color-mix(in srgb, var(--blue) 34%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+}
+.crl-cand-hero.active {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 9%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.crl-cand-hero .crl-thumb { width: 92px; height: 92px; }
+.crl-cand-hero .crl-cand-name strong { font-size: 15px; }
+.crl-cand-hero .crl-cand-right strong { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.crl-cand-hero .crl-cand-per { font-size: 12px; }
+.crl-cand-hero-kicker {
+  display: inline-flex;
+  width: max-content;
+  margin-bottom: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--blue);
+  color: var(--surface);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+@media (max-width: 1500px) {
+  .crl-detail .crl-cand {
+    grid-template-columns: 18px 58px minmax(0, 1fr);
+    align-items: start;
+  }
+  .crl-detail .crl-cand .crl-thumb,
+  .crl-detail .crl-cand-hero .crl-thumb {
+    width: 58px;
+    height: 58px;
+  }
+  .crl-detail .crl-cand-right {
+    grid-column: 3;
+    justify-self: start;
+    text-align: left;
+  }
+  .crl-detail .crl-cand-tags {
+    align-items: flex-start;
+  }
+}
 .crl-cand-name { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .crl-cand-name strong { color: var(--ink); font-size: 13px; font-weight: 600; }
 .crl-cand-name-link { display: inline-flex; align-items: center; color: var(--muted); flex: none; text-decoration: none; }
@@ -9152,7 +9201,7 @@ th {
 .crl-cand-right { text-align: right; }
 .crl-cand-right strong { display: block; color: var(--ink); font-size: 13px; }
 .crl-cand-per { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
-.crl-cand-rec { display: inline-block; margin-top: 3px; padding: 2px 7px; border-radius: 6px; background: #e7f6ee; color: var(--green); font-size: 10px; font-weight: 600; }
+.crl-cand-rec { display: inline-block; margin-top: 3px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--green) 12%, var(--surface)); color: var(--green); font-size: 10px; font-weight: 600; }
 
 .crl-drawer-link { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--blue); font-weight: 500; font-size: 13px; }
 .crl-drawer-link .button-icon { width: 15px; height: 15px; }
@@ -9275,6 +9324,8 @@ th {
 .m-match { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
 .m-match.best { grid-template-columns: 18px 44px minmax(0, 1fr) auto; }
 .m-match.active { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.m-match-hero { background: color-mix(in srgb, var(--blue) 5%, var(--surface)); border-color: color-mix(in srgb, var(--blue) 34%, var(--line)); }
+.m-match-hero.active { background: color-mix(in srgb, var(--blue) 9%, var(--surface)); }
 .m-match .crl-thumb { width: 44px; height: 44px; }
 .m-match input { width: 18px; height: 18px; accent-color: var(--blue); }
 .m-match-info { min-width: 0; }
@@ -10199,6 +10250,7 @@ th {
   align-self: flex-start; margin-top: 3px;
   font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 7px; border-radius: 999px; white-space: nowrap;
 }
+.crl-cand-stock.stock-good { background: color-mix(in srgb, var(--green) 12%, var(--surface)); color: var(--green); }
 .crl-cand-stock.stock-bad { background: #fdeaea; color: var(--red); }
 .crl-cand-stock.stock-warn { background: #fcf0db; color: var(--gold); }
 .pp-switch-msg { display: inline-flex; align-items: center; gap: 6px; color: var(--red); font-size: 12px; font-weight: 500; }
