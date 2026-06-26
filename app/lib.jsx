@@ -54,7 +54,7 @@ export const routeByView = {
   locations: "/app/locations",
   locationAdd: "/app/locations/new",
   qrLabels: "/app/locations/qr-labels",
-  scanSessions: "/app/scan-sessions",
+  scanner: "/app/scan-session",
   evidence: "/app/evidence",
   evidenceBinder: "/app/evidence/binder",
   plan: "/app/review",
@@ -87,8 +87,11 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/needs-attention") return { view: "needsAttention", isLoggedIn: true };
   if (path === "/app/reorder-list") return { view: "reorderList", isLoggedIn: true };
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
-  if (path === "/app/scan-sessions") return { view: "scanSessions", isLoggedIn: true, scanLocationId: query.get("location") || "" };
-  if (path.startsWith("/app/scan-sessions/")) return { view: "scanSession", isLoggedIn: true, scanSessionId: decodeURIComponent(path.split("/")[3] || "") };
+  // The session-less scanner. /app/scan-session is canonical; /app/scan-sessions
+  // (and any legacy /app/scan-sessions/:id deep link) resolve to the same surface.
+  if (path === "/app/scan-session" || path === "/app/scan-sessions")
+    return { view: "scanner", isLoggedIn: true, scanLocationId: query.get("location") || "", scanMode: query.get("mode") || "" };
+  if (path.startsWith("/app/scan-sessions/")) return { view: "scanner", isLoggedIn: true };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
   if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
   // /app/plan is the former name — kept so old links/bookmarks still resolve.
@@ -659,26 +662,22 @@ export async function lookupScannedProduct(code) {
 // the backend decoded off the package (the `scanned` block). The barcode path
 // carries traceability (GS1 / HIBC); the SKU path is a plain identity fallback.
 export async function scanLookup(code) {
-  if (!code) return { product: null, scanned: null, kind: "none", gtin: null };
+  if (!code) return { product: null, scanned: null, kind: "none" };
   try {
     const response = await fetch(`/api/products/search?barcode=${encodeURIComponent(code)}&limit=1`);
     const data = await response.json();
     const product = data.canonical_products?.[0] || null;
     const scanned = data.scanned || null;
-    // gtin is returned even when nothing matched (kind "none"), so an unmatched
-    // 1D + 2D pair of one package can still be recognized as the same item.
-    if (product || scanned || data.gtin) {
-      return { product, scanned, kind: data.kind || "none", gtin: data.gtin || null };
-    }
+    if (product || scanned) return { product, scanned, kind: data.kind || "none" };
   } catch {
     /* fall through to SKU lookup */
   }
   try {
     const response = await fetch(`/api/products/search?code=${encodeURIComponent(code)}&limit=1`);
     const data = await response.json();
-    return { product: data.canonical_products?.[0] || null, scanned: null, kind: data.kind || "none", gtin: null };
+    return { product: data.canonical_products?.[0] || null, scanned: null, kind: data.kind || "none" };
   } catch {
-    return { product: null, scanned: null, kind: "none", gtin: null };
+    return { product: null, scanned: null, kind: "none" };
   }
 }
 
@@ -706,25 +705,6 @@ export function isQrUrl(code) {
   return false;
 }
 
-// A scanned QR that points back into the app at a specific location — our printed
-// cabinet/shelf placards encode `…/app/scan-sessions?location=<id>` (see
-// qrlabels.jsx). Scanning one in the scanner should switch which location scans
-// file into, so pull the location id back out. Returns null for any other URL QR
-// (a marketing link, the styleguide), which the scanner still skips as a
-// non-product.
-export function parseLocationQr(code) {
-  const raw = String(code || "").trim();
-  if (!raw) return null;
-  try {
-    // A base lets scheme-less placards (www.tracedds.com/…) parse too.
-    const url = new URL(raw, "https://tracedds.com");
-    if (!/\/app\/scan-sessions\/?$/.test(url.pathname)) return null;
-    return url.searchParams.get("location") || null;
-  } catch {
-    return null;
-  }
-}
-
 // Why a scan didn't resolve to a catalog product, phrased for the buyer. Turns a
 // silent "Needs review" into an explanation: a QR that's only a marketing URL, an
 // HIBC/GTIN we don't carry yet, or a code that isn't a product at all (an
@@ -738,9 +718,10 @@ export function scanMissReason(code) {
   return "Not a recognized product code — added for review.";
 }
 
-// Build the POST body for a scan-session line from a scan lookup. Splits the
+// Build the POST body for a scan (POST /api/scans) from a scan lookup. Splits the
 // matched identity into canonical (mcp_) vs supplier-only (msp_) by id prefix so
-// the server derives the right review bucket, and carries the decoded lot/expiry.
+// the server files it under the right identity, and carries the decoded
+// lot/expiry. An unmatched lookup yields null ids — the scan still lands.
 export function scanLinePayload(code, product, scanned) {
   const best = product?.best_offer || product?.offers?.[0] || null;
   const id = product?.id || "";
@@ -795,26 +776,19 @@ export const traceApi = {
   // Permanently delete every inventory item captured at a location ("Clear list").
   clearLocationItems: (id) =>
     traceFetch(`/api/locations/${encodeURIComponent(id)}/items`, { method: "DELETE" }),
-  listSessions: (query = "") => traceFetch(`/api/scan-sessions${query}`),
-  startSession: (body) => traceFetch("/api/scan-sessions", jsonBody("POST", body)),
-  getSession: (id) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}`),
-  updateSession: (id, body) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
-  deleteSession: (id) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  addLine: (id, body) => traceFetch(`/api/scan-sessions/${encodeURIComponent(id)}/lines`, jsonBody("POST", body)),
-  updateLine: (id, body) => traceFetch(`/api/scan-lines/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
-  deleteLine: (id) => traceFetch(`/api/scan-lines/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  // Record one scan as lot-at-location evidence at the designated location (no
+  // session — it lands immediately). Returns { item, outcome } where outcome is
+  // added | merged | unmatched; an unmatched scan still lands, as a placeholder
+  // surfaced in Needs Attention until a product is linked.
+  createScan: (body) => traceFetch("/api/scans", jsonBody("POST", body)),
+  // Capture or correct an evidence record — lot/expiry/qty in the post-scan
+  // drawer, or link a product to an unidentified scan ("Identify product").
+  updateItem: (id, body) => traceFetch(`/api/inventory/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
   // Confirm a lot was physically pulled (reason: expiry | recall | manual), or
   // undo with { pulled: false }. The only thing that moves a lot out of active.
   pull: (id, body) => traceFetch(`/api/inventory/${encodeURIComponent(id)}/pull`, jsonBody("POST", body)),
   // Delete a single inventory evidence record (a mis-scan / wrong item).
   removeItem: (id) => traceFetch(`/api/inventory/${encodeURIComponent(id)}`, { method: "DELETE" }),
-};
-
-// Shared review-bucket vocabulary for scan-session lines (UI labels + tone).
-export const SCAN_BUCKETS = {
-  confirmed: { label: "Confirmed", tone: "green", icon: "icon-check-circle" },
-  needs_details: { label: "Needs details", tone: "amber", icon: "icon-clock" },
-  needs_review: { label: "Needs review", tone: "red", icon: "icon-alert-triangle" },
 };
 
 // Format an ISO date for the traceability UI ("Dec 4, 2028"), tolerant of the

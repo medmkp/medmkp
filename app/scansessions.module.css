@@ -500,6 +500,25 @@
 }
 .chip:hover { border-color: #c2ccda; }
 .chipActive { border-color: var(--blue); color: var(--blue); background: #f2f6ff; }
+
+/* Desktop scanner: Shelf Audit / Receiving mode selector on the start screen. */
+.modeToggle { display: inline-flex; gap: 8px; margin-bottom: 18px; }
+.modeToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #e1e7ef;
+  background: #fff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 15px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.modeToggleBtn svg { width: 16px; height: 16px; }
+.modeToggleBtn:hover { border-color: #c2ccda; }
+.modeToggleActive { border-color: var(--blue); color: var(--blue); background: #f2f6ff; }
 .chipCount {
   font-size: 11px;
   background: #eef2f7;

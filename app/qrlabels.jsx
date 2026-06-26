@@ -35,7 +35,7 @@ function typeLabel(type) {
 // relative URL during SSR (no window).
 function scanUrlFor(loc) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return `${origin}/app/scan-sessions?location=${encodeURIComponent(loc.id)}`;
+  return `${origin}/app/scan-session?location=${encodeURIComponent(loc.id)}`;
 }
 
 export function QrLabelView({ onBack, onToast }) {

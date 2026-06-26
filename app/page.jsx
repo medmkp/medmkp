@@ -6,7 +6,7 @@ import { BrandMark, Icon, IconSprite } from "./icons";
 import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { QrLabelView } from "./qrlabels";
-import { ScanSessionsView, ScanSessionView } from "./scansessions";
+import { ScannerView } from "./scansessions";
 import { MobileReorderScan } from "./scanmobile";
 import { getScanAudioCtx, loadMatchChime, playMatchChime, vibrateNoMatch } from "./scanSound";
 import { EvidenceView, EvidenceBinderView } from "./evidence";
@@ -39,8 +39,8 @@ export default function Home() {
   const [categorySlug, setCategorySlug] = useState(null);
   const [supplierId, setSupplierId] = useState(null);
   const [locationId, setLocationId] = useState(null);
-  const [scanSessionId, setScanSessionId] = useState(null);
   const [scanLocationId, setScanLocationId] = useState("");
+  const [scanMode, setScanMode] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -429,8 +429,8 @@ export default function Home() {
       setCategorySlug(nextRoute.categorySlug || null);
       setSupplierId(nextRoute.supplierId || null);
       setLocationId(nextRoute.locationId || null);
-      setScanSessionId(nextRoute.scanSessionId || null);
       setScanLocationId(nextRoute.scanLocationId || "");
+      setScanMode(nextRoute.scanMode || "");
       setSearchQuery(nextRoute.searchQuery || "");
       setMobileAddItemRoute(Boolean(nextRoute.mobileAddItemRoute));
       setMenuOpen(false);
@@ -780,8 +780,8 @@ export default function Home() {
     setCategorySlug(next.categorySlug || null);
     setSupplierId(next.supplierId || null);
     setLocationId(next.locationId || null);
-    setScanSessionId(next.scanSessionId || null);
     setScanLocationId(next.scanLocationId || "");
+    setScanMode(next.scanMode || "");
     setSearchQuery(next.searchQuery || "");
     setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
     setMenuOpen(false);
@@ -803,16 +803,10 @@ export default function Home() {
     navigate(pathForView(nextView));
   }
 
-  // Start (or resume) a real scan session for a location and drop into it. With
-  // no location, fall back to the Scan Sessions list (which has the picker).
-  async function startScanSession(locId) {
-    if (!locId) { navigate("/app/scan-sessions"); return; }
-    try {
-      const { session } = await traceApi.startSession({ location_id: locId });
-      navigate(`/app/scan-sessions/${session.id}`);
-    } catch {
-      showToast("Couldn't start a scan session.");
-    }
+  // Drop into the scanner. With a location, scan straight onto it (Shelf Audit);
+  // without one, the scanner opens its choose-a-location start screen.
+  function startScan(locId) {
+    navigate(locId ? `/app/scan-session?location=${encodeURIComponent(locId)}` : "/app/scan-session");
   }
 
   function handleScanComplete(code) {
@@ -1491,7 +1485,7 @@ export default function Home() {
     ["needsAttention", "icon-alert-triangle", "Needs attention", false, NEEDS_ATTENTION_BADGE],
     ["home", "icon-cart", "Reorder list"],
     ["locations", "icon-map-pin", "Locations"],
-    ["scanSessions", "icon-scan", "Scan sessions"],
+    ["scanner", "icon-scan", "Scan"],
     ["savings", "icon-dollar-circle", "Savings"],
     ["evidence", "icon-shield-check", "Evidence"],
     ["reports", "icon-chart", "Reports", true],
@@ -1500,13 +1494,13 @@ export default function Home() {
     ["settings", "icon-settings", "Settings"],
   ];
 
-  // The Start scan session screen — scan-first mobile home (`/app`) and the
-  // `/app/scan-sessions` route both render it (on mobile it's MobileScanStart;
-  // on desktop the sessions board). Defined once, reused in both places.
+  // The scanner — scan-first mobile home (`/app`) and the `/app/scan-session`
+  // route both render it. With a location it scans straight onto it; without one
+  // it shows the choose-a-location start screen. Defined once, reused in both.
   const scanStartEl = (
-    <ScanSessionsView
+    <ScannerView
       startLocationId={scanLocationId}
-      onOpenSession={(id) => navigate(`/app/scan-sessions/${id}`)}
+      startMode={scanMode}
       onNavigate={navigate}
       onToast={showToast}
     />
@@ -1733,7 +1727,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon, count]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels")) || (target === "scanSessions" && view === "scanSession") || (target === "evidence" && view === "evidenceBinder") ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels")) || (target === "evidence" && view === "evidenceBinder") ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1775,7 +1769,7 @@ export default function Home() {
                 onBack={() => { setScanResult(null); navigate("/app/reorder-list"); }}
               />
             ) : isMobile ? (
-              // Mobile home (`/app`) = the Start scan session screen (scan-first).
+              // Mobile home (`/app`) = the scanner start screen (scan-first).
               // Locations / Reorder / More are their own routes via the bottom nav;
               // the center Scan FAB returns here.
               scanStartEl
@@ -1790,7 +1784,7 @@ export default function Home() {
 
           {view === "locations" && (
             <LocationsBoardView
-              onStartScan={startScanSession}
+              onStartScan={startScan}
               onAddLocation={() => navigate("/app/locations/new")}
               onOpenLocation={(id) => navigate(`/app/locations/${id}`)}
               onNavigate={navigate}
@@ -1814,23 +1808,13 @@ export default function Home() {
             <LocationDetailView
               locationId={locationId}
               onBack={() => navigate("/app/locations")}
-              onStartScan={() => startScanSession(locationId)}
+              onStartScan={() => startScan(locationId)}
               onToast={showToast}
               onNavigate={navigate}
             />
           )}
 
-          {view === "scanSessions" && scanStartEl}
-
-          {view === "scanSession" && (
-            <ScanSessionView
-              sessionId={scanSessionId}
-              onBack={() => navigate("/app/scan-sessions")}
-              onNavigate={navigate}
-              onToast={showToast}
-              onNavigate={navigate}
-            />
-          )}
+          {view === "scanner" && scanStartEl}
 
           {view === "evidence" && (
             <EvidenceView

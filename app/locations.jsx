@@ -3,13 +3,40 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { daysUntil, formatTraceDate, money, traceApi, traceErrorMessage } from "./lib";
-import { ConfirmModal, ProductThumb } from "./ui";
+import { ConfirmModal, ProductSearchResults, ProductThumb, useProductSearch } from "./ui";
 import s from "./locations.module.css";
 
 // Locations surface: the Location Board (real per-practice locations with scan
 // coverage), the Add Location form (creates a real location), and the per-
 // location Detail (real inventory + scan entry). Scan coverage is rolled from
 // the location's scan sessions; inventory comes from the Phase-1 backend.
+
+// Link a catalog product to an unidentified scan. Search the catalog, pick the
+// right product, and PATCH the evidence record's identity — the same shape the
+// scanner's link flow used, now reachable from the items table + Needs Attention.
+function IdentifyModal({ item, onClose, onPick }) {
+  const { query, setQuery, results, loading } = useProductSearch(true);
+  return (
+    <div className={s.identifyOverlay} role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={s.identifyModal}>
+        <div className={s.identifyHead}>
+          <div>
+            <div className={s.identifyTitle}>Identify this item</div>
+            <div className={s.identifySub}>{item.name || item.barcode || "Unidentified item"}</div>
+          </div>
+          <button type="button" className={s.identifyClose} onClick={onClose} aria-label="Close"><Icon name="icon-x" /></button>
+        </div>
+        <div className={s.identifyBody}>
+          <label className={s.search} style={{ maxWidth: "none" }}>
+            <Icon name="icon-search" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the catalog…" aria-label="Search products" autoFocus />
+          </label>
+          <ProductSearchResults query={query} results={results} loading={loading} onPick={onPick} emptyHint="Type a product name to link it." />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Per room-type icon + tint, mirroring the office-layout editor's vocabulary.
 const TYPE_META = {
@@ -215,50 +242,38 @@ function relativeTime(iso) {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-// Map a real location + its latest scan session into the board card's shape.
-// Scan coverage (scanned/confirmed/needs-*) comes from the session; when a
-// location has never been scanned we show its tracked-item + needs-attention
-// rollups instead. No fabricated assignees or activity — only real numbers.
-function toBoardCard(loc, session) {
-  const c = session?.counts;
-  const scanned = c?.scanned || 0;
+// Map a real location into the board card's shape. Coverage is derived from the
+// location's own evidence — tracked items, items needing attention, and when it
+// was last scanned (max last_counted_at) — not from a scan session. No fabricated
+// assignees or activity — only real numbers.
+function toBoardCard(loc) {
   const meta = typeMeta(loc.type);
+  const tracked = loc.item_count || 0;
+  const attention = loc.needs_attention_count || 0;
 
   let status;
-  if (session?.status === "active") status = "in_progress";
-  else if (session?.status === "completed") status = "completed";
-  else if ((loc.needs_attention_count || 0) > 0) status = "needs_attention";
-  else if ((loc.item_count || 0) > 0) status = "healthy";
+  if (attention > 0) status = "needs_attention";
+  else if (tracked > 0) status = "healthy";
   else status = "not_started";
 
-  const stats = session
-    ? [
-        { icon: "icon-scan", value: scanned, label: "Scanned", tone: "blue" },
-        { icon: "icon-check-circle", value: c.confirmed || 0, label: "Confirmed", tone: "green" },
-        { icon: "icon-clock", value: c.needs_details || 0, label: "Need details", tone: "amber" },
-        { icon: "icon-alert-triangle", value: c.needs_review || 0, label: "Need review", tone: "red" },
-      ]
-    : [
-        { icon: "icon-package", value: loc.item_count || 0, label: "Tracked", tone: "blue" },
-        { icon: "icon-alert-triangle", value: loc.needs_attention_count || 0, label: "Needs attention", tone: (loc.needs_attention_count || 0) ? "amber" : "slate" },
-      ];
-
-  const resumeLabel = session?.status === "active" ? "Resume scan" : "Start scan";
   return {
     id: loc.id,
     name: loc.name,
     type: loc.type,
     room: meta.label,
     status,
-    stats,
-    progress: session ? (scanned ? Math.round(((c.confirmed || 0) / scanned) * 100) : 0) : null,
+    stats: [
+      { icon: "icon-package", value: tracked, label: "Tracked", tone: "blue" },
+      { icon: "icon-alert-triangle", value: attention, label: "Needs attention", tone: attention ? "amber" : "slate" },
+    ],
+    progress: null,
     empty:
       status === "not_started"
-        ? { title: "No items tracked yet", text: "Start a scan session to capture this location's inventory." }
+        ? { title: "No items tracked yet", text: "Scan this location to capture its inventory." }
         : null,
-    updated: session ? relativeTime(session.updated_at) : "",
+    updated: relativeTime(loc.last_scanned_at),
     actions: [
-      { label: resumeLabel, icon: "icon-scan", kind: "primary", action: "resume" },
+      { label: tracked ? "Scan again" : "Scan", icon: "icon-scan", kind: "primary", action: "resume" },
       { label: "Open", icon: "icon-chevron-right", iconRight: true, action: "open" },
     ],
   };
@@ -266,7 +281,6 @@ function toBoardCard(loc, session) {
 
 export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation, onNavigate, onToast }) {
   const [locations, setLocations] = useState(null);
-  const [sessions, setSessions] = useState([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [roomType, setRoomType] = useState("all");
@@ -280,44 +294,33 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
 
   useEffect(() => {
     let alive = true;
-    Promise.all([
-      traceApi.listLocations().catch(() => ({ locations: [] })),
-      traceApi.listSessions().catch(() => ({ sessions: [] })),
-    ]).then(([l, sx]) => {
-      if (!alive) return;
-      setLocations(l.locations || []);
-      setSessions(sx.sessions || []);
-    });
+    traceApi.listLocations()
+      .then((l) => { if (alive) setLocations(l.locations || []); })
+      .catch(() => { if (alive) setLocations([]); });
     return () => { alive = false; };
   }, []);
 
-  // Latest session per location (the API returns sessions newest-first).
-  const latestByLocation = useMemo(() => {
-    const map = new Map();
-    for (const sess of sessions) if (!map.has(sess.location_id)) map.set(sess.location_id, sess);
-    return map;
-  }, [sessions]);
-
   const cards = useMemo(
-    () => (locations || []).map((loc) => toBoardCard(loc, latestByLocation.get(loc.id))),
-    [locations, latestByLocation],
+    () => (locations || []).map((loc) => toBoardCard(loc)),
+    [locations],
   );
 
   const stats = useMemo(() => {
     const list = locations || [];
-    const total = list.length || 1;
-    const inProgress = sessions.filter((x) => x.status === "active").length;
-    const completed = sessions.filter((x) => x.status === "completed").length;
+    const total = list.length;
+    const denom = total || 1;
+    const scanned = list.filter((l) => l.last_scanned_at).length;
+    const tracked = list.reduce((sum, l) => sum + (l.item_count || 0), 0);
     const needAttention = list.filter((l) => (l.needs_attention_count || 0) > 0).length;
     return {
-      total: list.length,
-      inProgress,
-      inProgressPct: Math.round((inProgress / total) * 100),
+      total,
+      tracked,
+      scanned,
+      scannedPct: Math.round((scanned / denom) * 100),
       needAttention,
-      needAttentionPct: Math.round((needAttention / total) * 100),
-      completed,
+      needAttentionPct: Math.round((needAttention / denom) * 100),
     };
-  }, [locations, sessions]);
+  }, [locations]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -332,19 +335,22 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
     return rows;
   }, [cards, query, status, roomType, sort]);
 
-  const activity = useMemo(
+  const recentlyScanned = useMemo(
     () =>
-      sessions.slice(0, 4).map((sess) => ({
-        id: sess.id,
-        text: `${sess.location_name || "Location"} — ${sess.status === "active" ? "scan in progress" : "scan completed"}`,
-        meta: relativeTime(sess.updated_at),
-        icon: sess.status === "active" ? "icon-scan" : "icon-check-circle",
-        tone: sess.status === "active" ? "blue" : "green",
-      })),
-    [sessions],
+      (locations || [])
+        .filter((l) => l.last_scanned_at)
+        .sort((a, b) => new Date(b.last_scanned_at) - new Date(a.last_scanned_at))
+        .slice(0, 4)
+        .map((l) => ({
+          id: l.id,
+          text: `${l.name} — ${l.item_count || 0} item${(l.item_count || 0) === 1 ? "" : "s"} tracked`,
+          meta: relativeTime(l.last_scanned_at),
+          icon: "icon-scan",
+          tone: "blue",
+        })),
+    [locations],
   );
 
-  const lastActive = sessions.find((x) => x.status === "active");
   const loading = locations === null;
 
   function handleCardAction(action, loc) {
@@ -366,16 +372,16 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
         <header className={s.head}>
           <h1 className={s.title}>Location Board</h1>
           <p className={s.subtitle}>
-            Track rooms, cabinets, and scan coverage across the office. Start or resume a scan session, resolve issues, and monitor location health.
+            Track rooms, cabinets, and scan coverage across the office. Start scanning, resolve issues, and monitor location health.
           </p>
         </header>
       )}
 
       <div className={isMobile ? s.statsMini : s.stats}>
         <Stat compact={isMobile} icon="icon-map-pin" tint={s.tBlue} tone={s.txBlue} label="Total locations" value={stats.total} />
-        <Stat compact={isMobile} icon="icon-clock" tint={s.tBlue} tone={s.txBlue} label="Scans in progress" value={stats.inProgress} meta={`${stats.inProgressPct}% of locations`} />
+        <Stat compact={isMobile} icon="icon-package" tint={s.tBlue} tone={s.txBlue} label="Items tracked" value={stats.tracked} />
         <Stat compact={isMobile} icon="icon-alert-triangle" tint={s.tAmber} tone={s.txAmber} label="Need attention" value={stats.needAttention} meta={`${stats.needAttentionPct}% of locations`} />
-        <Stat compact={isMobile} icon="icon-check-circle" tint={s.tGreen} tone={s.txGreen} label="Sessions completed" value={stats.completed} />
+        <Stat compact={isMobile} icon="icon-scan" tint={s.tGreen} tone={s.txGreen} label="Locations scanned" value={stats.scanned} meta={`${stats.scannedPct}% of locations`} />
       </div>
 
       <div className={s.toolbar}>
@@ -391,11 +397,9 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
               onChange={setStatus}
               options={[
                 { value: "all", label: "All statuses" },
-                { value: "in_progress", label: "In progress" },
-                { value: "completed", label: "Completed" },
                 { value: "needs_attention", label: "Needs attention" },
-                { value: "not_started", label: "Not started" },
                 { value: "healthy", label: "Healthy" },
+                { value: "not_started", label: "Not started" },
               ]}
             />
             <Select
@@ -453,10 +457,10 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
         </div>
 
         <aside className={s.rail}>
-          {activity.length > 0 && (
+          {recentlyScanned.length > 0 && (
             <section className={s.railCard}>
-              <h2 className={s.railTitle}>Recent scan activity</h2>
-              {activity.map((ev) => (
+              <h2 className={s.railTitle}>Recently scanned</h2>
+              {recentlyScanned.map((ev) => (
                 <div className={s.activityRow} key={ev.id}>
                   <span className={`${s.activityIcon} ${TONE[ev.tone] || s.tSlate}`}><Icon name={ev.icon} /></span>
                   <div className={s.activityBody}>
@@ -470,15 +474,6 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
 
           <section className={s.railCard}>
             <h2 className={s.railTitle}>Scan shortcuts</h2>
-            <button
-              type="button"
-              className={s.shortcut}
-              onClick={() => (lastActive ? onStartScan?.(lastActive.location_id) : onToast?.("No scan session to resume."))}
-            >
-              <span className={s.shortcutIcon}><Icon name="icon-scan" /></span>
-              {lastActive ? `Resume ${lastActive.location_name || "last session"}` : "Resume last session"}
-              <Icon name="icon-chevron-right" className={s.shortcutChevron} />
-            </button>
             <button type="button" className={s.shortcut} onClick={() => onStartScan?.(null)}>
               <span className={s.shortcutIcon}><Icon name="icon-map-pin" /></span>
               Choose a location to scan
@@ -490,7 +485,7 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
             <span className={s.promoIcon}><Icon name="icon-scan" /></span>
             <div>
               <div className={s.promoTitle}>Scan on the go</div>
-              <p className={s.promoText}>Open a scan session on your phone to capture lot &amp; expiry off each package.</p>
+              <p className={s.promoText}>Scan on your phone to capture lot &amp; expiry off each package.</p>
             </div>
           </section>
         </aside>
@@ -498,7 +493,7 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
 
       <div className={s.tip}>
         <Icon name="icon-info" />
-        <span><strong>Tip:</strong> A scan session captures lot &amp; expiry that isn&rsquo;t on any invoice — the data recall response and expiry alerts depend on.</span>
+        <span><strong>Tip:</strong> Scanning captures lot &amp; expiry that isn&rsquo;t on any invoice — the data recall response and expiry alerts depend on.</span>
       </div>
     </div>
   );
@@ -756,9 +751,16 @@ function deriveLifecycleClient(it) {
 // Honest per-item status from the lot lifecycle (active/expiring/expired/pulled).
 // No par-based "reorder" here — reorder timing is the reorder ladder's job, not a
 // census. An expired-but-unpulled lot is the loudest state: "Pull now".
+function isUnidentified(it) {
+  return !it.canonical_product_id && !it.supplier_product_id;
+}
+
 function itemStatus(it) {
   const lc = it.lifecycle || deriveLifecycleClient(it);
   if (lc === "pulled") return { label: "Pulled", tone: "slate" };
+  // An unidentified scan can't be trusted until it's linked to a product — the
+  // loudest actionable state alongside an expired lot.
+  if (isUnidentified(it)) return { label: "Unidentified", tone: "red" };
   if (lc === "expired") return { label: "Pull now", tone: "red" };
   if (lc === "expiring") return { label: "Expiring soon", tone: "amber" };
   if (!it.lot_number || !it.expiration_date) return { label: "Needs details", tone: "amber" };
@@ -769,6 +771,7 @@ function itemStatus(it) {
 function statusKey(it) {
   const lc = it.lifecycle || deriveLifecycleClient(it);
   if (lc === "pulled") return "pulled";
+  if (isUnidentified(it)) return "unidentified";
   if (lc === "expired") return "expired";
   if (lc === "expiring") return "expiring";
   if (!it.lot_number || !it.expiration_date) return "needs_details";
@@ -802,7 +805,7 @@ function formatPriceRange(it) {
 // the lot-at-location record (a mis-scan or wrong item). Self-contained so each
 // row owns its own open state + outside-click handling, the same pattern as the
 // table-header kebab and the Select dropdowns.
-function RowActions({ onRemove, onPull }) {
+function RowActions({ onRemove, onPull, onIdentify }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -832,6 +835,13 @@ function RowActions({ onRemove, onPull }) {
       </button>
       {open && (
         <ul className={s.rowMenu} role="menu">
+          {onIdentify && (
+            <li role="none">
+              <button type="button" role="menuitem" className={s.headMenuItem} onClick={() => { setOpen(false); onIdentify(); }}>
+                <Icon name="icon-link" />Identify product
+              </button>
+            </li>
+          )}
           {onPull && (
             <li role="none">
               <button type="button" role="menuitem" className={s.headMenuItem} onClick={() => { setOpen(false); onPull(); }}>
@@ -853,11 +863,11 @@ function RowActions({ onRemove, onPull }) {
 export function LocationDetailView({ locationId, onBack, onStartScan, onToast, onNavigate }) {
   const [location, setLocation] = useState(null);
   const [items, setItems] = useState([]);
-  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [traceFilter, setTraceFilter] = useState("all");
+  const [identify, setIdentify] = useState(null); // the unidentified item being linked
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -889,16 +899,11 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     if (!locationId) return undefined;
     let alive = true;
     setLoading(true);
-    Promise.all([
-      traceApi.getLocation(locationId),
-      traceApi.listSessions().catch(() => ({ sessions: [] })),
-    ])
-      .then(([data, sx]) => {
+    traceApi.getLocation(locationId)
+      .then((data) => {
         if (!alive) return;
         setLocation(data.location || null);
         setItems(data.items || []);
-        // Sessions come back newest-first, so the first match is the latest.
-        setSession((sx.sessions || []).find((x) => x.location_id === locationId) || null);
         setLoading(false);
       })
       .catch(() => { if (alive) { setLoading(false); onToast?.("Couldn't load this location."); } });
@@ -965,7 +970,6 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
   const attention = location.needs_attention_count ?? top.expired + top.expiring;
   const status = attention > 0 ? STATUS_META.needs_attention : items.length ? STATUS_META.healthy : STATUS_META.not_started;
   const tracePct = items.length ? Math.round((top.traced / items.length) * 100) : 0;
-  const scanPct = session?.counts?.scanned ? Math.round(((session.counts.confirmed || 0) / session.counts.scanned) * 100) : 0;
   const reload = () => traceApi.getLocation(locationId)
     .then((d) => { setLocation(d.location || null); setItems(d.items || []); })
     .catch(() => {});
@@ -983,6 +987,25 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
       onToast?.(`Removed — ${it.name}`);
     } catch {
       onToast?.("Couldn't remove the item.");
+    }
+  };
+  // Link a catalog product to an unidentified scan, then re-derive its status.
+  const onIdentifyPick = async (product) => {
+    const target = identify;
+    setIdentify(null);
+    if (!target) return;
+    const best = product.best_offer || product.offers?.[0] || null;
+    const id = product.id || "";
+    try {
+      await traceApi.updateItem(target.id, {
+        canonical_product_id: id.startsWith("mcp") ? id : null,
+        supplier_product_id: best?.supplier_product_id || (id.startsWith("msp") ? id : null),
+        name: product.name,
+      });
+      onToast?.(`Identified — ${product.name}`);
+      reload();
+    } catch {
+      onToast?.("Couldn't identify that item.");
     }
   };
   // "Clear list" permanently deletes every item captured here. It's a real
@@ -1119,25 +1142,25 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
             </div>
 
             <div className={s.locProgress}>
-              {session ? (
+              {items.length ? (
                 <>
-                  <span className={s.locProgressLabel}>Scan progress</span>
+                  <span className={s.locProgressLabel}>Traceability captured</span>
                   <div className={s.progress}>
                     <span className={s.progressTrack}>
-                      <span className={`${s.progressFill} ${scanPct === 100 ? s.complete : ""}`} style={{ width: `${scanPct}%` }} />
+                      <span className={`${s.progressFill} ${tracePct === 100 ? s.complete : ""}`} style={{ width: `${tracePct}%` }} />
                     </span>
-                    <span className={s.progressPct}>{scanPct}%</span>
+                    <span className={s.progressPct}>{tracePct}%</span>
                   </div>
                   <div className={s.locMeta}>
-                    <span className={s.locMetaItem}><Icon name="icon-scan" />Scanned<small>{session.counts?.scanned ?? 0}</small></span>
-                    <span className={s.locMetaItem}><Icon name="icon-clock" />Last scan<small>{relativeTime(session.updated_at) || "just now"}</small></span>
+                    <span className={s.locMetaItem}><Icon name="icon-package" />Tracked<small>{items.length}</small></span>
+                    <span className={s.locMetaItem}><Icon name="icon-clock" />Last scan<small>{relativeTime(location.last_scanned_at) || "—"}</small></span>
                   </div>
                 </>
               ) : (
                 <div className={s.locNoScan}>
                   <span className={s.locNoScanIcon}><Icon name="icon-scan" /></span>
                   <div>
-                    <div className={s.locNoScanTitle}>No scan in progress</div>
+                    <div className={s.locNoScanTitle}>Nothing scanned yet</div>
                     <div className={s.locNoScanSub}>Scan to capture lot &amp; expiry off each package.</div>
                   </div>
                 </div>
@@ -1146,7 +1169,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
 
             <div className={s.locActions}>
               <button type="button" className={s.scanBtn} onClick={() => onStartScan?.()}>
-                <Icon name="icon-scan" />{session?.status === "active" ? "Resume scan" : "Scan this location"}
+                <Icon name="icon-scan" />Scan this location
               </button>
               <button type="button" className={s.addBtn} onClick={() => onNavigate?.("/app/locations/qr-labels")}>
                 <Icon name="icon-grid" />Print QR label
@@ -1167,6 +1190,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                 onChange={setStatusFilter}
                 options={[
                   { value: "all", label: "All statuses" },
+                  { value: "unidentified", label: "Unidentified" },
                   { value: "active", label: "Active" },
                   { value: "expiring", label: "Expiring soon" },
                   { value: "expired", label: "Expired" },
@@ -1213,7 +1237,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
             </div>
 
             {items.length === 0 ? (
-              <div className={s.empty}>No items captured here yet. Start a scan session to build this location&rsquo;s inventory.</div>
+              <div className={s.empty}>No items captured here yet. Scan this location to build its inventory.</div>
             ) : (
               <div className={s.tableWrap}>
                 <table className={s.table}>
@@ -1248,7 +1272,11 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                           </td>
                           <td className={s.tMuted}>{it.last_counted_at ? formatTraceDate(it.last_counted_at) : "—"}</td>
                           <td className={s.actionsCell}>
-                            <RowActions onRemove={() => onRemove(it)} onPull={lc === "expired" ? () => onPull(it) : undefined} />
+                            <RowActions
+                              onRemove={() => onRemove(it)}
+                              onPull={lc === "expired" ? () => onPull(it) : undefined}
+                              onIdentify={isUnidentified(it) ? () => setIdentify(it) : undefined}
+                            />
                           </td>
                         </tr>
                       );
@@ -1320,6 +1348,10 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
           onConfirm={confirmClearList}
           onClose={() => setConfirmingClear(false)}
         />
+      )}
+
+      {identify && (
+        <IdentifyModal item={identify} onClose={() => setIdentify(null)} onPick={onIdentifyPick} />
       )}
     </div>
   );
