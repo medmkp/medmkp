@@ -1,0 +1,12 @@
+[
+  { "name": "iso-lot-exp",        "text": "LOT M607840  EXP 2026-01",            "expectLot": "M607840", "expectExpiry": "2026-01-31" },
+  { "name": "l0t-garble-useby",   "text": "L0T:  AB123456   USE BY 2025/08/31",  "expectLot": "AB123456", "expectExpiry": "2025-08-31" },
+  { "name": "ref-not-lot",        "text": "REF 4302  LOT 9981  EXP JAN 2027",    "expectLot": "9981", "expectExpiry": "2027-01-31" },
+  { "name": "lotno-keyword",      "text": "LOT NO 7765432  EXP 2027/12",         "expectLot": "7765432", "expectExpiry": "2027-12-31" },
+  { "name": "exp-mmddyyyy",       "text": "LOT C12D34  EXP 03-15-2026",          "expectLot": "C12D34", "expectExpiry": "2026-03-15" },
+  { "name": "bb-month",           "text": "BB 12/2026  LOT 5567",                "expectLot": "5567", "expectExpiry": "2026-12-31" },
+  { "name": "mon-yyyy-front",     "text": "EXP MAR 2028  LOT XJ4471",            "expectLot": "XJ4471", "expectExpiry": "2028-03-31" },
+  { "name": "shape-fallback-lot", "text": "M607840",                             "expectLot": "M607840", "expectExpiry": null },
+  { "name": "expiry-only-iso",    "text": "EXP 2026-09",                         "expectLot": null, "expectExpiry": "2026-09-30" },
+  { "name": "yyyymm-slash",       "text": "LOT 88123  EXP 2025/07",              "expectLot": "88123", "expectExpiry": "2025-07-31" }
+]

@@ -17,9 +17,9 @@ A cron job runs `run-loop.sh` every few hours. Each tick:
    Fails **closed** (skips) if it can't read usage.
 3. Branches off the latest `origin/main` in an isolated git worktree.
 4. **Picks work**: a labeled issue (`eng-loop`/`qa`) if any, else the next
-   **playbook category** in rotation (see `CATEGORIES`) — currently `qa-design`
-   and `clustering`, with `pricing` opt-in. Categories whose prerequisites aren't
-   met (e.g. no DB URL, harvester down) are skipped that tick.
+   **playbook category** in rotation (see `CATEGORIES`) — `qa-design`, `clustering`,
+   and `ocr`, with `pricing` opt-in. Categories whose prerequisites aren't met
+   (e.g. no DB URL, harvester down) are skipped that tick.
 5. Hands a **headless Claude run** the common rules (`loop-prompt.md`) plus the
    chosen **playbook** (`playbooks/*.md`): find one defect, capture **before**,
    fix it, capture **after**, and open a PR — or, for a data-quality problem with
@@ -48,7 +48,10 @@ A cron job runs `run-loop.sh` every few hours. Each tick:
 | `loop-prompt.md` | Common rules (PR/issue, evidence, safety, auth) for every run |
 | `playbooks/qa-design.md` | UI QA / design / bug-fixing — screenshot evidence |
 | `playbooks/clustering.md` | Over/under-clustering fix — dry-run metrics-diff evidence |
+| `playbooks/ocr.md` | Lot/expiry label reading — parser-accuracy-diff evidence |
 | `playbooks/pricing.md` | Price/vendor coverage vs Net32 (opt-in) — files issues |
+| `ocr/check-parser.mjs` | Headless lot/expiry parser-accuracy harness (the OCR "dry-run") |
+| `ocr/cases.json` | Ground-truth corpus: raw OCR text → expected lot/expiry (grows over time) |
 | `config.env` | Tunables (threshold, window, labels, categories, paths, backend, DB, timeout) |
 | `README.md` | This file |
 
