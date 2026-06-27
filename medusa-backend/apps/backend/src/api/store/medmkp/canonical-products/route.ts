@@ -499,8 +499,30 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         return
       }
     }
-    res.json({ count: 0, canonical_products: [] })
-    return
+    // Handle alias fallback: a URL issued before a re-match renamed the product.
+    // Resolve the old handle to the canonical that superseded it so bookmarks,
+    // open tabs, and shared links keep working instead of 404-ing. Falls through
+    // to not-found if the alias table is absent (migration not yet applied).
+    if (handle) {
+      try {
+        const pool = getPostgresPool()
+        const { rows } = await pool.query<{ canonical_id: string }>(
+          `SELECT canonical_id FROM medmkp_canonical_handle_alias WHERE handle = $1 LIMIT 1`,
+          [handle]
+        )
+        if (rows.length) {
+          filteredCanonicalProducts = await medmkp.listCanonicalProducts({
+            id: rows[0].canonical_id,
+          } as any)
+        }
+      } catch {
+        // alias table unavailable — treat as not found
+      }
+    }
+    if (!filteredCanonicalProducts.length) {
+      res.json({ count: 0, canonical_products: [] })
+      return
+    }
   }
 
   // On a handle lookup, pull in the rest of the family so the product page can

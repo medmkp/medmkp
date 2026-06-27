@@ -69,8 +69,14 @@ export type ScoredPair = {
 }
 
 export type Cluster = {
-  /** Index used to derive the canonical product id. */
+  /** Iteration index within a single run. Stable only within that run; used as
+   * an in-memory join key (families, substitutes). NEVER persist-derive ids from
+   * this — it is positional and shifts between runs. Use contentKey instead. */
   key: number
+  /** Deterministic, order-independent fingerprint of the cluster's identity
+   * (brand + model + pack + variant). The persisted canonical id and handle are
+   * derived from this so a product keeps the same URL across re-match runs. */
+  contentKey: string
   members: NormalizedProduct[]
   representative: NormalizedProduct
   supplierCount: number
