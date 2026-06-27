@@ -50,6 +50,7 @@ A cron job runs `run-loop.sh` every few hours. Each tick:
 |---|---|
 | `run-loop.sh` | One tick: lock → gate → worktree → pick work + category → run Claude → teardown → log |
 | `deploy-nuc.sh` | Deploy/update the loop on the NUC from your Mac (`npm run deploy:eng-loop`) |
+| `status.sh` | One-screen status dashboard from your Mac (`npm run status:eng-loop`) — see [Watching it](#watching-it) |
 | `usage-gate.sh` | Pick the engine: Claude if >50% left, else Codex if >25%, else skip |
 | `usage-codex.sh` | Read Codex remaining % from its TUI `/status` panel via tmux |
 | `loop-prompt.md` | Common rules (PR/issue, evidence, safety, auth) for every run |
@@ -169,6 +170,52 @@ Cron line (the gate does the real throttling, so a few hours is fine):
 
 (Optionally `git -C ~/eng-loop/checkout pull --ff-only` before the run so the loop
 scripts/prompt stay current — though it always branches off fresh `origin/main`.)
+
+## Watching it
+
+`npm run status:eng-loop` prints a one-screen, read-only summary so you can see
+what the loop is doing without SSHing the NUC and grepping logs. It fans out a
+**single** `ssh` call to the NUC (crontab, `cron.log`, the latest dated log's
+usage lines, worktrees, `.rotation`) plus local `gh` calls (open loop PRs, issue
+backlog), and prints:
+
+- **Liveness** — NUC reachable + its clock, cron installed + schedule, `PAUSE`
+  state, time since last activity, current Claude/Codex usage % (parsed from the
+  latest dated log — no extra `/usage` call), and the next autonomous lane.
+- **Current run** — what's being worked right now (issue/PR/autonomous category)
+  and how long it's been running, or `idle` between ticks. (Run duration is
+  inferred from `cron.log`'s mtime: nothing writes it during a model invocation,
+  so its last-modified time is the run's start.)
+- **Recent ticks** — the last ~10 ticks: engine, what got picked, and the
+  outcome (PR opened / revised / reconciled / no PR / skipped — with the skip
+  reason, e.g. "usage gate closed").
+- **Open loop PRs** — every `eng-loop-…` branch PR with mergeable, review
+  decision (e.g. `CHANGES_REQUESTED`), CI rollup, and lane.
+- **Backlog** — loopable queue (`eng-loop`/`qa`, newest-first) vs blocked
+  (`needs-design`) counts.
+- **Log tail** — the last N lines of `cron.log`.
+
+```sh
+npm run status:eng-loop                 # full dashboard
+scripts/eng-loop/status.sh -n 30        # show 30 log-tail lines
+scripts/eng-loop/status.sh --no-color   # plain output (also auto when not a tty)
+scripts/eng-loop/status.sh --html out.html   # self-contained web page (omit path → stdout)
+```
+
+When the NUC is offline it prints `NUC unreachable` (within the 5s connect
+timeout — it never hangs) and still shows the GitHub-side PR/backlog data.
+Env: `NUC_HOST` (default `nuc`), `NUC_LOOP_HOME` (default `~/eng-loop` on the NUC).
+
+**Web view.** `--html` re-renders the same dashboard as a standalone, dark-themed
+page that **auto-refreshes every 60s** (a `<meta refresh>` — no server, no
+secrets, just a file you open). Leave the tab open as a live monitor:
+
+```sh
+scripts/eng-loop/status.sh --html /tmp/eng-loop-status.html && open /tmp/eng-loop-status.html
+```
+
+**Skill.** `/eng-loop-status` wraps this CLI for chat — it runs the dashboard and
+gives a one-line readout (say "web"/"open" to get the HTML page instead).
 
 ## Operating it
 
