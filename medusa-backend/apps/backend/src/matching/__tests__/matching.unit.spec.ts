@@ -323,6 +323,13 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(extractNumericAttrs("Bracket Hook 5-0 Trial").get("suture_size")).toBeUndefined()
   })
 
+  it("captures endodontic point material as a hard-conflict attribute", () => {
+    const paper = extractNumericAttrs("Dia Pro T Paper Points - Assorted (F1/F2/F3)")
+    const guttaPercha = extractNumericAttrs("Dia-ProT Assorted Gutta Percha (F1/F2/F3) 60/Pk")
+    expect([...(paper.get("endo_point_material") ?? [])]).toEqual(["paper"])
+    expect([...(guttaPercha.get("endo_point_material") ?? [])]).toEqual(["gutta_percha"])
+  })
+
   it("rejects same-SKU color variants instead of merging them", () => {
     const decision = score(
       {
@@ -357,6 +364,69 @@ describe("identity matching (golden pairs from production data)", () => {
       }
     )
     expect(decision.status).toBe("reject")
+  })
+
+  it("does not merge Dia Pro T paper points with gutta-percha points through assorted range codes", () => {
+    // Prod regression: the paper-point SKU family (MP250-S691) and gutta-percha
+    // SKU family (ML150-S691) shared brand/name/range evidence ("F1/F2/F3").
+    // A shared-name-code edge joined the paper Patterson row to the DC Dental
+    // gutta-percha row, then exact SKU edges transitively collapsed both
+    // materials into one canonical.
+    const rows = [
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Diadent Manufacturing Inc",
+        manufacturer_sku: "MP250-S691",
+        name: "Dia Pro T Paper Points - Assorted – (F1/F2/F3)",
+      }),
+      product({
+        supplier_id: "msup_dentalcity_com",
+        brand: "Dental City",
+        manufacturer_sku: "MP250-S691",
+        name: "Dia-Pro T Paper Points Asst F1,2,3 100/Box MP 250-S691",
+        pack_size: "100/Box",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "Diadent Mfg Inc",
+        manufacturer_sku: "MP250-S691",
+        name: "Dia-Pro T Paper Points 100/Pk",
+        pack_size: "100/Pk",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "Diadent Mfg Inc",
+        manufacturer_sku: "ML150-S691",
+        name: "Dia-Pro T Hand Rolled Gutta Percha Points Millimeter Markings 60/Bx",
+        pack_size: "60/Bx",
+      }),
+      product({
+        supplier_id: "msup_dcdental_com",
+        brand: "Diadent Mfg, Inc.",
+        manufacturer_sku: "714-ML150-S691",
+        name: "Dia-ProT Assorted Gutta Percha (F1/F2/F3) 60/Pk",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Diadent Manufacturing Inc",
+        manufacturer_sku: "ML150-S691",
+        name: "Dia Pro T Gutta Percha Points - Assorted Sizes F1, F2, F3",
+        pack_size: "60/Pkg",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const materialSets = result.clusters.map((cluster) =>
+      new Set(
+        cluster.members
+          .map((member) => member.numericAttrs.get("endo_point_material"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+    )
+
+    expect(result.clusters).toHaveLength(2)
+    expect(materialSets.some((values) => values.size === 1 && values.has("paper"))).toBe(true)
+    expect(materialSets.some((values) => values.size === 1 && values.has("gutta_percha"))).toBe(true)
   })
 
   it("keeps same-SKU products with matching color mergeable", () => {

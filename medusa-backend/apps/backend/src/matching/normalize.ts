@@ -397,6 +397,17 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     }
   }
 
+  // Endodontic paper points and gutta-percha points often share the same
+  // brand, shape range (F1/F2/F3), and "points" vocabulary, but they are
+  // different materials and must not bridge transitively through assorted
+  // range codes.
+  if (/\bpaper\s+points?\b|\babsorbent\s+points?\b/.test(lowered)) {
+    add("endo_point_material", "paper")
+  }
+  if (/\bgutta[\s-]?percha\b/.test(lowered)) {
+    add("endo_point_material", "gutta_percha")
+  }
+
   // Apparel/glove sizing (gloves, gowns, masks, lab coats are size-differentiated
   // but carry no measured unit). Disjoint sizes are a hard conflict, like 25mm
   // vs 31mm. Only worded forms and the X-prefixed family are matched; bare
