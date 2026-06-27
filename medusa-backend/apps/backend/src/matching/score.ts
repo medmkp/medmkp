@@ -160,6 +160,29 @@ export function packRelation(a: NormalizedProduct, b: NormalizedProduct): "same"
   return a.packQty === b.packQty ? "same" : "differs"
 }
 
+function isOptiCide3(product: NormalizedProduct): boolean {
+  const tokens = new Set(product.nameTokens)
+  return tokens.has("opticide3") || (tokens.has("opti") && tokens.has("cide") && tokens.has("3"))
+}
+
+function isOptiCideCatalogCode(code: string): boolean {
+  return /^DOC[PSW]\d{2,}/.test(code)
+}
+
+function productLineBrandsAgree(
+  a: NormalizedProduct,
+  b: NormalizedProduct,
+  skuCode: string
+): boolean {
+  return (
+    !!skuCode &&
+    a.mfrSku === b.mfrSku &&
+    isOptiCideCatalogCode(skuCode) &&
+    isOptiCide3(a) &&
+    isOptiCide3(b)
+  )
+}
+
 function isGenericDentalBurCode(code: string): boolean {
   // ISO bur shape + diameter + optional grit (e.g. 801-016M -> 801016M).
   // These codes describe geometry shared by many makers, not a product line.
@@ -214,7 +237,7 @@ function hasSharedSpecificBurLineToken(a: NormalizedProduct, b: NormalizedProduc
 export function scorePair(a: NormalizedProduct, b: NormalizedProduct): PairDecision {
   const sku = skuEvidence(a, b)
   const numeric = compareNumericAttrs(a, b)
-  const brandRel = brandsAgree(a, b)
+  const brandRel = productLineBrandsAgree(a, b, sku.code) ? "match" : brandsAgree(a, b)
   const packRel = packRelation(a, b)
 
   // Both products carry catalog codes in the name, but they share none. The

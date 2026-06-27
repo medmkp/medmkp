@@ -463,7 +463,7 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
             <Icon name="icon-grid" />
             Print QR codes
           </button>
-          <button type="button" className={s.addBtn} onClick={() => onNavigate?.("/app/locations/layout")}>
+          <button type="button" className={s.addBtn} onClick={() => onNavigate?.("/app/locations/office-layout")}>
             <Icon name="icon-map-pin" />
             Office layout
           </button>
@@ -1178,6 +1178,9 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
+  const selectAllRef = useRef(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -1270,6 +1273,25 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     [items],
   );
 
+  useEffect(() => {
+    setSelectedItemIds((prev) => {
+      if (!prev.size) return prev;
+      const live = new Set(items.map((it) => it.id));
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [items]);
+
+  const visibleItemIds = useMemo(() => visibleItems.map((it) => it.id), [visibleItems]);
+  const selectedItems = useMemo(() => items.filter((it) => selectedItemIds.has(it.id)), [items, selectedItemIds]);
+  const selectedVisibleCount = visibleItemIds.filter((id) => selectedItemIds.has(id)).length;
+  const allVisibleSelected = visibleItemIds.length > 0 && selectedVisibleCount === visibleItemIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleItemIds.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
+
   if (loading) return <div className={s.detail}><div className={s.empty}>Loading location…</div></div>;
   if (!location) return <div className={s.detail}><div className={s.empty}>Location not found.</div></div>;
 
@@ -1291,6 +1313,12 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     try {
       await traceApi.removeItem(it.id);
       setItems((prev) => prev.filter((x) => x.id !== it.id));
+      setSelectedItemIds((prev) => {
+        if (!prev.has(it.id)) return prev;
+        const next = new Set(prev);
+        next.delete(it.id);
+        return next;
+      });
       onToast?.(`Removed — ${it.name}`);
     } catch {
       onToast?.("Couldn't remove the item.");
@@ -1333,15 +1361,52 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     if (!items.length) return;
     setConfirmingClear(true);
   };
+  const toggleItemSelection = (id) => {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleVisibleSelection = () => {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleItemIds.forEach((id) => next.delete(id));
+      else visibleItemIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+  const handleBulkDelete = () => {
+    if (!selectedItemIds.size) return;
+    setMenuOpen(false);
+    setConfirmingBulkDelete(true);
+  };
   const confirmClearList = async () => {
     setConfirmingClear(false);
     setItems([]); // optimistic; reload reconciles from the now-empty backend
+    setSelectedItemIds(new Set());
     try {
       await traceApi.clearLocationItems(locationId);
       onToast?.("List cleared.");
       reload();
     } catch {
       onToast?.("Couldn't clear the list.");
+      reload();
+    }
+  };
+  const confirmBulkDelete = async () => {
+    const deleteItems = selectedItems;
+    const deleteIds = deleteItems.map((it) => it.id);
+    setConfirmingBulkDelete(false);
+    setItems((prev) => prev.filter((it) => !deleteIds.includes(it.id)));
+    setSelectedItemIds(new Set());
+    const results = await Promise.allSettled(deleteIds.map((id) => traceApi.removeItem(id)));
+    const removed = results.filter((result) => result.status === "fulfilled").length;
+    if (removed === deleteIds.length) {
+      onToast?.(`Deleted ${removed} item${removed === 1 ? "" : "s"}.`);
+    } else {
+      onToast?.(removed ? `Deleted ${removed} of ${deleteIds.length} items.` : "Couldn't delete the selected items.");
       reload();
     }
   };
@@ -1554,6 +1619,15 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
               <button type="button" className={s.filterBtn} onClick={() => onToast?.("Advanced filters are coming soon.")}>
                 <Icon name="icon-filter" />Filters
               </button>
+              {selectedItemIds.size > 0 && (
+                <div className={s.bulkActions} aria-live="polite">
+                  <span>{selectedItemIds.size} selected</span>
+                  <button type="button" className={s.bulkClearBtn} onClick={() => setSelectedItemIds(new Set())}>Clear</button>
+                  <button type="button" className={s.bulkDeleteBtn} onClick={handleBulkDelete}>
+                    <Icon name="icon-trash" />Delete
+                  </button>
+                </div>
+              )}
               {items.length > 0 && (
                 <div className={s.headKebabWrap} ref={menuRef}>
                   <button
@@ -1586,6 +1660,16 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                 <table className={s.table}>
                   <thead>
                     <tr>
+                      <th className={s.selectCell}>
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          disabled={visibleItemIds.length === 0}
+                          onChange={toggleVisibleSelection}
+                          aria-label={allVisibleSelected ? "Deselect visible items" : "Select visible items"}
+                        />
+                      </th>
                       <th>Item</th><th>SDS</th><th>Expiration</th><th>Lot</th><th>Price</th><th>Status</th><th>Last scanned</th><th aria-label="Actions" />
                     </tr>
                   </thead>
@@ -1594,8 +1678,22 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                       const st = itemStatus(it);
                       const lc = it.lifecycle || deriveLifecycleClient(it);
                       const price = formatPriceRange(it);
+                      const rowSelected = selectedItemIds.has(it.id);
                       return (
-                        <tr key={it.id} className={selected?.id === it.id ? s.rowActive : ""} onClick={() => setSelected(it)} title="Open lot detail">
+                        <tr
+                          key={it.id}
+                          className={`${rowSelected ? s.rowSelected : ""} ${selected?.id === it.id ? s.rowActive : ""}`}
+                          onClick={() => setSelected(it)}
+                          title="Open lot detail"
+                        >
+                          <td className={s.selectCell} onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={rowSelected}
+                              onChange={() => toggleItemSelection(it.id)}
+                              aria-label={`Select ${it.name || "item"}`}
+                            />
+                          </td>
                           <td>
                             <div className={s.tItemCell}>
                               <ProductThumb image={it.image_url || it.photo_url} alt={it.name} />
@@ -1703,6 +1801,17 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
           destructive
           onConfirm={confirmClearList}
           onClose={() => setConfirmingClear(false)}
+        />
+      )}
+
+      {confirmingBulkDelete && (
+        <ConfirmModal
+          title="Delete selected items?"
+          body={`This permanently deletes ${selectedItems.length} selected item${selectedItems.length === 1 ? "" : "s"} from ${location.name}, on every device. This can’t be undone.`}
+          confirmLabel="Delete selected"
+          destructive
+          onConfirm={confirmBulkDelete}
+          onClose={() => setConfirmingBulkDelete(false)}
         />
       )}
 

@@ -187,6 +187,10 @@ export function OfficeLayoutView({
 
   const dirty = changedPositions.length > 0;
 
+  useEffect(() => {
+    setItems(locations);
+  }, [locations]);
+
   const placed = useMemo(() => items.filter((l) => l.layout_x != null && l.layout_y != null), [items]);
   const unplaced = useMemo(() => items.filter((l) => l.layout_x == null || l.layout_y == null), [items]);
   const selectedLocation = useMemo(() => items.find((l) => l.id === selectedId) || null, [items, selectedId]);

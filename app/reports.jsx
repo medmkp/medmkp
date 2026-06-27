@@ -108,13 +108,53 @@ function ProdGlyph() {
   return <span className={s.prodGlyph}><Icon name="icon-package" /></span>;
 }
 
+function Select({ label, value, onChange, options }) {
+  return (
+    <label className={s.filter}>
+      <span className={s.filterLabel}>{label}</span>
+      <select className={s.filterSelect} value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <Icon name="icon-chevron-down" className={s.filterChevron} />
+    </label>
+  );
+}
+
+function includesQuery(row, query, fields) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((field) => String(row[field] || "").toLowerCase().includes(q));
+}
+
 export function ReportsView({ data = MOCK, onToast, onNavigate }) {
-  const [tab, setTab] = useState("action"); // action | scanned — single switch, both shown stacked on wide screens
+  const [actionQuery, setActionQuery] = useState("");
+  const [actionIssue, setActionIssue] = useState("all");
+  const [scannedQuery, setScannedQuery] = useState("");
+  const [scannedMatch, setScannedMatch] = useState("all");
   const soon = (what) => onToast?.(`${what} connects when the report export is wired up.`);
 
+  const filteredActionGroups = useMemo(() => {
+    return data.actionGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => (
+          (actionIssue === "all" || item.issueTone === actionIssue) &&
+          includesQuery(item, actionQuery, ["name", "sku", "issue", "location", "shelf", "source", "action"])
+        )),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [data.actionGroups, actionIssue, actionQuery]);
+
+  const filteredScanned = useMemo(() => {
+    return data.scanned.filter((row) => (
+      (scannedMatch === "all" || row.match === scannedMatch) &&
+      includesQuery(row, scannedQuery, ["name", "sku", "gtin", "location", "shelf", "qty", "par", "expiration", "lot"])
+    ));
+  }, [data.scanned, scannedMatch, scannedQuery]);
+
   const actionCount = useMemo(
-    () => data.actionGroups.reduce((a, g) => a + g.items.length, 0),
-    [data.actionGroups],
+    () => filteredActionGroups.reduce((total, group) => total + group.items.length, 0),
+    [filteredActionGroups],
   );
 
   return (
@@ -148,13 +188,43 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
               <h2 className={s.cardTitle}>Action required <span className={s.countPill}>{actionCount}</span></h2>
               <button type="button" className={s.cardLink} onClick={() => onNavigate?.("/app/needs-attention")}>Open needs attention <Icon name="icon-arrow-right" /></button>
             </div>
+            <div className={s.toolbar}>
+              <label className={s.search}>
+                <Icon name="icon-search" />
+                <input
+                  type="search"
+                  value={actionQuery}
+                  onChange={(event) => setActionQuery(event.target.value)}
+                  placeholder="Search action items"
+                  aria-label="Search action items"
+                />
+              </label>
+              <Select
+                label="Issue"
+                value={actionIssue}
+                onChange={setActionIssue}
+                options={[
+                  { value: "all", label: "All issues" },
+                  { value: "mismatch", label: "Mismatches" },
+                  { value: "variance", label: "Variance" },
+                  { value: "details", label: "Missing details" },
+                  { value: "sds", label: "Missing SDS" },
+                  { value: "expiry", label: "Expiring soon" },
+                ]}
+              />
+              <button type="button" className={s.filtersBtn} onClick={() => soon("Advanced filters")}>
+                <Icon name="icon-filter" />Filters
+              </button>
+            </div>
             <div className={s.tableScroll}>
               <table className={s.table}>
                 <thead>
                   <tr><th>Item</th><th>Issue</th><th>Location</th><th>Shelf</th><th>Source</th><th>Action</th></tr>
                 </thead>
                 <tbody>
-                  {data.actionGroups.map((g) => (
+                  {filteredActionGroups.length === 0 ? (
+                    <tr><td colSpan={6} className={s.tableEmpty}>No action items match these filters.</td></tr>
+                  ) : filteredActionGroups.map((g) => (
                     <GroupRows key={g.key} group={g} onAction={() => soon("Resolve")} />
                   ))}
                 </tbody>
@@ -166,7 +236,33 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
           <section className={s.tableCard}>
             <div className={s.cardHead}>
               <h2 className={s.cardTitle}>Scanned inventory</h2>
-              <span className={s.cardMeta}>{data.scanned.length} of {data.stats[0].value} records</span>
+              <span className={s.cardMeta}>{filteredScanned.length} of {data.stats[0].value} records</span>
+            </div>
+            <div className={s.toolbar}>
+              <label className={s.search}>
+                <Icon name="icon-search" />
+                <input
+                  type="search"
+                  value={scannedQuery}
+                  onChange={(event) => setScannedQuery(event.target.value)}
+                  placeholder="Search scanned inventory"
+                  aria-label="Search scanned inventory"
+                />
+              </label>
+              <Select
+                label="Match"
+                value={scannedMatch}
+                onChange={setScannedMatch}
+                options={[
+                  { value: "all", label: "All matches" },
+                  { value: "exact", label: "Exact match" },
+                  { value: "details", label: "Needs details" },
+                  { value: "review", label: "Needs review" },
+                ]}
+              />
+              <button type="button" className={s.filtersBtn} onClick={() => soon("Advanced filters")}>
+                <Icon name="icon-filter" />Filters
+              </button>
             </div>
             <div className={s.tableScroll}>
               <table className={s.table}>
@@ -174,7 +270,9 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
                   <tr><th>Item</th><th>SKU / GTIN</th><th>Location</th><th>Shelf</th><th>Quantity</th><th>Par level</th><th>Expiration</th><th>Lot</th><th>Match</th></tr>
                 </thead>
                 <tbody>
-                  {data.scanned.map((r) => (
+                  {filteredScanned.length === 0 ? (
+                    <tr><td colSpan={9} className={s.tableEmpty}>No scanned inventory records match these filters.</td></tr>
+                  ) : filteredScanned.map((r) => (
                     <tr key={r.id}>
                       <td>
                         <span className={s.itemCell}><ProdGlyph /><span className={s.itemName}>{r.name}</span></span>
@@ -198,7 +296,7 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
               </table>
             </div>
             <div className={s.pagination}>
-              <span className={s.pageInfo}>Showing 1 to {data.scanned.length} of {data.stats[0].value} records</span>
+              <span className={s.pageInfo}>Showing 1 to {filteredScanned.length} of {data.stats[0].value} records</span>
               <div className={s.pager}>
                 <button type="button" className={s.pageBtn} aria-label="Previous" onClick={() => soon("Pagination")}><Icon name="icon-chevron-left" /></button>
                 {["1", "2", "3", "…", "7"].map((n, i) => (
