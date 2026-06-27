@@ -17,6 +17,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$here/config.env" ] && . "$here/config.env"
 CODEX_BIN="${CODEX_BIN:-codex}"
 GATE_WINDOW="${GATE_WINDOW:-both}"
+CODEX_AUTO_UPDATE="${CODEX_AUTO_UPDATE:-true}"
+CODEX_READY_TIMEOUT="${CODEX_READY_TIMEOUT:-180}"
 # NB: do NOT force LC_ALL=C here — codex's TUI needs a UTF-8 locale to render.
 # Our grep patterns are ASCII-only, so UTF-8 matching is fine.
 
@@ -35,12 +37,37 @@ tmux new-session -d -s "$sess" -c "$HOME" -x 200 -y 55 "$CODEX_BIN" || { log "tm
 
 pane=""
 ready=0
-# Wait for the TUI to be interactive (handles a first-launch self-update). Key off
-# the ASCII "model: …gpt" line in the header box (no multibyte chars to match).
-for _ in $(seq 1 30); do
+# Wait for the TUI to be interactive. Key off the ASCII "model: ...gpt" line in
+# the header box (no multibyte chars to match). When Codex presents an update
+# prompt, accept the selected "Update now" option once so the unattended usage
+# gate does not wedge until someone presses Enter by hand.
+update_started=0
+continue_sent=0
+deadline=$((SECONDS + CODEX_READY_TIMEOUT))
+while [ "$SECONDS" -lt "$deadline" ]; do
   sleep 2
   pane="$(tmux capture-pane -t "$sess" -p 2>/dev/null || true)"
-  printf '%s' "$pane" | grep -qiE 'updating|downloading|fetching|upgrade' && continue
+  if printf '%s' "$pane" | grep -qiE 'Update available!|Update now'; then
+    if [ "$CODEX_AUTO_UPDATE" = "true" ] && [ "$update_started" = "0" ]; then
+      log "codex update prompt detected — accepting update"
+      tmux send-keys -t "$sess" Enter
+      update_started=1
+      continue
+    fi
+    if [ "$CODEX_AUTO_UPDATE" != "true" ]; then
+      log "codex update prompt detected but CODEX_AUTO_UPDATE=$CODEX_AUTO_UPDATE"
+      exit 1
+    fi
+  fi
+  if [ "$update_started" = "1" ] && [ "$continue_sent" = "0" ] \
+     && printf '%s' "$pane" | grep -qiE 'Press enter to continue' \
+     && ! printf '%s' "$pane" | grep -qiE 'Update available!|Update now'; then
+    log "codex update completed — continuing to TUI"
+    tmux send-keys -t "$sess" Enter
+    continue_sent=1
+    continue
+  fi
+  printf '%s' "$pane" | grep -qiE 'updating|downloading|fetching|upgrade|installing' && continue
   printf '%s' "$pane" | grep -qiE 'model:.*gpt' && { ready=1; break; }
 done
 [ "$ready" = 1 ] || { log "codex TUI not ready in time. last pane: $(printf '%s' "$pane" | tr '\n' '|' | cut -c1-280)"; exit 1; }

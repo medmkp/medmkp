@@ -94,13 +94,16 @@ Prereqs on the NUC host: `git`, `node`/`npx`, `flock` (util-linux), `jq`, and
    claude -p "/usage"   # sanity check: prints your real usage panel
    ```
 1b. **Codex CLI (optional fallback), installed + logged in** with your Codex Pro
-   account, and launched once so it finishes any self-update:
+   account:
    ```sh
-   codex login     # then launch `codex` once; in it, run /status to confirm limits
+   codex login     # then launch `codex`; in it, run /status to confirm limits
    ```
    The loop reads Codex limits by scraping `/status` in tmux. (Heads-up: verify
    `codex` is authed as your **Pro** account — `/status` shows the account + plan;
-   set `CODEX_ENABLED=false` to disable the fallback entirely.)
+   set `CODEX_ENABLED=false` to disable the fallback entirely.) If Codex shows
+   an interactive update prompt during the usage probe, the loop accepts the
+   selected "Update now" option once by default (`CODEX_AUTO_UPDATE=true`) and
+   waits up to `CODEX_READY_TIMEOUT` seconds for the TUI to become ready.
 2. **GitHub CLI, authenticated** with rights to push branches + open PRs:
    ```sh
    gh auth status
