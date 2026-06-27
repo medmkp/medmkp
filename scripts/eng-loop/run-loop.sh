@@ -320,7 +320,17 @@ else
   pr_num="$(cd "$wt" 2>/dev/null && gh pr view --json number -q .number 2>/dev/null || true)"
   if [ -n "$pr_num" ]; then
     gh label create "eng-loop:$category" --repo "$LOOP_REPO" --color ededed 2>/dev/null || true
-    gh pr edit "$pr_num" --repo "$LOOP_REPO" --add-label "eng-loop:$category" 2>/dev/null || true
+    # Add the category label via the REST labels endpoint (a PR is an "issue" in
+    # the API). We deliberately do NOT use `gh pr edit --add-label`: on the older
+    # gh shipped to the NUC (2.45.x) its GraphQL PR query references the
+    # now-sunset Projects-classic `projectCards` field, so the whole call fails
+    # and the label silently never lands — which in turn defeats the per-category
+    # backpressure cap that counts open PRs by this label. Surface failures
+    # instead of swallowing them so a future regression is visible in the log.
+    if ! label_err="$(gh api -X POST "repos/$LOOP_REPO/issues/$pr_num/labels" \
+          -f "labels[]=eng-loop:$category" 2>&1 >/dev/null)"; then
+      log "WARN: failed to label PR #$pr_num with eng-loop:$category: $label_err"
+    fi
     # Drop the source issue's loop labels so a LATER tick won't re-pick an issue
     # that already has an in-flight PR (the PR carries a "Closes #N" link; merging
     # closes the issue). Re-label the issue to retry if the PR is closed unmerged.
