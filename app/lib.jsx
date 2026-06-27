@@ -57,6 +57,7 @@ export const routeByView = {
   scanner: "/app/scan-session",
   evidence: "/app/evidence",
   evidenceBinder: "/app/evidence/binder",
+  reports: "/app/reports",
   plan: "/app/review",
   catalog: "/app/catalog",
   savings: "/app/savings",
@@ -94,6 +95,7 @@ export function viewFromPath(pathname = "/") {
   if (path.startsWith("/app/scan-sessions/")) return { view: "scanner", isLoggedIn: true };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
   if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
+  if (path === "/app/reports") return { view: "reports", isLoggedIn: true };
   // /app/plan is the former name — kept so old links/bookmarks still resolve.
   if (path === "/app/review/handoff" || path === "/app/plan/handoff") return { view: "handoff", isLoggedIn: true, handoffId: query.get("ho") || "" };
   if (path === "/app/review" || path === "/app/plan") return { view: "plan", isLoggedIn: true };

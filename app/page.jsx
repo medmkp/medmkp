@@ -10,6 +10,7 @@ import { ScannerView } from "./scansessions";
 import { MobileReorderScan } from "./scanmobile";
 import { getScanAudioCtx, loadMatchChime, playMatchChime, vibrateNoMatch } from "./scanSound";
 import { EvidenceView, EvidenceBinderView } from "./evidence";
+import { ReportsView } from "./reports";
 import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
@@ -1485,7 +1486,7 @@ export default function Home() {
     ["scanner", "icon-scan", "Scan"],
     ["savings", "icon-dollar-circle", "Savings"],
     ["evidence", "icon-shield-check", "Evidence"],
-    ["reports", "icon-chart", "Reports", true],
+    ["reports", "icon-chart", "Reports"],
     ["catalog", "icon-store", "Catalog"],
     ["history", "icon-clock", "History"],
     ["settings", "icon-settings", "Settings"],
@@ -1821,6 +1822,10 @@ export default function Home() {
 
           {view === "evidenceBinder" && (
             <EvidenceBinderView onBack={() => navigate("/app/evidence")} />
+          )}
+
+          {view === "reports" && (
+            <ReportsView onNavigate={navigate} onToast={showToast} />
           )}
 
           {view === "plan" && (

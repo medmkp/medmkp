@@ -164,7 +164,7 @@ function LocationCard({ loc, onAction, onOpen }) {
             <span className={s.cardName}>{loc.name}</span>
             <span className={`${s.badge} ${status.badge}`}>{status.label}</span>
           </div>
-          <div className={s.cardSub}>{loc.room}{loc.sub ? ` · ${loc.sub}` : ` · ${meta.label}`}</div>
+          <div className={s.cardSub}>{loc.sub && loc.sub !== loc.room ? `${loc.room} · ${loc.sub}` : loc.room}</div>
         </div>
       </button>
 
