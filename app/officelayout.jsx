@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./icons";
 
 // Mock locations for the standalone demo. The real page passes its own
@@ -76,6 +76,10 @@ export function OfficeLayoutView({ locations = MOCK_LOCATIONS, onMoveLocation, o
   const [selectedId, setSelectedId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // `${x},${y}` | "tray" | null
+
+  useEffect(() => {
+    setItems(locations);
+  }, [locations]);
 
   const placed = useMemo(() => items.filter((l) => l.layout_x != null && l.layout_y != null), [items]);
   const unplaced = useMemo(() => items.filter((l) => l.layout_x == null || l.layout_y == null), [items]);

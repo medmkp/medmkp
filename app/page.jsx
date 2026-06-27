@@ -5,6 +5,7 @@ import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogVie
 import { BrandMark, Icon, IconSprite } from "./icons";
 import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
+import { OfficeLayoutView } from "./officelayout";
 import { QrLabelView } from "./qrlabels";
 import { ScannerView } from "./scansessions";
 import { MobileReorderScan } from "./scanmobile";
@@ -41,6 +42,7 @@ export default function Home() {
   const [categorySlug, setCategorySlug] = useState(null);
   const [supplierId, setSupplierId] = useState(null);
   const [locationId, setLocationId] = useState(null);
+  const [officeLayoutLocations, setOfficeLayoutLocations] = useState(null);
   const [scanLocationId, setScanLocationId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -420,6 +422,16 @@ export default function Home() {
         setSupplierShipping({});
       });
   }, []);
+
+  useEffect(() => {
+    if (view !== "officeLayout") return undefined;
+    let alive = true;
+    setOfficeLayoutLocations(null);
+    traceApi.listLocations()
+      .then((data) => { if (alive) setOfficeLayoutLocations(data.locations || []); })
+      .catch(() => { if (alive) setOfficeLayoutLocations([]); });
+    return () => { alive = false; };
+  }, [view]);
 
   useEffect(() => {
     function syncViewFromLocation() {
@@ -1727,7 +1739,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon, count]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels" || view === "officeLayout")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1802,6 +1814,14 @@ export default function Home() {
 
           {view === "qrLabels" && (
             <QrLabelView onBack={() => navigate("/app/locations")} onToast={showToast} />
+          )}
+
+          {view === "officeLayout" && (
+            <OfficeLayoutView
+              locations={officeLayoutLocations || []}
+              onSelectLocation={(id) => navigate(`/app/locations/${id}`)}
+              onAddLocation={() => navigate("/app/locations/new")}
+            />
           )}
 
           {view === "locationDetail" && (
