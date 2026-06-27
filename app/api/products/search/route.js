@@ -7,6 +7,9 @@ export async function GET(request) {
   const code = searchParams.get("code") || "";
   const barcode = searchParams.get("barcode") || "";
   const limit = searchParams.get("limit") || "8";
+  // Candidate-retrieval mode for the fuzzy path: "multi" unions retrieval over the
+  // query's tokens (used by the OCR substitute lookup, whose queries are noisy).
+  const retrieval = searchParams.get("retrieval") || "";
 
   if (!q.trim() && !code.trim() && !barcode.trim()) {
     return NextResponse.json({ canonical_products: [], source: "medusa", kind: "none" });
@@ -15,7 +18,10 @@ export async function GET(request) {
   const params = new URLSearchParams({ limit });
   if (barcode.trim()) params.set("barcode", barcode.trim());
   else if (code.trim()) params.set("code", code.trim());
-  else params.set("q", q.trim());
+  else {
+    params.set("q", q.trim());
+    if (retrieval) params.set("retrieval", retrieval);
+  }
 
   try {
     const response = await fetch(`${MEDUSA_URL}/medmkp/products/search?${params}`, {

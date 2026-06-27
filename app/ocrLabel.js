@@ -223,6 +223,126 @@ export function parseLotExpiry(text, { barcode } = {}) {
   return { lot, expiry, raw };
 }
 
+// ── Identity OCR: find the product when the barcode didn't ────────────────
+//
+// A scan whose barcode resolves to nothing — a 2D-only suture label, a serial-
+// numbered piece of equipment, an Rx UPC we don't stock — still has the product
+// printed on it in plain text. We read that on-device and hand the backend two
+// routes it already serves:
+//   • parseCatalogRefs → the manufacturer's catalog / REF number, looked up
+//     EXACTLY against the SKU index (?code=). Highest precision: an exact lookup
+//     self-filters, so a wrong candidate simply returns nothing.
+//   • buildIdentityQuery → a denoised brand + product-type query for the fuzzy
+//     ?q= path, to suggest possible substitutes.
+// Both are assistive — a suggestion the user confirms before it's linked to a
+// compliance record, never an auto-match — the same rule the lot/expiry OCR follows.
+
+// Boilerplate that carries no product identity: regulatory text, distributor
+// addresses, pack/units, and the words a catalog name never hangs on. Dropped
+// from the fuzzy query so the distinctive brand/type tokens dominate the rank.
+const QUERY_STOP = new Set([
+  // regulatory / handling
+  "STERILE", "NONSTERILE", "NON", "STERILIZED", "RESTERILIZE", "REUSE", "SINGLE", "USE",
+  "DISPOSABLE", "LATEX", "FREE", "CAUTION", "WARNING", "FEDERAL", "LAW", "PRESCRIPTION",
+  "ONLY", "KEEP", "AWAY", "DRY", "STORE", "STORAGE", "SEE", "INSERT", "CONTENTS",
+  "DELIVERS", "DIRECTIONS", "INGREDIENTS", "ACTIVE", "INACTIVE", "MADE", "ASSEMBLED",
+  "DISTRIBUTED", "MANUFACTURED", "MANUFACTURER", "PACKAGED", "INDIVIDUALLY", "WRAPPED",
+  // org / address noise
+  "CORPORATION", "CORP", "COMPANY", "INC", "LTD", "LLC", "GMBH", "USA", "CHINA", "GERMANY",
+  "WWW", "COM", "HTTP", "HTTPS", "TEL", "FAX", "STREET", "SUITE", "ROAD", "DRIVE",
+  // pack / units / measures
+  "BOX", "BX", "CASE", "PACK", "PKG", "PCS", "PIECES", "EACH", "CT", "NET", "BULK",
+  "REFILL", "KIT", "UNIT", "DOSE", "ML", "MG", "GM", "CM", "MM", "OZ", "METRIC",
+  // label field markers
+  "REF", "REORDER", "CAT", "CATALOG", "ITEM", "LOT", "EXP", "EXPIRY", "EXPIRATION",
+  "REV", "REVISED", "MFG", "MFD", "DATE", "BATCH", "CODE", "MODEL", "SERIAL", "TYPE",
+  "USP", "NDC", "RX",
+  // marketing adjectives — they're often the longest word on a label, so dropping
+  // them keeps a product-type word (not "ERGONOMICALLY") as the distinctive token.
+  "ERGONOMICALLY", "DESIGNED", "PROFESSIONAL", "PREMIUM", "QUALITY", "ADVANCED",
+]);
+
+// Shared exclusions for a catalog/REF candidate: never the scanned code's own
+// printed line, a self-validating GTIN, a GS1/HIBC fragment, or a date — the same
+// prints the lot parser already learns to reject.
+function refExcluded(v, barcode) {
+  if (/[+*$()]/.test(v)) return true;                    // GS1 / HIBC fragment
+  if (!/^[A-Z0-9][A-Z0-9/-]{2,19}$/.test(v)) return true;
+  const bare = v.replace(/\D/g, "");
+  if (barcode && sameCode(v, barcode)) return true;
+  if (isGtin(bare)) return true;
+  if (isDateLikeDigits(bare)) return true;
+  return false;
+}
+
+// True when an UNANCHORED token (no REF/CAT marker beside it) looks like a catalog
+// number on its own: an alnum run mixing letters AND digits (DS-PGRA40,
+// PGA283016F4P, C020100, ER24), or a dashed reorder number (101-4583). Stricter
+// than the marker path because there's no marker vouching for it — a bare numeric
+// here is far more likely to be a quantity or a stray digit run than a SKU.
+function isRefCandidate(tok, barcode) {
+  const v = tok.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, ""); // trim edge punctuation
+  if (refExcluded(v, barcode)) return false;
+  const hasAlpha = /[A-Z]/.test(v);
+  const hasDigit = /\d/.test(v);
+  if (hasAlpha && hasDigit) return true;                  // mixed alnum REF
+  if (!hasAlpha && /^\d{3}-\d{3,4}$/.test(v)) return true; // dashed reorder number
+  return false;
+}
+
+// Catalog / REF numbers printed on a label, most-trustworthy first. A REF / CAT /
+// REORDER / ITEM marker names the value explicitly, so those come first; bare
+// REF-shaped tokens follow as a fallback. Deduped, capped — each is tried as an
+// exact ?code= lookup, so a generous-but-bounded list is cheap and safe.
+export function parseCatalogRefs(text, { barcode } = {}) {
+  const flat = String(text || "").toUpperCase().replace(/\s+/g, " ").trim();
+  const refs = [];
+  const seen = new Set();
+  // A marker (REF/CAT/REORDER) vouches for its value, so the marker path accepts
+  // a bare-numeric or short-dashed catalog number (CAT# 9302, REF 660360) that the
+  // unanchored path would reject; both still apply the shared exclusions.
+  const add = (raw, loose) => {
+    const v = String(raw || "").replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, "");
+    if (!v || seen.has(v)) return;
+    if (loose ? refExcluded(v, barcode) : !isRefCandidate(v, barcode)) return;
+    seen.add(v);
+    refs.push(v);
+  };
+
+  // Marker-anchored: "REF DS-PGRA40", "REORDER NO 101-4583", "CAT# 9302-1".
+  const markerRe = /\b(?:REF|RE-?ORDER|CAT(?:ALOG)?|ITEM)\b[\s.:#)\]\[|-]*(?:N[O0]\b[\s.:#)\]\[|-]*)?([A-Z0-9][A-Z0-9/-]{2,19})/g;
+  for (const m of flat.matchAll(markerRe)) add(m[1], true);
+
+  // Unanchored REF-shaped tokens, in reading order.
+  for (const tok of flat.split(" ")) {
+    if (refs.length >= 5) break;
+    add(tok, false);
+  }
+  return refs.slice(0, 5);
+}
+
+// A denoised search query from label text: the distinctive brand + product-type
+// words, with barcode digits, GS1/HIBC strings, units, addresses and regulatory
+// boilerplate stripped. Fed to the fuzzy ?q= path, whose tokenizer + trigram rank
+// floats the closest catalog products; keep it short so noise doesn't dilute it.
+export function buildIdentityQuery(text) {
+  const words = String(text || "").toUpperCase().match(/[A-Z][A-Z0-9'./-]{2,}/g) || [];
+  const kept = [];
+  const seen = new Set();
+  for (const word of words) {
+    const w = word.replace(/[^A-Z0-9]/g, "");
+    if (w.length < 3 || w.length > 18) continue;
+    if (!/[A-Z]/.test(w)) continue;        // need a letter — drops bare numbers
+    if (/\d/.test(w) && /[A-Z]/.test(w)) continue; // drop alnum codes (those are REFs)
+    if (QUERY_STOP.has(w)) continue;
+    if (seen.has(w)) continue;
+    seen.add(w);
+    kept.push(w);
+    if (kept.length >= 8) break;
+  }
+  return kept.join(" ").toLowerCase();
+}
+
 // ── Browser OCR engine ────────────────────────────────────────────────
 
 // One lazy import of Tesseract (the WASM core + the quantized LSTM English model
@@ -364,5 +484,25 @@ export async function ocrLotExpiry(source, { barcode } = {}) {
     return { lot, expiry };
   } catch {
     return {};
+  }
+}
+
+// Read a captured frame for product IDENTITY when the barcode matched nothing.
+// Returns { refs, query, raw }: the catalog/REF numbers to look up exactly, a
+// denoised query for the fuzzy fallback, and the raw text (so the caller can pull
+// lot/expiry off the same read with parseLotExpiry — no second OCR pass). Uses the
+// layout-aware AUTO mode, which keeps the brand/description blocks intact, and
+// resolves to empty on any failure (the user can always search by hand).
+export async function ocrIdentity(source, { barcode } = {}) {
+  if (!source) return { refs: [], query: "", raw: "" };
+  try {
+    const [{ PSM }, worker] = await Promise.all([getModule(), getWorker()]);
+    const image = preprocess(source);
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+    const { data } = await worker.recognize(image);
+    const raw = data?.text || "";
+    return { refs: parseCatalogRefs(raw, { barcode }), query: buildIdentityQuery(raw), raw };
+  } catch {
+    return { refs: [], query: "", raw: "" };
   }
 }

@@ -5,6 +5,7 @@ import { Icon } from "./icons";
 import {
   formatTraceDate,
   isQrUrl,
+  lookupByOcrIdentity,
   scanLinePayload,
   scanLookup,
   scanMissReason,
@@ -58,7 +59,8 @@ export function ScannerView({ startLocationId, onNavigate, onToast }) {
   const [currentLocationId, setCurrentLocationId] = useState(startLocationId || null);
   const [items, setItems] = useState([]); // captured this run, for the count + list
   const [pendingItem, setPendingItem] = useState(null);
-  // OCR suggestion for the pending item: { itemId, busy, needLot, needExp, lot?, expiry? }.
+  // OCR suggestion for the pending item: { itemId, busy, needLot, needExp, lot?,
+  // expiry? }, plus identity for an unmatched scan { match?, via?, suggestions? }.
   const [ocr, setOcr] = useState(null);
   const [manual, setManual] = useState("");
   const flashTimer = useRef();
@@ -181,11 +183,15 @@ export function ScannerView({ startLocationId, onNavigate, onToast }) {
         flashTimer.current = window.setTimeout(() => setPendingItem(null), 2600);
       }
 
-      // OCR fallback: the barcode identified the item but carried no lot/expiry —
-      // read them off the frozen frame, on-device, as a suggestion the drawer fills.
+      // OCR fallback off the frozen frame, on-device. Two cases:
+      //   • the barcode matched but carried no lot/expiry → read those (the common
+      //     case, e.g. a bare UPC or HIBC primary code).
+      //   • the barcode matched nothing → read the product IDENTITY too, to suggest
+      //     a match: the printed catalog/REF number (looked up exactly) or a fuzzy
+      //     query for possible substitutes. Lot/expiry come off the same read.
       const needLot = !body.lot_number;
       const needExp = !body.expiration_date;
-      if (frame && (needLot || needExp)) {
+      if (frame && product && (needLot || needExp)) {
         setOcr({ itemId: item.id, busy: true, needLot, needExp });
         try {
           const { ocrLotExpiry } = await import("./ocrLabel");
@@ -198,6 +204,30 @@ export function ScannerView({ startLocationId, onNavigate, onToast }) {
             needExp,
             lot: needLot ? res.lot || null : null,
             expiry: needExp ? res.expiry || null : null,
+          });
+        } catch {
+          setOcr(null);
+        }
+      } else if (frame && !product) {
+        setOcr({ itemId: item.id, busy: true, needLot, needExp });
+        try {
+          const { ocrIdentity, parseLotExpiry } = await import("./ocrLabel");
+          const id = await ocrIdentity(frame, { barcode: code });
+          const le = parseLotExpiry(id.raw, { barcode: code }); // same read, no 2nd pass
+          const found = await lookupByOcrIdentity({ refs: id.refs, query: id.query });
+          setOcr({
+            itemId: item.id,
+            busy: false,
+            needLot,
+            needExp,
+            lot: needLot ? le.lot || null : null,
+            expiry: needExp ? le.expiry || null : null,
+            // A possible identity from the label text — surfaced for the user to
+            // confirm, never auto-linked. `match` is an exact REF hit; `suggestions`
+            // are fuzzy substitutes.
+            match: found.product || null,
+            via: found.via,
+            suggestions: found.suggestions || [],
           });
         } catch {
           setOcr(null);
@@ -225,6 +255,32 @@ export function ScannerView({ startLocationId, onNavigate, onToast }) {
       onToast?.("Couldn't add that item.");
     }
   }, [active, currentLocationId, onToast]);
+
+  // Link a product the user picked from an OCR suggestion onto an unmatched
+  // evidence row — the confirm step for an OCR identity. Patches the catalog ids +
+  // name/image (same shape as scanLinePayload's id mapping) and clears the
+  // now-resolved suggestion.
+  const linkProduct = useCallback(async (id, product) => {
+    const best = product?.best_offer || product?.offers?.[0] || null;
+    const pid = product?.id || "";
+    const patch = {
+      canonical_product_id: pid.startsWith("mcp") ? pid : null,
+      supplier_product_id: best?.supplier_product_id || (pid.startsWith("msp") ? pid : null),
+      name: product?.name || null,
+      image_url: product?.image_url || best?.image_url || "",
+    };
+    try {
+      const { item } = await traceApi.updateItem(id, patch);
+      const merged = { ...decorateItem(item, product), inventory_action: "received" };
+      pendingItemRef.current = merged;
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...merged } : i)));
+      setPendingItem((p) => (p && p.id === id ? { ...p, ...merged } : p));
+      setOcr(null);
+      playMatchChime();
+    } catch {
+      onToast?.("Couldn't link that product.");
+    }
+  }, [onToast]);
 
   const patchItem = useCallback(async (id, body) => {
     try {
@@ -255,9 +311,10 @@ export function ScannerView({ startLocationId, onNavigate, onToast }) {
           active={active}
           pendingItem={pendingItem}
           ocrBusy={Boolean(ocrMatch?.busy)}
-          ocrSuggestion={ocrMatch && !ocrMatch.busy ? { lot: ocrMatch.lot, expiry: ocrMatch.expiry, needLot: ocrMatch.needLot, needExp: ocrMatch.needExp } : null}
+          ocrSuggestion={ocrMatch && !ocrMatch.busy ? { lot: ocrMatch.lot, expiry: ocrMatch.expiry, needLot: ocrMatch.needLot, needExp: ocrMatch.needExp, match: ocrMatch.match, via: ocrMatch.via, suggestions: ocrMatch.suggestions } : null}
           onScan={handleScan}
           onAddProduct={addProduct}
+          onLinkProduct={linkProduct}
           onPatchItem={patchItem}
           onClearPending={() => { setPendingItem(null); pendingItemRef.current = null; }}
           onBack={() => (startLocationId ? onNavigate?.("/app/locations") : setPhase("start"))}
