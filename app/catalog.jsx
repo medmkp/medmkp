@@ -646,10 +646,16 @@ export function CatalogCategoryView({ slug, onNavigate }) {
     // A curated category can own several supplier-named source categories
     // (e.g. Burs & Rotary = "Burs & Diamonds" + "Burs"); fetch each, merge,
     // dedupe, and rank by best offer so the grid spans the whole department.
+    // Subcategory filter: send the curated `match` regex (e.g. "scaler|curette")
+    // rather than the chip's display label. The label is a plural/compound term
+    // ("Scalers & Curettes") that rarely appears verbatim in product names, so a
+    // literal substring match returned nothing; the regex matches the real names.
+    const subMeta = sub ? category.subcategories.find((s) => s.name === sub) : null;
+    const subPattern = subMeta?.match || sub;
     Promise.all(
       category.sources.map((source) => {
         const params = new URLSearchParams({ category: source, limit: "24" });
-        if (sub) params.set("q", sub);
+        if (sub) params.set("pattern", subPattern);
         return fetch(`/api/canonical-products?${params}`, { signal: controller.signal })
           .then((r) => r.json())
           .catch(() => ({ canonical_products: [], count: 0 }));
