@@ -41,10 +41,39 @@ do not commit it). Save the baseline metrics from `summary.json`:
   rule in `normalize.ts`/`engine.ts` (e.g. an attribute axis not vetoed → over-merge; a
   normalization that collapses distinct shades/sizes; a brand-conflict false reject →
   under-merge).
+- **Variant split vs. true under-cluster — don't confuse them.** If the "split" is the same
+  product across a *size / shade / pack / gauge* axis (e.g. `Alasta Nitrile Glove` S/M/L/XL,
+  `Filtek` A1/A2/A3), that is **not** something to merge: the matcher *intentionally* keeps
+  size-specific canonicals separate so per-unit price comparison stays valid. The correct
+  fix is the **family overlay** (`matching/family.ts`), not a union-find merge.
+  Only treat it as a true under-cluster when the rows are the *same SKU/pack* wrongly split
+  (e.g. a brand-conflict false reject).
 
 #### 3. Make a minimal, targeted fix
 - Smallest rule change that corrects this case. **Add or extend a unit test** in
   `matching.unit.spec.ts` that captures it (`npm run test:unit` must pass).
+
+#### 3a. Variants → options on the canonical product page (REQUIRED when the fix touches a variant axis)
+If your fix changes how a size / shade / pack / gauge axis clusters — splitting an
+over-merged axis back apart, or recognizing a new axis — the size-specific canonicals must
+**also surface as selectable variants on the product page**, not just resolve in the matcher.
+A bare split that leaves no family is a regression: the user sees N separate cards instead of
+one product with a variant selector.
+- **Assert the family is assigned.** `matching/family.ts` `assignFamilies(clusters)` must group
+  the affected canonicals under one `family_id` with distinct `variant_label`/`variant_rank`
+  (it is precision-guarded: brand or ≥3 core tokens, ≥2 distinct labels). If your axis is new,
+  extend `family.ts`'s grouped-axis set / `formatVariant` so it produces clean, ordered labels —
+  and keep sub-integer ranks scaled to integers (taper/mm/shade ranks ×100; `variant_rank` is an
+  INTEGER column — fractional values crash `--commit`).
+- **Confirm it reaches the PDP.** The store route
+  (`api/store/medmkp/canonical-products/route.ts`) groups by `COALESCE(family_id,id)` and the
+  handle path returns members sorted by `variant_rank`; `app/catalog.jsx` `ProductDetail`
+  renders the `.pdp-variants` selector and the catalog card shows the "N options" pill.
+  Add/extend a `family.unit.spec.ts` case for the new grouping.
+- **Show it in the PR.** Include the family overlay's before→after (`families` count, the
+  affected family's member labels) and, where practical, a PDP screenshot showing the variant
+  selector — per CLAUDE.md visual-fidelity. State that populating families in prod needs the
+  reviewer's `products:match --commit` (it regenerates canonical handles).
 
 #### 4. Verify (AFTER) — the snapshot
 - Re-run `npm run products:match` (dry-run). Diff the new `summary.json` against baseline.
