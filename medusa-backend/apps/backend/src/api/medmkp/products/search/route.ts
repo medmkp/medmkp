@@ -330,7 +330,7 @@ async function fuzzyCanonicalSearch(
   if (retrievalTokens && retrievalTokens.length) {
     const pools = await Promise.all(
       retrievalTokens
-        .slice(0, 3)
+        .slice(0, 6)
         .map((token) => medmkp.listCanonicalProducts({ q: token }, { take: 400 }))
     )
     candidates = dedupeById(pools.flat())
@@ -517,8 +517,17 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
-  // Fuzzy text path for the search box.
-  const results = await fuzzyCanonicalSearch(medmkp, q, limit)
+  // Fuzzy text path. The search box (default) retrieves candidates by the single
+  // most distinctive token — precise for a name a human typed. An OCR'd label is
+  // noisier (its longest token is often a misread brand or a marketing adjective),
+  // so retrieval=multi unions the retrieval over the label's tokens: every word
+  // gets a shot at pulling the product TYPE into the pool, then the full-query
+  // trigram rerank floats the closest catalog products.
+  const retrievalTokens =
+    url.searchParams.get("retrieval") === "multi"
+      ? [...new Set(tokenizeName(q))].filter((t) => t.length >= 3).sort((a, b) => b.length - a.length).slice(0, 6)
+      : undefined
+  const results = await fuzzyCanonicalSearch(medmkp, q, limit, retrievalTokens)
   const products = results.map((r) => ({ ...r.product, match: { kind: "fuzzy", score: r.score } }))
   res.json({ query: q, kind: "fuzzy", count: products.length, products })
 }

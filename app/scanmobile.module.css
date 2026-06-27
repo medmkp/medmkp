@@ -1009,6 +1009,50 @@
 .modeSheetActions .btnPrimary { flex: 2; }
 .optionalLabel { font-size: 11.5px; color: var(--muted); font-weight: 400; }
 
+/* ── OCR identity suggestions (unmatched scan) ──────────────────────────
+   When a scan's barcode matched nothing, the label text is OCR'd for a possible
+   product. Shown in the post-scan drawer above the lot/expiry strip; tapping Link
+   on a row attaches that product to the evidence record (the confirm step). */
+.ocrSuggest {
+  display: flex; flex-direction: column; gap: 6px;
+  background: #f6f8fc; border: 1px solid #e6ebf2; border-radius: 10px;
+  padding: 8px 10px;
+}
+.ocrSuggestHead {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 500; color: var(--muted);
+}
+.ocrSuggestHead svg { width: 13px; height: 13px; }
+.ocrSuggestList {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 132px; overflow-y: auto;
+}
+.ocrSuggestRow {
+  display: flex; align-items: center; gap: 8px;
+  background: #fff; border: 1px solid #eef0f4; border-radius: 8px; padding: 6px 8px;
+}
+.ocrSuggestThumb {
+  width: 34px; height: 34px; border-radius: 7px; flex-shrink: 0; overflow: hidden;
+  background: #f3f5f8; display: flex; align-items: center; justify-content: center;
+}
+.ocrSuggestThumb img { width: 100%; height: 100%; object-fit: contain; }
+.ocrSuggestThumb svg { width: 17px; height: 17px; color: #8d9aab; }
+.ocrSuggestInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ocrSuggestName {
+  font-size: 12.5px; font-weight: 500; color: var(--ink); line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ocrSuggestMeta {
+  font-size: 11px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ocrSuggestLink {
+  flex-shrink: 0; align-self: center;
+  font-size: 12.5px; font-weight: 600; color: var(--blue);
+  background: #eef3ff; border: 0; border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+
 /* ── Reorder-scan drawer (/app/scan) ────────────────────────────────────
    Compact post-scan sheet, capped near a third of the screen. The captured
    fields sit in a horizontal swipe strip so the sheet stays shallow even when

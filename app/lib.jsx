@@ -683,6 +683,41 @@ export async function scanLookup(code) {
   }
 }
 
+// Resolve an unmatched scan from text OCR'd off its label. Two routes, both served
+// by the existing search endpoint:
+//   1. Each catalog/REF number, tried EXACTLY (?code= → the SKU / manufacturer_sku
+//      index). An exact hit is high-confidence, so it's returned as `product`.
+//   2. If no REF resolves, the denoised query runs the fuzzy ?q= path; its hits
+//      come back as `suggestions` — possible substitutes for the user to confirm.
+// Returns { product, via, ref, suggestions }. `product` is null unless a REF hit;
+// nothing here is auto-linked — the caller surfaces it as a confirm-before-save
+// suggestion, the same rule the lot/expiry OCR follows.
+export async function lookupByOcrIdentity({ refs = [], query = "", limit = 5 } = {}) {
+  for (const ref of refs) {
+    try {
+      const response = await fetch(`/api/products/search?code=${encodeURIComponent(ref)}&limit=1`);
+      const data = await response.json();
+      const product = data.canonical_products?.[0] || null;
+      if (product) return { product, via: "ref", ref, suggestions: [] };
+    } catch {
+      /* try the next ref, then the fuzzy fallback */
+    }
+  }
+  if (query.trim()) {
+    try {
+      // retrieval=multi: union candidate retrieval over every label token, so a
+      // noisy OCR query still pulls the product type into the pool to rerank.
+      const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&retrieval=multi&limit=${limit}`);
+      const data = await response.json();
+      const suggestions = data.canonical_products || [];
+      if (suggestions.length) return { product: null, via: "ocr", ref: null, suggestions };
+    } catch {
+      /* fall through to empty */
+    }
+  }
+  return { product: null, via: null, ref: null, suggestions: [] };
+}
+
 // Standard GTIN mod-10 check (mirrors backend matching/gtin.ts) so we can tell a
 // real-but-uncarried barcode from an unreadable / non-product code on the client.
 function isLikelyGtin(value) {

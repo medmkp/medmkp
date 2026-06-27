@@ -201,7 +201,7 @@ function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage,
 export function MobileScanSession({
   location, items, active,
   pendingItem, ocrBusy, ocrSuggestion,
-  onScan, onAddProduct, onPatchItem, onBack, onClearPending,
+  onScan, onAddProduct, onLinkProduct, onPatchItem, onBack, onClearPending,
   locations, onSwitchLocation, onNavigate,
 }) {
   const [sheet, setSheet] = useState(null); // manual | search | location
@@ -355,6 +355,7 @@ export function MobileScanSession({
           line={pendingItem}
           locationName={locName}
           suggestion={ocrSuggestion}
+          onLinkProduct={onLinkProduct}
           onPersist={(id, body) => onPatchItem(id, body)}
           onDismiss={(id, body) => { onPatchItem(id, body); onClearPending?.(); }}
         />
@@ -787,7 +788,7 @@ function captureResult(line) {
   return { cls: s.badgeGreen, icon: "icon-check-circle", label: "Added · received" };
 }
 
-function CaptureScanSheet({ line, locationName, suggestion, onPersist, onDismiss }) {
+function CaptureScanSheet({ line, locationName, suggestion, onLinkProduct, onDismiss, onPersist }) {
   const result = captureResult(line);
   // Identified + not a confirm of an existing lot ⇒ a receive (captures a
   // received date). Unidentified lines record neither until they're linked.
@@ -861,6 +862,19 @@ function CaptureScanSheet({ line, locationName, suggestion, onPersist, onDismiss
 
   const name = line.name || offerSku(line) || "Unidentified item";
 
+  // Possible matches read off the label by OCR, shown only while the line is still
+  // unidentified. An exact catalog/REF hit (`match`) leads, tagged so it reads as
+  // higher-confidence than the fuzzy `suggestions` behind it; tapping Link is the
+  // confirm step that attaches the product to this evidence row.
+  const ocrMatches = matched
+    ? []
+    : [
+        ...(suggestion?.match ? [{ product: suggestion.match, exact: true }] : []),
+        ...(suggestion?.suggestions || [])
+          .slice(0, suggestion?.match ? 2 : 3)
+          .map((product) => ({ product, exact: false })),
+      ];
+
   return (
     <div className={`${s.modeSheet} ${s.modeSheetLive}`}>
       <div
@@ -893,6 +907,37 @@ function CaptureScanSheet({ line, locationName, suggestion, onPersist, onDismiss
             </span>
           </div>
         </div>
+
+        {ocrMatches.length > 0 && (
+          <div className={s.ocrSuggest}>
+            <span className={s.ocrSuggestHead}>
+              <Icon name="icon-search" />
+              {ocrMatches.length === 1 && ocrMatches[0].exact
+                ? "Possible match read from the label"
+                : "Possible matches read from the label"}
+            </span>
+            <ul className={s.ocrSuggestList}>
+              {ocrMatches.map(({ product, exact }) => (
+                <li key={product.id} className={s.ocrSuggestRow}>
+                  <span className={s.ocrSuggestThumb}>
+                    {product.image_url ? <img src={product.image_url} alt="" /> : <Icon name="icon-package" />}
+                  </span>
+                  <span className={s.ocrSuggestInfo}>
+                    <span className={s.ocrSuggestName}>{product.name}</span>
+                    <span className={s.ocrSuggestMeta}>
+                      {exact
+                        ? "Catalog # match"
+                        : product.best_offer?.brand || product.best_offer?.supplier_name || "Possible substitute"}
+                    </span>
+                  </span>
+                  <button type="button" className={s.ocrSuggestLink} onClick={() => onLinkProduct?.(line.id, product)}>
+                    Link
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className={s.reorderStrip}>
           <div className={s.reorderField}>

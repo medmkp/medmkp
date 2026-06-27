@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseLotExpiry } from "./ocrLabel.js";
+import { parseLotExpiry, parseCatalogRefs, buildIdentityQuery } from "./ocrLabel.js";
 
 // Real Tesseract output captured from the dental-label photos in test/photos
 // (the same labels we scan in the field). These pin the lot-number parser against
@@ -92,4 +92,78 @@ test("expiry: a manufacture date never beats the real expiry", () => {
   assert.equal(parseLotExpiry("MFG 2024-01-10 STERILE 2026-01-10").expiry, "2026-01-10");
   // Two untagged dates: the latest is the expiry, not whichever OCR read first.
   assert.equal(parseLotExpiry("2024-05-01 STERILE 2029-10-19").expiry, "2029-10-19");
+});
+
+// ── Identity OCR: catalog/REF numbers (the exact ?code= lookup path) ──────────
+
+test("REF marker names the catalog number (DSI suture 'REF DS-PGRA40')", () => {
+  const refs = parseCatalogRefs("PGA Rapid USP 4-0\nREF DS-PGRA40\nSTERILE EO");
+  assert.equal(refs[0], "DS-PGRA40");
+});
+
+test("REF marker tolerates 'NO' / box-glyph separators (REORDER NO 101-4583)", () => {
+  assert.deepEqual(parseCatalogRefs("RE-ORDER NO. 101-4583"), ["101-4583"]);
+  assert.equal(parseCatalogRefs("CAT# 9302-1 SOFT TIP")[0], "9302-1");
+});
+
+test("unanchored REF-shaped tokens are found in reading order", () => {
+  // DemeTECH suture: the catalog number prints with no usable marker.
+  assert.ok(parseCatalogRefs("DemeSORB 3-0 PGA283016F4P 12 PCS").includes("PGA283016F4P"));
+  // Dentsply RINN equipment model.
+  assert.ok(parseCatalogRefs("DENTSPLY C020100 RINN CRESCENT").includes("C020100"));
+});
+
+test("REF parser rejects the scanned barcode, GTINs, GS1/HIBC and dates", () => {
+  // The scanned code's printed line is never a REF.
+  assert.deepEqual(parseCatalogRefs("REF 30884522026721", { barcode: "30884522026721" }), []);
+  // A self-validating UPC-A is a barcode print, not a catalog number.
+  assert.deepEqual(parseCatalogRefs("785306841174"), []);
+  // GS1 / HIBC fragments carry +*$() and are excluded.
+  assert.deepEqual(parseCatalogRefs("*+D701ER242/$$32802122602122*"), []);
+  // A bare date is not a REF.
+  assert.deepEqual(parseCatalogRefs("2026-01-10"), []);
+});
+
+test("REF parser dedupes and caps the candidate list", () => {
+  const refs = parseCatalogRefs("REF AB-12 AB-12 CD34 EF56 GH78 IJ90 KL12");
+  assert.equal(refs[0], "AB-12");
+  assert.ok(refs.length <= 5);
+  assert.equal(new Set(refs).size, refs.length);
+});
+
+// ── Identity OCR: denoised fuzzy query (the ?q= substitute path) ──────────────
+
+test("query keeps brand + product-type words, drops boilerplate and codes", () => {
+  const q = buildIdentityQuery(
+    "Chlorhexidine Gluconate 0.12% Oral Rinse, USP\nNDC 16571-128-15\n" +
+      "Rx Only  Dist. By Rising Pharma Holdings Inc.  0316571128150",
+  );
+  const words = q.split(" ");
+  assert.ok(words.includes("chlorhexidine"));
+  assert.ok(words.includes("gluconate"));
+  assert.ok(words.includes("rinse"));
+  // boilerplate / units / brand-noise dropped
+  for (const drop of ["ndc", "rx", "only", "inc", "usp", "0316571128150"]) {
+    assert.ok(!words.includes(drop), `expected ${drop} to be dropped`);
+  }
+});
+
+test("query surfaces the distinctive type for a prophy-angle label", () => {
+  const q = buildIdentityQuery(
+    "PROPHY ANGLES\nERGONOMICALLY DESIGNED · DISPOSABLE · LATEX FREE\n9302/SOFT TIP\n" +
+      "PACKAGED 100 INDIVIDUALLY WRAPPED PIECES",
+  );
+  const words = q.split(" ");
+  assert.ok(words.includes("prophy"));
+  assert.ok(words.includes("angles"));
+  assert.ok(!words.includes("disposable")); // boilerplate
+  assert.ok(!words.includes("9302")); // a code, not a type word
+});
+
+test("query is bounded and free of bare numbers / alnum codes", () => {
+  const q = buildIdentityQuery("DemeSORB Polyglycolic Acid Absorbable Suture Violet PGA283016F4P 75 CM 12 PCS");
+  const words = q.split(" ").filter(Boolean);
+  assert.ok(words.length <= 8);
+  assert.ok(words.every((w) => /^[a-z]/.test(w) && !/\d/.test(w)));
+  assert.ok(words.includes("polyglycolic"));
 });
