@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import s from "./evidence.module.css";
 
@@ -348,6 +348,7 @@ export function EvidenceView({ data = MOCK, onToast, onBuildPacket }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [openDoc, setOpenDoc] = useState(null);
+  const tableRef = useRef(null);
 
   const pct = useMemo(() => readinessFromSnapshot(data.coverageSnapshot), [data.coverageSnapshot]);
 
@@ -359,6 +360,15 @@ export function EvidenceView({ data = MOCK, onToast, onBuildPacket }) {
     () => Array.from(new Set(data.documents.map((d) => d.source).filter(Boolean))).sort(),
     [data.documents],
   );
+  const primaryLocation = useMemo(() => {
+    const counts = new Map();
+    data.documents.forEach((doc) => {
+      if (!doc.location) return;
+      counts.set(doc.location, (counts.get(doc.location) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || "all";
+  }, [data.documents]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -374,6 +384,10 @@ export function EvidenceView({ data = MOCK, onToast, onBuildPacket }) {
 
   // No capture/edit backend in this FE-first slice — be honest, don't fake it.
   const soon = (what) => onToast?.(`${what} connects when storage is wired up.`);
+  const viewByLocation = () => {
+    setLocationFilter(primaryLocation);
+    tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div className={s.page}>
@@ -399,7 +413,7 @@ export function EvidenceView({ data = MOCK, onToast, onBuildPacket }) {
 
       <div className={s.main}>
         {/* The library table */}
-        <section className={s.tableCard}>
+        <section className={s.tableCard} ref={tableRef}>
           <div className={s.toolbar}>
             <div className={s.search}>
               <Icon name="icon-search" />
@@ -554,7 +568,7 @@ export function EvidenceView({ data = MOCK, onToast, onBuildPacket }) {
                 ))}
               </ul>
             </div>
-            <button type="button" className={s.railLink} onClick={() => soon("Location breakdown")}>
+            <button type="button" className={s.railLink} onClick={viewByLocation}>
               View by location <Icon name="icon-arrow-right" />
             </button>
           </div>
