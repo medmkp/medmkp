@@ -173,11 +173,19 @@ const categoryListPromises = new Map<string, Promise<CategoryListResult>>()
 async function queryCategoryProducts(
   category: string,
   q: string | undefined,
+  pattern: string | undefined,
   limit: number,
   offset: number
 ): Promise<CategoryListResult> {
   const pool = getPostgresPool()
   const qLike = q ? `%${q}%` : null
+  // Subcategory drill-down sends a curated POSIX-regex alternation (e.g.
+  // "scaler|curette") instead of the chip's display label, because the label is
+  // a plural/compound marketing term that rarely appears verbatim in product
+  // names (a literal "Scalers & Curettes" substring matched nothing). The regex
+  // runs over the already category-scoped CTE (a few thousand rows), so it stays
+  // cheap even though ~* can't use the trigram indexes.
+  const patternRe = pattern || null
 
   // Group size/spec variants under one card: the listing unit is the family
   // (COALESCE(family_id, id)). The card's best offer is the cheapest by PER-UNIT
@@ -198,6 +206,8 @@ async function queryCategoryProducts(
       WHERE category ILIKE $1 AND deleted_at IS NULL
         AND ($2::text IS NULL OR name ILIKE $2 OR handle ILIKE $2
              OR category ILIKE $2 OR family_name ILIKE $2)
+        AND ($5::text IS NULL OR name ~* $5 OR handle ~* $5
+             OR category ~* $5 OR family_name ~* $5)
     ),
     priced AS (
       SELECT cat.grp, m.supplier_product_id, cp.price_cents, cp.unit_price_cents
@@ -244,7 +254,7 @@ async function queryCategoryProducts(
     ORDER BY (b.unit_price_cents IS NULL) ASC, b.unit_price_cents ASC, b.price_cents ASC, g.any_name ASC
     LIMIT $3 OFFSET $4
     `,
-    [category, qLike, limit, offset]
+    [category, qLike, limit, offset, patternRe]
   )
 
   const canonical_products = rows.map(listRowToItem)
@@ -292,10 +302,11 @@ function listRowToItem(row: any): CategoryListItem {
 async function listCategoryProducts(
   category: string,
   q: string | undefined,
+  pattern: string | undefined,
   limit: number,
   offset: number
 ): Promise<CategoryListResult> {
-  const key = `${category}|${q ?? ""}|${limit}|${offset}`
+  const key = `${category}|${q ?? ""}|${pattern ?? ""}|${limit}|${offset}`
   const cached = categoryListCache.get(key)
   if (cached && Date.now() - cached.loadedAt < CATEGORY_LIST_CACHE_TTL_MS) {
     return cached.result
@@ -305,7 +316,7 @@ async function listCategoryProducts(
   // firing one fetch per source category) onto one database query.
   let promise = categoryListPromises.get(key)
   if (!promise) {
-    promise = queryCategoryProducts(category, q, limit, offset)
+    promise = queryCategoryProducts(category, q, pattern, limit, offset)
     categoryListPromises.set(key, promise)
   }
 
@@ -399,6 +410,7 @@ async function listSupplierProducts(
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const url = new URL(req.url, "http://localhost")
   const q = url.searchParams.get("q")?.trim()
+  const pattern = url.searchParams.get("pattern")?.trim() || undefined
   const handle = normalize(url.searchParams.get("handle"))
   const category = normalize(url.searchParams.get("category"))
   const supplier = normalize(url.searchParams.get("supplier"))
@@ -415,7 +427,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   // which returns full offer lists.
   if (category && !handle && !supplier) {
     try {
-      res.json(await listCategoryProducts(category, q, limit, offset))
+      res.json(await listCategoryProducts(category, q, pattern, limit, offset))
       return
     } catch (error) {
       // Fall through to the general path if the read model is unavailable.

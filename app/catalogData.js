@@ -22,10 +22,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Infection Control"],
     pattern: /infection|steriliz|disinfect|barrier|sanit|glove|mask/,
     subcategories: [
-      { name: "Gloves", blurb: "Exam and surgical gloves in nitrile, latex, and vinyl." },
-      { name: "Masks", blurb: "Procedure and surgical masks for chairside protection." },
-      { name: "Surface Disinfectants", blurb: "Wipes and sprays for operatory surface disinfection." },
-      { name: "Sterilization Pouches", blurb: "Self-seal pouches and wraps for autoclave cycles." },
+      { name: "Gloves", match: "glove", blurb: "Exam and surgical gloves in nitrile, latex, and vinyl." },
+      { name: "Masks", match: "mask", blurb: "Procedure and surgical masks for chairside protection." },
+      { name: "Surface Disinfectants", match: "disinfect|cavicide|caviwipe|sani-?cloth|surface wipe", blurb: "Wipes and sprays for operatory surface disinfection." },
+      { name: "Sterilization Pouches", match: "pouch|sterilization wrap|autoclave bag|sterilization bag", blurb: "Self-seal pouches and wraps for autoclave cycles." },
     ],
   },
   {
@@ -37,10 +37,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Cosmetic Dentistry", "Surgical & Restoratives"],
     pattern: /restorat|composite|cosmetic|matrix|etch/,
     subcategories: [
-      { name: "Composites", blurb: "Light-cure composite resins for direct restorations." },
-      { name: "Bonding Agents", blurb: "Adhesives and primers for enamel and dentin bonding." },
-      { name: "Etchants", blurb: "Phosphoric acid gels for enamel and dentin etching." },
-      { name: "Matrix Systems", blurb: "Bands, rings, and wedges for tight proximal contacts." },
+      { name: "Composites", match: "composite", blurb: "Light-cure composite resins for direct restorations." },
+      { name: "Bonding Agents", match: "bond|adhesive|primer", blurb: "Adhesives and primers for enamel and dentin bonding." },
+      { name: "Etchants", match: "etch", blurb: "Phosphoric acid gels for enamel and dentin etching." },
+      { name: "Matrix Systems", match: "matri(x|ces)|tofflemire|sectional|matrix band", blurb: "Bands, rings, and wedges for tight proximal contacts." },
     ],
   },
   {
@@ -52,10 +52,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Endodontics"],
     pattern: /endo|root canal|obturat|gutta|irrigant/,
     subcategories: [
-      { name: "Files", blurb: "Hand and rotary files for canal shaping and cleaning." },
-      { name: "Obturation", blurb: "Gutta-percha points and carriers for canal filling." },
-      { name: "Irrigants", blurb: "Sodium hypochlorite, EDTA, and chlorhexidine solutions." },
-      { name: "Sealers", blurb: "Root canal sealers for a durable apical seal." },
+      { name: "Files", match: "\\bfile|reamer|k-?file|h-?file", blurb: "Hand and rotary files for canal shaping and cleaning." },
+      { name: "Obturation", match: "obturat|gutta", blurb: "Gutta-percha points and carriers for canal filling." },
+      { name: "Irrigants", match: "irrigat|hypochlorite|naocl|edta|chlorhexidine", blurb: "Sodium hypochlorite, EDTA, and chlorhexidine solutions." },
+      { name: "Sealers", match: "sealer", blurb: "Root canal sealers for a durable apical seal." },
     ],
   },
   {
@@ -67,10 +67,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Burs & Diamonds", "Burs"],
     pattern: /\bburs?\b|diamond|rotary|abrasive|\bdiscs?\b|polish/,
     subcategories: [
-      { name: "Diamond Burs", blurb: "Diamond rotary burs for cutting and finishing." },
-      { name: "Carbide Burs", blurb: "Tungsten carbide burs for fast, clean cutting." },
-      { name: "Polishers", blurb: "Rubber points and cups for chairside polishing." },
-      { name: "Discs", blurb: "Finishing and polishing discs for contouring restorations." },
+      { name: "Diamond Burs", match: "diamond", blurb: "Diamond rotary burs for cutting and finishing." },
+      { name: "Carbide Burs", match: "carbide", blurb: "Tungsten carbide burs for fast, clean cutting." },
+      { name: "Polishers", match: "polish", blurb: "Rubber points and cups for chairside polishing." },
+      { name: "Discs", match: "\\bdiscs?\\b", blurb: "Finishing and polishing discs for contouring restorations." },
     ],
   },
   {
@@ -82,10 +82,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Instruments"],
     pattern: /instrument|scaler|forcep|plier|mirror|explorer/,
     subcategories: [
-      { name: "Scalers & Curettes", blurb: "Hand scalers and curettes for deposit removal." },
-      { name: "Mirrors", blurb: "Mouth mirrors and handles for intraoral visibility." },
-      { name: "Forceps", blurb: "Extraction forceps for upper and lower arches." },
-      { name: "Explorers", blurb: "Diagnostic explorers for caries and calculus detection." },
+      { name: "Scalers & Curettes", match: "scaler|curette|gracey|sickle", blurb: "Hand scalers and curettes for deposit removal." },
+      { name: "Mirrors", match: "mirror", blurb: "Mouth mirrors and handles for intraoral visibility." },
+      { name: "Forceps", match: "forcep", blurb: "Extraction forceps for upper and lower arches." },
+      { name: "Explorers", match: "explorer", blurb: "Diagnostic explorers for caries and calculus detection." },
     ],
   },
   {
@@ -97,10 +97,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Small Equipment"],
     pattern: /equipment|handpiece|curing|motor|light/,
     subcategories: [
-      { name: "Handpieces", blurb: "High- and low-speed handpieces for daily use." },
-      { name: "Curing Lights", blurb: "LED curing lights for polymerizing restorations." },
-      { name: "Motors", blurb: "Endo and implant motors with controlled torque." },
-      { name: "Ultrasonics", blurb: "Ultrasonic scalers and inserts for debridement." },
+      { name: "Handpieces", match: "handpiece", blurb: "High- and low-speed handpieces for daily use." },
+      { name: "Curing Lights", match: "curing", blurb: "LED curing lights for polymerizing restorations." },
+      { name: "Motors", match: "motor", blurb: "Endo and implant motors with controlled torque." },
+      { name: "Ultrasonics", match: "ultrasonic|piezo|cavitron|scaler insert", blurb: "Ultrasonic scalers and inserts for debridement." },
     ],
   },
   {
@@ -112,10 +112,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Preventives"],
     pattern: /prevent|prophy|fluorid|sealant|hygien|floss/,
     subcategories: [
-      { name: "Prophy Paste", blurb: "Prophy paste in assorted grits and flavors." },
-      { name: "Fluoride", blurb: "Fluoride varnish, gel, and foam for caries prevention." },
-      { name: "Sealants", blurb: "Pit and fissure sealants for occlusal protection." },
-      { name: "Floss & Picks", blurb: "Floss, tape, and interdental picks for home care." },
+      { name: "Prophy Paste", match: "prophy", blurb: "Prophy paste in assorted grits and flavors." },
+      { name: "Fluoride", match: "fluoride|varnish", blurb: "Fluoride varnish, gel, and foam for caries prevention." },
+      { name: "Sealants", match: "sealant", blurb: "Pit and fissure sealants for occlusal protection." },
+      { name: "Floss & Picks", match: "floss|interdental|\\bpick", blurb: "Floss, tape, and interdental picks for home care." },
     ],
   },
   {
@@ -127,10 +127,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Impression Material"],
     pattern: /impression|alginate|\bvps\b|\bpvs\b|bite registration/,
     subcategories: [
-      { name: "Alginate", blurb: "Alginate impression materials for study models." },
-      { name: "VPS / PVS", blurb: "Vinyl polysiloxane materials for precise impressions." },
-      { name: "Trays", blurb: "Disposable and metal impression trays in all sizes." },
-      { name: "Bite Registration", blurb: "Bite registration materials for accurate occlusion." },
+      { name: "Alginate", match: "alginate", blurb: "Alginate impression materials for study models." },
+      { name: "VPS / PVS", match: "\\bvps\\b|\\bpvs\\b|polyvinyl|polysiloxane|vinyl polysiloxane", blurb: "Vinyl polysiloxane materials for precise impressions." },
+      { name: "Trays", match: "\\btray", blurb: "Disposable and metal impression trays in all sizes." },
+      { name: "Bite Registration", match: "bite registration|bite reg|registration", blurb: "Bite registration materials for accurate occlusion." },
     ],
   },
   {
@@ -142,10 +142,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["Laboratory Products"],
     pattern: /laborator|gypsum|\bwax|acrylic|articulator|model/,
     subcategories: [
-      { name: "Gypsum", blurb: "Dental stones and plaster for casts and dies." },
-      { name: "Waxes", blurb: "Inlay, baseplate, and utility waxes for fabrication." },
-      { name: "Acrylics", blurb: "Self- and heat-cure acrylics for appliances and repairs." },
-      { name: "Articulators", blurb: "Articulators and facebows for mounting casts." },
+      { name: "Gypsum", match: "gypsum|\\bstone\\b|plaster|die stone", blurb: "Dental stones and plaster for casts and dies." },
+      { name: "Waxes", match: "\\bwax", blurb: "Inlay, baseplate, and utility waxes for fabrication." },
+      { name: "Acrylics", match: "acrylic", blurb: "Self- and heat-cure acrylics for appliances and repairs." },
+      { name: "Articulators", match: "articulator|facebow", blurb: "Articulators and facebows for mounting casts." },
     ],
   },
   {
@@ -157,10 +157,10 @@ export const CATALOG_CATEGORIES = [
     sources: ["X-Ray"],
     pattern: /x-?ray|radiograph|imaging|sensor|\bfilm\b/,
     subcategories: [
-      { name: "Sensors", blurb: "Digital sensors for fast intraoral radiographs." },
-      { name: "Film", blurb: "Intraoral and extraoral film for traditional imaging." },
-      { name: "Phosphor Plates", blurb: "Reusable phosphor plates for digital scanning." },
-      { name: "Mounts", blurb: "Film mounts and barriers for organized imaging." },
+      { name: "Sensors", match: "sensor", blurb: "Digital sensors for fast intraoral radiographs." },
+      { name: "Film", match: "\\bfilm", blurb: "Intraoral and extraoral film for traditional imaging." },
+      { name: "Phosphor Plates", match: "phosphor|\\bpsp\\b|imaging plate", blurb: "Reusable phosphor plates for digital scanning." },
+      { name: "Mounts", match: "\\bmount", blurb: "Film mounts and barriers for organized imaging." },
     ],
   },
 ]
