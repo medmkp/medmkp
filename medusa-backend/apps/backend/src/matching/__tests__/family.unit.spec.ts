@@ -1,6 +1,7 @@
 import { runMatching } from "../engine"
+import { assignFamilies } from "../family"
 import { normalizeProduct } from "../normalize"
-import type { FamilyInfo, SupplierProductRow } from "../types"
+import type { Cluster, FamilyInfo, SupplierProductRow } from "../types"
 
 let nextId = 0
 function product(partial: Partial<SupplierProductRow>): SupplierProductRow {
@@ -42,6 +43,20 @@ function familiesByName(rows: SupplierProductRow[]) {
   return { result, byRepName }
 }
 
+function familyCluster(key: number, name: string, packSize: string): Cluster {
+  const members = [
+    normalizeProduct(product({ brand: "Aurelia", name, pack_size: packSize, supplier_id: "msup_a_com" })),
+    normalizeProduct(product({ brand: "Aurelia", name, pack_size: packSize, supplier_id: "msup_b_com" })),
+  ]
+  return {
+    key,
+    contentKey: `test-${key}`,
+    members,
+    representative: members[0],
+    supplierCount: 2,
+  }
+}
+
 describe("variant families", () => {
   it("groups apparel glove sizes into one family with distinct labels", () => {
     const rows = [
@@ -64,6 +79,21 @@ describe("variant families", () => {
     // Family title drops the size token.
     expect(families[0].familyName).not.toMatch(/small|medium|large/i)
     expect(families[0].familyName.toLowerCase()).toContain("nitrile glove")
+  })
+
+  it("disambiguates duplicate size labels with pack size", () => {
+    const clusters = [
+      familyCluster(1, "Aurelia Sonic Nitrile Gloves X-Small 100/Box", "100/Box"),
+      familyCluster(2, "Aurelia Sonic Nitrile Gloves X-Small 300/Box", "300/Box"),
+      familyCluster(3, "Aurelia Sonic Nitrile Gloves Small 300/Box", "300/Box"),
+      familyCluster(4, "Aurelia Sonic Nitrile Gloves Medium 300/Box", "300/Box"),
+    ]
+    const families = [...assignFamilies(clusters).values()]
+
+    expect(new Set(families.map((f) => f.familyId)).size).toBe(1)
+    expect(new Set(families.map((f) => f.variantLabel))).toEqual(
+      new Set(["X-Small - 100/Box", "X-Small - 300/Box", "Small", "Medium"])
+    )
   })
 
   it("groups measured (mm) variants and labels them with the unit", () => {

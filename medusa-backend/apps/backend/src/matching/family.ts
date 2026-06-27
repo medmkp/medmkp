@@ -80,6 +80,26 @@ function slugify(value: string): string {
 
 type ClusterVariant = { axis: string; value: string; label: string; rank: number }
 
+function mostCommon(values: string[]): string {
+  const counts = new Map<string, number>()
+  for (const value of values) {
+    const cleaned = value.trim()
+    if (!cleaned) {
+      continue
+    }
+    counts.set(cleaned, (counts.get(cleaned) ?? 0) + 1)
+  }
+  let best = ""
+  let bestCount = 0
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value
+      bestCount = count
+    }
+  }
+  return best
+}
+
 /**
  * The varying-attribute value for a whole cluster. All members of a cluster
  * share the same modeled attributes (a conflict would have split them), but
@@ -175,6 +195,16 @@ function cleanFamilyName(name: string): string {
   return cleaned || name
 }
 
+function duplicateAwareLabel(member: Member, duplicateLabels: Set<string>): string {
+  if (!duplicateLabels.has(member.variant.label)) {
+    return member.variant.label
+  }
+  const packSize = mostCommon(member.cluster.members.map((m) => m.row.pack_size))
+  return packSize ? `${member.variant.label} - ${packSize}` : member.variant.label
+}
+
+type Member = { cluster: Cluster; variant: ClusterVariant; tokenCount: number }
+
 /**
  * Assign display families over the matcher's clusters. Returns one entry per
  * cluster that belongs to a multi-variant family, keyed by cluster.key.
@@ -185,7 +215,6 @@ function cleanFamilyName(name: string): string {
  * brand or a specific (>=3 token) name, distinct labels, and >=2 members.
  */
 export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
-  type Member = { cluster: Cluster; variant: ClusterVariant; tokenCount: number }
   const groups = new Map<string, Member[]>()
 
   for (const cluster of clusters) {
@@ -220,6 +249,11 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
     if (distinctLabels.size < 2) {
       continue
     }
+    const duplicateLabels = new Set(
+      [...distinctLabels].filter(
+        (label) => members.filter((m) => m.variant.label === label).length > 1
+      )
+    )
 
     const familyId = stableId("mcpf", key)
     // Name from the lowest-rank member (e.g. the "Small"/smallest variant) for a
@@ -233,7 +267,7 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
         familyId,
         familyHandle,
         familyName,
-        variantLabel: member.variant.label,
+        variantLabel: duplicateAwareLabel(member, duplicateLabels),
         variantRank: member.variant.rank,
         variantAxis: member.variant.axis,
       })
