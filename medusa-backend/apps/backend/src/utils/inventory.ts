@@ -102,13 +102,18 @@ export async function attachInventoryImages(
   items: any[]
 ): Promise<any[]> {
   const canonicalIds = [...new Set(items.map((i) => i.canonical_product_id).filter(Boolean))] as string[]
-  if (!canonicalIds.length) {
-    return items.map((i) => ({ ...i, image_url: i.photo_url ?? null }))
-  }
+  const directSupplierProductIds = [...new Set(items.map((i) => i.supplier_product_id).filter(Boolean))] as string[]
 
-  const matches = (await medmkp.listCanonicalProductMatches({ canonical_product_id: canonicalIds })) as any[]
+  const matches = canonicalIds.length
+    ? ((await medmkp.listCanonicalProductMatches({ canonical_product_id: canonicalIds })) as any[])
+    : []
   const relevant = matches.filter((m) => m.match_status === "exact" || m.match_status === "variant")
-  const supplierProductIds = [...new Set(relevant.map((m) => m.supplier_product_id).filter(Boolean))]
+  const supplierProductIds = [
+    ...new Set([
+      ...relevant.map((m) => m.supplier_product_id).filter(Boolean),
+      ...directSupplierProductIds,
+    ]),
+  ]
   const supplierProducts = supplierProductIds.length
     ? ((await medmkp.listSupplierProducts({ id: supplierProductIds })) as any[])
     : []
@@ -125,7 +130,10 @@ export async function attachInventoryImages(
   return items.map((i) => ({
     ...i,
     image_url:
-      i.photo_url || (i.canonical_product_id ? imageByCanonical.get(i.canonical_product_id) : "") || null,
+      i.photo_url ||
+      (i.canonical_product_id ? imageByCanonical.get(i.canonical_product_id) : "") ||
+      (i.supplier_product_id ? imageBySupplierProduct.get(i.supplier_product_id) : "") ||
+      null,
   }))
 }
 
