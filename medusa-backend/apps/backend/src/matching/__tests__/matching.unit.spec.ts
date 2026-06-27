@@ -323,6 +323,12 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(extractNumericAttrs("Bracket Hook 5-0 Trial").get("suture_size")).toBeUndefined()
   })
 
+  it("captures short/long needle length as a hard-conflict attribute", () => {
+    expect([...(extractNumericAttrs("Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Long, Red").get("needle_length") ?? [])]).toEqual(["long"])
+    expect([...(extractNumericAttrs("Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Short, Red").get("needle_length") ?? [])]).toEqual(["short"])
+    expect(extractNumericAttrs("Long Shank Finishing Bur 12/Pk").get("needle_length")).toBeUndefined()
+  })
+
   it("captures endodontic point material as a hard-conflict attribute", () => {
     const paper = extractNumericAttrs("Dia Pro T Paper Points - Assorted (F1/F2/F3)")
     const guttaPercha = extractNumericAttrs("Dia-ProT Assorted Gutta Percha (F1/F2/F3) 60/Pk")
@@ -507,6 +513,66 @@ describe("identity matching (golden pairs from production data)", () => {
 
     expect(result.clusters).toHaveLength(4)
     expect(skuSets.every((skus) => skus.size === 1)).toBe(true)
+  })
+
+  it("does not merge distinct WallShoulders X-ray apron hanger models", () => {
+    // Prod regression: Patterson's sparse WallShoulders names shared brand and
+    // near-identical text, so same-supplier edges bridged WS3130B/WS3130W/etc.
+    // into one canonical even though the manufacturer SKU is the model.
+    const rows = [
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Debroeck Company Inc",
+        manufacturer_sku: "WS3130B",
+        name: "wallShoulders X ray Apron Hanger - Bisque",
+        pack_size: "1/Pkg",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Debroeck Company Inc",
+        manufacturer_sku: "WS3130W",
+        name: "wallShoulders X ray Apron Hanger - Glacier White",
+        pack_size: "1/Pkg",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "WS3130B",
+        name: "Wall Shoulders X-Ray Apron Hanger WS3130 Bisque Ea",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "WS3130W",
+        name: "Wall Shoulders X-Ray Apron Hanger WS3130 White Ea",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "GS1126B",
+        name: "Wall Shoulders X-Ray Apron Hanger GS1126 Bisque Ea",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "GS1126W",
+        name: "Wall Shoulders X-Ray Apron Hanger GS1126 White Ea",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const clusterModels = result.clusters
+      .map((cluster) =>
+        cluster.members
+          .map((member) => member.numericAttrs.get("wallshoulders_model"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+      .map((models) => [...new Set(models)].sort())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+
+    expect(result.clusters).toHaveLength(2)
+    expect(clusterModels).toEqual([["WS3130B"], ["WS3130W"]])
+    expect(result.reviewPairs).toHaveLength(0)
   })
 
   it("keeps same-SKU products with matching color mergeable", () => {
@@ -991,6 +1057,67 @@ describe("end-to-end clustering", () => {
     ]
     const result = runMatching(rows.map(normalizeProduct))
     expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 2])
+  })
+
+  it("does not let long and short injection needles weld into one canonical", () => {
+    // Prod regression: Transcodent/Transoject 25 gauge Long and Short needles
+    // shared brand, gauge, pack, and near-identical names, so same-supplier
+    // name edges bridged the two SKU-specific cross-supplier matches.
+    const rows = [
+      product({
+        supplier_id: "msup_pearsondental_com",
+        manufacturer_sku: "162242",
+        brand: "MedMix",
+        name: "Transoject Painless Steel Needles 25 Gauge Long (100)",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "162242",
+        brand: "MedMix US Inc",
+        name: "Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Long, Red",
+        pack_size: "100/Pkg",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "162242",
+        brand: "Medmix US Inc.",
+        name: "Trancodent Painless Steel Needle Plastic Hub 25 Gauge Long Red 100/Bx",
+        pack_size: "100/Bx",
+      }),
+      product({
+        supplier_id: "msup_pearsondental_com",
+        manufacturer_sku: "162241",
+        brand: "MedMix",
+        name: "Transoject Painless Steel Needles 25 Gauge Short (100)",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "162241",
+        brand: "MedMix US Inc",
+        name: "Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Short, Red",
+        pack_size: "100/Pkg",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "162241",
+        brand: "Medmix US Inc.",
+        name: "Trancodent Painless Steel Needle Plastic Hub 25 Gauge Short Red 100/Bx",
+        pack_size: "100/Bx",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const lengthSets = result.clusters.map((cluster) =>
+      new Set(
+        cluster.members
+          .map((member) => member.numericAttrs.get("needle_length"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+    )
+
+    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([3, 3])
+    expect(lengthSets.some((values) => values.size === 1 && values.has("long"))).toBe(true)
+    expect(lengthSets.some((values) => values.size === 1 && values.has("short"))).toBe(true)
   })
 
   it("does not let a size-less bridge collapse Small and X-Small into one canonical", () => {

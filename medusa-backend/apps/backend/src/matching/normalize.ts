@@ -426,6 +426,16 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     }
   }
 
+  // Injection/hypodermic needles share gauge, pack, and brand, but short and
+  // long variants are distinct products. Keep this axis scoped to needle
+  // listings so generic "short"/"long" adjectives elsewhere do not veto.
+  if (/\bneedles?\b/.test(lowered)) {
+    const needleLengthRe = /\b(short|long)\b/g
+    while ((match = needleLengthRe.exec(lowered))) {
+      add("needle_length", match[1])
+    }
+  }
+
   // Endodontic paper points and gutta-percha points often share the same
   // brand, shape range (F1/F2/F3), and "points" vocabulary, but they are
   // different materials and must not bridge transitively through assorted
@@ -541,6 +551,14 @@ export function normalizeProduct(row: SupplierProductRow): NormalizedProduct {
   const skuLikeTokens = extractSkuLikeTokens(row.name)
   const skuLikeSet = new Set(skuLikeTokens)
   const numericAttrs = extractNumericAttrs(row.name)
+  const wallShouldersModel = mfrSku.match(/^(?:GS|WS)\d{4}[A-Z]$/)?.[0]
+  if (
+    wallShouldersModel &&
+    /\bwall\s*shoulders\b/i.test(row.name) &&
+    /\bx[\s-]?ray\s+apron\s+hanger\b/i.test(row.name)
+  ) {
+    numericAttrs.set("wallshoulders_model", new Set([wallShouldersModel]))
+  }
   // The prefix-stripped model is a hard-conflict axis: two products with
   // different models are different products. Only prefix-coded suppliers carry
   // it, so it can only ever veto a pair of THAT supplier's own listings —
