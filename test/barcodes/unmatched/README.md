@@ -1,6 +1,6 @@
 # Scanner-matched barcode images
 
-Real web-served barcode images (PNG) that the medmkp scanner resolves to a
+Real web-served barcode images (PNG) that the tracedds scanner resolves to a
 catalog product. Collected for later analysis of scan → product matching.
 
 ## How these were gathered
@@ -14,7 +14,7 @@ catalog product. Collected for later analysis of scan → product matching.
      Coltene, Septodont, Young Dental) — the same GUDID source the catalog's
      barcode enrichment came from.
 2. Each GTIN was screened against the prod scanner endpoint
-   `GET /medmkp/products/search?barcode=<gtin>`; 180/536 openFDA codes matched.
+   `GET /tracedds/products/search?barcode=<gtin>`; 180/536 openFDA codes matched.
 3. For each distinct matched product, a real barcode image was fetched from a
    public barcode rendering service (`barcodeapi.org`), then **verified**:
    decoded with `zbarimg` (same family as the app's ZXing path) and re-queried

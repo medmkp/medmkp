@@ -36,8 +36,8 @@ next-best in-stock supplier with one click, before the handoff is frozen.
 
 | Capability | Where |
 |---|---|
-| `availability` enum on price snapshots: `in_stock \| limited \| backordered \| unknown` | `medusa-backend/apps/backend/src/modules/medmkp/models/supplier-price-snapshot.ts:12` |
-| Availability surfaced on **search** offers | `.../api/medmkp/products/search/route.ts:86,176` |
+| `availability` enum on price snapshots: `in_stock \| limited \| backordered \| unknown` | `medusa-backend/apps/backend/src/modules/tracedds/models/supplier-price-snapshot.ts:12` |
+| Availability surfaced on **search** offers | `.../api/tracedds/products/search/route.ts:86,176` |
 | FE pill helper `availabilityInfo(value)` (in_stock→ok, limited→warn, backordered→bad, else muted) | `app/page.jsx:2462` |
 | Per-line offer override `selectedOfferKey` + ranked `offers[]` per row | `app/page.jsx:4239-4240` |
 | Offer detail drawers (radio pick among candidates → `onConfirmMatch({selectedOfferKey})`) | `app/page.jsx:4420-4630`, `4888-5000` |
@@ -244,7 +244,7 @@ No DB migration required — `availability` already exists on the snapshot.
 
 ## Build & verification order
 
-1. **A1 backend** → verify: POST `/medmkp/invoices/match` for a backordered item
+1. **A1 backend** → verify: POST `/tracedds/invoices/match` for a backordered item
    returns `availability` on the offer (curl against local stack / prod read).
 2. **A2 plumb** → verify: a matched plan row carries `availability` end to end.
 3. **A3 badge** → verify live (`/browse`, forged session): backordered line shows

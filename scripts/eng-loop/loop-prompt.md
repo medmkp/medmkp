@@ -73,10 +73,10 @@ its binary directly (e.g. the gstack `browse` binary) — the procedure is the s
 These need a logged-in session. Two safe options:
 - **Preferred:** if `LOOP_TEST_EMAIL` / `LOOP_TEST_PASSWORD` are set, log in normally
   at the dev URL (server-to-server, writes nothing).
-- **Read-only screenshot:** the server gate (`proxy.js`) only checks a `medmkp_session`
+- **Read-only screenshot:** the server gate (`proxy.js`) only checks a `tracedds_session`
   cookie is present and unexpired (no signature check). Forge one: `header.<payload>.sig`
   where `<payload>` is base64url of `{"exp":9999999999}`; set it with
-  `$B cookie "medmkp_session=<token>"`, then `goto`. The client may redirect once
+  `$B cookie "tracedds_session=<token>"`, then `goto`. The client may redirect once
   `/api/auth/me` returns unauthenticated — screenshot promptly. **Never commit** any
   edit that neuters the client redirect; revert it before committing.
 
@@ -115,7 +115,7 @@ inventing a look.
 
 ## Clean up
 - Stop any dev server and the `/browse` daemon you started. Do not commit generated
-  report dirs (e.g. `.medmkp/`).
+  report dirs (e.g. `.tracedds/`).
 
 ## PR body template
 

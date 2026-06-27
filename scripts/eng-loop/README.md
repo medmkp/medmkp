@@ -105,7 +105,7 @@ Prereqs on the NUC host: `git`, `node`/`npx`, `flock` (util-linux), `jq`, and
    ```sh
    gh auth status
    ```
-3. **A dedicated checkout for the loop** (kept separate from `/opt/medmkp` so it
+3. **A dedicated checkout for the loop** (kept separate from `/opt/tracedds` so it
    never races Airflow's deploy), with deps installed once so the `clustering`
    playbook's worktrees can symlink them:
    ```sh

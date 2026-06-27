@@ -1,6 +1,6 @@
-# MedMKP
+# TraceDDS
 
-MedMKP is an early B2B dental-supply spend optimization prototype for dental practices and DSOs.
+TraceDDS is an early B2B dental-supply spend optimization prototype for dental practices and DSOs.
 
 The MVP currently has two layers:
 
@@ -17,14 +17,14 @@ The clickable prototype includes:
 - Buyer quote approval page with savings, brand-match, and alternative-product context.
 - Order status page with PO, supplier confirmation, shipment, and reorder reminder states.
 - Seeded client-side data for the demo request, supplier RFQs, quote chart, and order timeline.
-- Visual direction based on the supplied MedMKP Figma export: white procurement dashboard, blue brand accent, compact cards, and operational status tables.
+- Visual direction based on the supplied TraceDDS Figma export: white procurement dashboard, blue brand accent, compact cards, and operational status tables.
 
 ## Run Locally
 
-MedMKP currently has three runnable pieces:
+TraceDDS currently has three runnable pieces:
 
 - Docker infrastructure: Postgres and Redis.
-- Medusa backend: commerce backend, admin app, and MedMKP API routes.
+- Medusa backend: commerce backend, admin app, and TraceDDS API routes.
 - Next.js frontend: the clickable buyer/admin prototype.
 
 ### 1. Start Docker Infrastructure
@@ -32,7 +32,7 @@ MedMKP currently has three runnable pieces:
 From the repo root:
 
 ```bash
-cd /Users/patrice/code/medmkp
+cd /path/to/tracedds
 docker compose up -d
 ```
 
@@ -50,14 +50,14 @@ Check that infrastructure is running:
 docker compose ps
 ```
 
-You should see `medmkp-postgres` and `medmkp-redis` as healthy.
+You should see `tracedds-postgres` and `tracedds-redis` as healthy.
 
 ### 2. Prepare the Medusa Database
 
 From the Medusa workspace:
 
 ```bash
-cd /Users/patrice/code/medmkp/medusa-backend
+cd /path/to/tracedds/medusa-backend
 npm run db:migrate
 ```
 
@@ -70,19 +70,19 @@ Catalog data comes from the supplier ingestion pipeline (see
 
 ### 3. Create the Local Medusa Admin User
 
-The MedMKP seed data does not create an admin login. Create the local admin
+The TraceDDS seed data does not create an admin login. Create the local admin
 user separately:
 
 ```bash
-cd /Users/patrice/code/medmkp/medusa-backend
+cd /path/to/tracedds/medusa-backend
 npm run admin:create
 ```
 
 Local admin credentials:
 
 ```text
-Email: admin@medmkp.local
-Password: medmkp-admin
+Email: admin@tracedds.local
+Password: tracedds-admin
 ```
 
 If the user already exists, Medusa may return an error. That is okay; use the
@@ -93,7 +93,7 @@ existing credentials above.
 In a dedicated terminal:
 
 ```bash
-cd /Users/patrice/code/medmkp/medusa-backend
+cd /path/to/tracedds/medusa-backend
 npm run dev:medusa
 ```
 
@@ -109,12 +109,12 @@ Medusa admin:
 http://127.0.0.1:9000/app
 ```
 
-Prototype MedMKP API endpoints:
+Prototype TraceDDS API endpoints:
 
 ```text
-http://127.0.0.1:9000/medmkp/categories
-http://127.0.0.1:9000/medmkp/requests
-http://127.0.0.1:9000/medmkp/quotes
+http://127.0.0.1:9000/tracedds/categories
+http://127.0.0.1:9000/tracedds/requests
+http://127.0.0.1:9000/tracedds/quotes
 ```
 
 If you see `EADDRINUSE` for port `9000`, another Medusa/Node process is already
@@ -129,7 +129,7 @@ lsof -nP -iTCP:9000 -sTCP:LISTEN
 In a separate terminal, from the repo root:
 
 ```bash
-cd /Users/patrice/code/medmkp
+cd /path/to/tracedds
 npm run dev
 ```
 
@@ -144,7 +144,7 @@ If port `3000` is busy, Next will print the alternate port, often `3001`.
 ### 6. Password Reset
 
 The web app has a forgot/reset-password flow (`/forgot-password`, `/reset-password`)
-on top of Medusa's email/password auth. Set `MEDMKP_FRONTEND_URL` on the Medusa
+on top of Medusa's email/password auth. Set `TRACEDDS_FRONTEND_URL` on the Medusa
 backend (local `.env` and Render) so reset links point at the web app. Until a
 notification provider is configured, the reset link is written to the Medusa logs
 by the `auth.password_reset` subscriber, so the flow can be completed in development.
@@ -155,7 +155,7 @@ With Docker and Medusa running:
 
 ```bash
 docker compose ps
-curl http://127.0.0.1:9000/medmkp/categories
+curl http://127.0.0.1:9000/tracedds/categories
 curl http://localhost:3000
 ```
 
@@ -231,29 +231,29 @@ npm run build
 
 The Medusa backend runs against local Postgres and Redis from
 `docker-compose.yml`. Postgres is published on `127.0.0.1:55432` to avoid
-colliding with Supabase or other local Postgres projects. Its first MedMKP
+colliding with Supabase or other local Postgres projects. Its first TraceDDS
 routes are available under unauthenticated prototype endpoints:
 
-- `GET /medmkp/categories`
-- `GET /medmkp/requests`
-- `GET /medmkp/quotes`
+- `GET /tracedds/categories`
+- `GET /tracedds/requests`
+- `GET /tracedds/quotes`
 
 The same handlers are also mounted under Medusa-shaped paths, where Medusa's
 normal auth applies:
 
-- `GET /store/medmkp/categories`
-- `GET /admin/medmkp/requests`
-- `GET /admin/medmkp/quotes`
+- `GET /store/tracedds/categories`
+- `GET /admin/tracedds/requests`
+- `GET /admin/tracedds/quotes`
 
 ### Product Model
 
-MedMKP uses Medusa's native Product model for canonical buyer-facing products.
-Supplier-specific listings live in the MedMKP module as catalog items/offers.
+TraceDDS uses Medusa's native Product model for canonical buyer-facing products.
+Supplier-specific listings live in the TraceDDS module as catalog items/offers.
 
 ```text
 Medusa Product = canonical product buyers search and compare
-MedMKP Supplier = vendor/distributor record
-MedMKP Catalog Item = supplier-specific SKU, price, stock, lead time, and score
+TraceDDS Supplier = vendor/distributor record
+TraceDDS Catalog Item = supplier-specific SKU, price, stock, lead time, and score
 ```
 
 For example, a buyer should see one canonical dental product, with
@@ -271,7 +271,7 @@ product matching pipeline (`npm run products:match`, see
 
 ## Deploy
 
-MedMKP is deployed as two services from the same GitHub repo:
+TraceDDS is deployed as two services from the same GitHub repo:
 
 ```text
 Vercel: Next.js frontend at the repo root
@@ -284,7 +284,7 @@ Render Postgres: database for Medusa
 Create a Vercel project from this repo:
 
 ```text
-Repository: medmkp/medmkp-demo
+Repository: tracedds/tracedds-demo
 Root directory: ./
 Framework: Next.js
 Build command: npm run build
@@ -293,7 +293,7 @@ Build command: npm run build
 Set this Vercel environment variable after the Render backend exists:
 
 ```text
-MEDUSA_BACKEND_URL=https://medmkp.vercel.com
+MEDUSA_BACKEND_URL=https://tracedds.vercel.com
 ```
 
 The frontend does not call Medusa directly from browser code. It calls the local
@@ -306,14 +306,14 @@ The repo includes [render.yaml](./render.yaml) for a Render Blueprint.
 Create a Render Blueprint from this repo:
 
 ```text
-Repository: medmkp/medmkp-demo
+Repository: tracedds/tracedds-demo
 Blueprint file: render.yaml
 ```
 
 The Blueprint creates:
 
-- `medmkp-medusa`: Medusa web service
-- `medmkp-postgres`: managed Postgres database
+- `tracedds-medusa`: Medusa web service
+- `tracedds-postgres`: managed Postgres database
 
 Render runs Medusa migrations before each deploy:
 
@@ -356,8 +356,8 @@ npm run admin:create
 For local development, this creates:
 
 ```text
-Email: admin@medmkp.local
-Password: medmkp-admin
+Email: admin@tracedds.local
+Password: tracedds-admin
 ```
 
 For a real hosted demo, replace those credentials after deploy with a stronger
@@ -367,7 +367,7 @@ account/password before sharing the admin URL.
 
 1. Push `main` to GitHub.
 2. Create the Render Blueprint.
-3. Wait for Render to deploy `medmkp-medusa`.
+3. Wait for Render to deploy `tracedds-medusa`.
 4. Run `admin:create` once from Render Shell or a one-off job.
 5. Create the Vercel frontend project.
 6. Set `MEDUSA_BACKEND_URL` in Vercel to the Render backend URL.

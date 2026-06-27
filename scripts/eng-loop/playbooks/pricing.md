@@ -13,7 +13,7 @@ your environment; the harvester reachability was pre-checked before this run.
 
 #### 1. Pick a small sample (≤ ~20 items)
 - Read-only SQL (`psql "$DATABASE_URL"`): take a sample of our **priced** canonicals
-  across a few categories (join `medmkp_supplier_product` to `medmkp_supplier_current_price`,
+  across a few categories (join `tracedds_supplier_product` to `tracedds_supplier_current_price`,
   `price_cents > 0`). Capture our best **unit** price and the set of suppliers we list.
 
 #### 2. Look up each on Net32 (read-only)

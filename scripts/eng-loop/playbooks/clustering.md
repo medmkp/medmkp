@@ -23,18 +23,18 @@ From `medusa-backend/apps/backend`:
 ```
 npm run products:match            # dry-run: read-only, ~minutes; NO --commit
 ```
-It prints a `summary` JSON to stdout and writes `.medmkp/matching/latest/` (gitignored —
+It prints a `summary` JSON to stdout and writes `.tracedds/matching/latest/` (gitignored —
 do not commit it). Save the baseline metrics from `summary.json`:
 `clusters_total`, `clusters_multi_supplier`, `products_in_multi_supplier_clusters`,
 `accepted_pairs`, `needs_review_pairs`, plus the `price_spread_*` fields.
 
 #### 2. Find ONE concrete defect
-- Scan `.medmkp/matching/latest/match-groups-sample.csv` for an **over-clustered**
+- Scan `.tracedds/matching/latest/match-groups-sample.csv` for an **over-clustered**
   canonical (one cluster mixing clearly distinct sizes / gauges / shades / brands), and
   `needs-review-sample.csv` for an **under-clustered** pair (obvious same-product split).
 - Or target with read-only SQL (`psql "$DATABASE_URL" -c "..."`):
   - Over: large clusters mixing pack/size —
-    group `medmkp_canonical_product_match` (status in exact/variant) by `canonical_product_id`,
+    group `tracedds_canonical_product_match` (status in exact/variant) by `canonical_product_id`,
     `HAVING COUNT(DISTINCT supplier_product_id) > 10`, aggregating distinct `pack_size`/`brand`.
   - Under: same `name` spread across multiple `canonical_product_id`.
 - Pick the **clearest, highest-impact** single case. Trace its root cause to a specific
@@ -55,7 +55,7 @@ do not commit it). Save the baseline metrics from `summary.json`:
 - Confirm the specific canonical is now correct (re-query it / find it in the new sample).
 
 #### 5. Open the PR
-- Commit only the code + test change (not `.medmkp/`). PR body "Verification" = a
+- Commit only the code + test change (not `.tracedds/`). PR body "Verification" = a
   before→after metrics table from the two `summary.json`s, the targeted cluster's
   membership before/after, and `npm run test:unit` passing. Note the global cluster-count
   delta so the reviewer can judge ripple. State that prod commit (`products:match --commit`)

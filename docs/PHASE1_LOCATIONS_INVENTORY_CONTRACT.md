@@ -8,7 +8,7 @@ The spine of the TraceDDS pivot: physical **locations** in a practice, each hold
 the existing catalog/matching backbone — an inventory item *is* a `canonical_product`,
 placed and counted. Low volume per practice (~10 locations, hundreds of items).
 
-## Data models (Medusa `medmkp` module, new tables)
+## Data models (Medusa `tracedds` module, new tables)
 
 ### `location`
 | field | type | notes |
@@ -30,7 +30,7 @@ placed and counted. Low volume per practice (~10 locations, hundreds of items).
 |---|---|---|
 | `id` | string PK | `inv_` prefix |
 | `location_id` | string FK → location | required |
-| `canonical_product_id` | string \| null | link to `medmkp_canonical_product` (the matched identity) |
+| `canonical_product_id` | string \| null | link to `tracedds_canonical_product` (the matched identity) |
 | `supplier_product_id` | string \| null | the specific SKU, if known |
 | `name` | string | denormalized product name for display |
 | `quantity_on_hand` | number | default 0 |
@@ -44,22 +44,22 @@ placed and counted. Low volume per practice (~10 locations, hundreds of items).
 | `counted_by` | string \| null | attribution |
 | `created_at` / `updated_at` | timestamp | |
 
-## REST API (`/medmkp/*`, authed + practice-scoped, same pattern as reorder-list)
+## REST API (`/tracedds/*`, authed + practice-scoped, same pattern as reorder-list)
 
 | method | path | body / returns |
 |---|---|---|
-| GET | `/medmkp/locations` | → `{ locations: Location[] }` — each with derived `item_count`, `needs_attention_count` |
-| POST | `/medmkp/locations` | `{ name, type, notes?, layout_x?, layout_y? }` → `{ location }` (server mints `qr_code`) |
-| GET | `/medmkp/locations/:id` | → `{ location, items: InventoryItem[] }` |
-| PATCH | `/medmkp/locations/:id` | partial Location (incl. `layout_x/y`) → `{ location }` |
-| DELETE | `/medmkp/locations/:id` | guarded: 409 if it still has inventory unless `?force=1` |
-| PATCH | `/medmkp/locations/layout` | `{ positions: [{id, layout_x, layout_y}] }` → `{ ok }` — bulk save from Office Layout |
-| GET | `/medmkp/locations/:id/inventory` | → `{ items: InventoryItem[] }` |
-| POST | `/medmkp/locations/:id/inventory` | InventoryItem (sans id) → `{ item }` |
-| PATCH | `/medmkp/inventory/:id` | partial InventoryItem → `{ item }` |
-| DELETE | `/medmkp/inventory/:id` | → `{ ok }` |
+| GET | `/tracedds/locations` | → `{ locations: Location[] }` — each with derived `item_count`, `needs_attention_count` |
+| POST | `/tracedds/locations` | `{ name, type, notes?, layout_x?, layout_y? }` → `{ location }` (server mints `qr_code`) |
+| GET | `/tracedds/locations/:id` | → `{ location, items: InventoryItem[] }` |
+| PATCH | `/tracedds/locations/:id` | partial Location (incl. `layout_x/y`) → `{ location }` |
+| DELETE | `/tracedds/locations/:id` | guarded: 409 if it still has inventory unless `?force=1` |
+| PATCH | `/tracedds/locations/layout` | `{ positions: [{id, layout_x, layout_y}] }` → `{ ok }` — bulk save from Office Layout |
+| GET | `/tracedds/locations/:id/inventory` | → `{ items: InventoryItem[] }` |
+| POST | `/tracedds/locations/:id/inventory` | InventoryItem (sans id) → `{ item }` |
+| PATCH | `/tracedds/inventory/:id` | partial InventoryItem → `{ item }` |
+| DELETE | `/tracedds/inventory/:id` | → `{ ok }` |
 
-Conventions: practice resolved from the session (like `/medmkp/me`, `/medmkp/reorder-list`);
+Conventions: practice resolved from the session (like `/tracedds/me`, `/tracedds/reorder-list`);
 422 on validation error; ISO-8601 dates; `needs_attention` = expired/expiring-soon OR
 `quantity_on_hand <= par_level` OR missing lot/expiration.
 

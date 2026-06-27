@@ -1,12 +1,12 @@
-# MedMKP Dental Spend Optimization Architecture
+# TraceDDS Dental Spend Optimization Architecture
 
-MedMKP is now a subscription SaaS for dental practices, not a transaction marketplace.
+TraceDDS is now a subscription SaaS for dental practices, not a transaction marketplace.
 The product makes money from monthly service fees, and the buyer remains responsible
 for purchasing from suppliers directly.
 
 ## Product Promise
 
-Dental practices upload supplier invoices. MedMKP normalizes line items, compares
+Dental practices upload supplier invoices. TraceDDS normalizes line items, compares
 their current prices against cached supplier catalogs and fresh price evidence, and
 produces savings opportunities the practice can act on.
 
@@ -23,7 +23,7 @@ Invoice upload
 
 ## Backend Direction
 
-Medusa remains useful as the backend shell for now, but MedMKP domain data should
+Medusa remains useful as the backend shell for now, but TraceDDS domain data should
 live in custom modules instead of commerce primitives. The core SaaS model is:
 
 ```text
@@ -72,7 +72,7 @@ overwrite trusted pricing.
 Operational catalog refresh and supplier onboarding steps live in
 `SUPPLIER_INGESTION.md`.
 
-The first ingestion surface is `POST /admin/medmkp/catalog-ingestions`. It accepts
+The first ingestion surface is `POST /admin/tracedds/catalog-ingestions`. It accepts
 a supplier, source metadata, and normalized product rows. The pipeline writes:
 
 - one `SupplierCatalogSource`
@@ -87,7 +87,7 @@ Supplier discovery starts with offline vetting, not live crawling. The supplier 
 can be classified with:
 
 ```bash
-npm run supplier:vet -- "/Users/patrice/Downloads/Med Supply URLs (Merged) - dental urls.csv"
+npm run supplier:vet -- "~/Downloads/Med Supply URLs (Merged) - dental urls.csv"
 ```
 
 This writes:
@@ -98,7 +98,7 @@ This writes:
 - `data/supplier-vetting/summary.json`
 
 The usable subset is intentionally strict. The source CSV contains many missing
-URLs and mismatched company/domain rows, so MedMKP should only promote
+URLs and mismatched company/domain rows, so TraceDDS should only promote
 `catalog_candidate` domains into supplier records automatically. Those can be
 seeded with:
 
@@ -167,12 +167,12 @@ The quote page should evolve into a savings report, not checkout approval.
 ```text
 SavingsOpportunity
   -> SavingsReport
-  -> buyer action outside MedMKP
+  -> buyer action outside TraceDDS
 ```
 
 Useful buyer actions:
 
 - download negotiation sheet
 - mark opportunity accepted or ignored
-- request MedMKP to gather fresher supplier evidence
+- request TraceDDS to gather fresher supplier evidence
 - add item to reorder watchlist

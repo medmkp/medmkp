@@ -11,7 +11,7 @@ These exercise the QR path added to the scanner:
 - Client: `qr_code` added to the iOS ponyfill formats ([app/ui.jsx](../../../app/ui.jsx));
   native Chrome/Android `BarcodeDetector` already decodes QR by default.
 - Backend: `gs1Gtin()` now pulls AI 01 out of a Digital Link URL, not just
-  GS1 element strings ([route.ts](../../../medusa-backend/apps/backend/src/api/medmkp/products/search/route.ts)).
+  GS1 element strings ([route.ts](../../../medusa-backend/apps/backend/src/api/tracedds/products/search/route.ts)).
 
 ## Verified end-to-end (live prod GTIN lookup)
 

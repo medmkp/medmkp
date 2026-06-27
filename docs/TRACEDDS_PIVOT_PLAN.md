@@ -5,7 +5,7 @@
 
 ## TL;DR
 
-MedMKP is becoming **TraceDDS**. The center of gravity moves from *"find the cheapest
+The product is now **TraceDDS**. The center of gravity moves from *"find the cheapest
 supplier"* to *"be the system of record for what's on a practice's shelves and whether
 they're audit-ready."* The name encodes it: **Trace** (traceability) **DDS** (dental).
 
@@ -14,7 +14,7 @@ see what you'd save"). Once a practice scans, we own their inventory + complianc
 and that is what retains them.
 
 This is a **pivot of the same product**, not a new product spun out alongside the old one.
-There is no live MedMKP to keep running (pre-customer, ingestion DAGs paused), so we extend
+There is no live TraceDDS to keep running (pre-customer, ingestion DAGs paused), so we extend
 the existing codebase rather than fork it.
 
 ---
@@ -81,22 +81,22 @@ investment pays off here.
 have one product becoming another. Plan:
 
 1. Create the **`tracedds` GitHub org** (needed anyway for brand/domain/secrets). *(Sean to do.)*
-2. **Transfer** `medmkp/medmkp` into it, rename to **`tracedds/tracedds`**. Transfer preserves
+2. **Transfer** the existing repository into it under **`tracedds/tracedds`**. Transfer preserves
    all history/PRs/issues and sets up redirects so existing clones, the NUC remote, and
    Render/Vercel git integrations keep working until re-pointed.
 
 ### Rebrand in layers, not a big-bang find/replace
 
-Current footprint: 177 files mention `medmkp`; `/medmkp/*` API prefix has 107 refs;
-~12 `MEDMKP_*` env vars; a `medmkp` Medusa module; **95 distinct `medmkp_*` DB identifiers**
+Current footprint: 177 files mention `tracedds`; `/tracedds/*` API prefix has 107 refs;
+~12 `TRACEDDS_*` env vars; a `tracedds` Medusa module; **95 distinct `tracedds_*` DB identifiers**
 on the prod Render Postgres.
 
 | Tier | What | Recommendation |
 |---|---|---|
-| **User-facing** | Logo, copy, titles, `medmkp.com`→`tracedds.com`, frontend | **Do now** (Phase 0) |
-| **Code identifiers** | npm package names, `medmkp` module dir, `MEDMKP_*` env vars | **Do opportunistically** (Phase 0/1) |
-| **`/medmkp/*` route prefix** | 107 refs, BE + FE in lockstep, invisible to users | **Leave or alias**; rename later only if it bugs us |
-| **95 `medmkp_*` DB objects** | Migrations + matview rebuilds + reindex under load on a 1GB PG that already OOMs, for zero user value | **Leave permanently** as a legacy schema namespace |
+| **User-facing** | Logo, copy, titles, `tracedds.com`, frontend | **Do now** (Phase 0) |
+| **Code identifiers** | npm package names, `tracedds` module dir, `TRACEDDS_*` env vars | **Do opportunistically** (Phase 0/1) |
+| **`/tracedds/*` route prefix** | 107 refs, BE + FE in lockstep, invisible to users | **Leave or alias**; rename later only if it bugs us |
+| **95 `tracedds_*` DB objects** | Migrations + matview rebuilds + reindex under load on a 1GB PG that already OOMs, for zero user value | **Leave permanently** as a legacy schema namespace |
 
 The DB prefix is the schema's internal namespace — nobody sees it. Renaming it is pure risk
 against a prod database that has already fallen over on heavy refreshes, with no user upside.
@@ -109,7 +109,7 @@ Sequencing is gated by the data spine: **Locations → Inventory** must land bef
 and Evidence have anywhere to write.
 
 ### Phase 0 — Brand + IA reskin
-Rename MedMKP→TraceDDS (logo/copy/domain), stand up the new nav rail, demote Savings.
+Complete the TraceDDS brand pass (logo/copy/domain), stand up the new nav rail, demote Savings.
 One-time infra task alongside: new org + repo transfer + new domain + re-point Render/Vercel/NUC.
 Mostly frontend. Low risk; makes the pivot visible immediately.
 **Verify:** app builds, renders TraceDDS, new rail navigates, Savings demoted.

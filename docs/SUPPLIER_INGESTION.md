@@ -1,22 +1,22 @@
 # Supplier Catalog Ingestion Runbook
 
-This document explains how MedMKP refreshes supplier product catalogs and how to
+This document explains how TraceDDS refreshes supplier product catalogs and how to
 add new suppliers to the ingestion system.
 
 ## Source Of Truth
 
-`medmkp_supplier` is the runtime source of truth for suppliers.
+`tracedds_supplier` is the runtime source of truth for suppliers.
 
 CSV files in `research/` and `data/supplier-vetting/` are curation inputs only.
 Use them to discover and seed suppliers, but production ingestion should read
-from `medmkp_supplier`.
+from `tracedds_supplier`.
 
 Catalog data lands in:
 
-- `medmkp_supplier_catalog_source`
-- `medmkp_supplier_product`
-- `medmkp_supplier_price_snapshot`
-- `medmkp_canonical_product_match`
+- `tracedds_supplier_catalog_source`
+- `tracedds_supplier_product`
+- `tracedds_supplier_price_snapshot`
+- `tracedds_canonical_product_match`
 
 After ingestion commits, regenerate cross-supplier product matches — see
 `PRODUCT_MATCHING.md`.
@@ -57,15 +57,15 @@ cd medusa-backend/apps/backend
 npm run supplier:ingest:db -- --supplier-id=msup_pearsondental_com --limit=25 --debug
 ```
 
-This is a dry run. It reads from `medmkp_supplier`, writes debug output, and does
+This is a dry run. It reads from `tracedds_supplier`, writes debug output, and does
 not update catalog tables.
 
 Review:
 
 ```text
-medusa-backend/apps/backend/.medmkp/ingestion/latest/products.csv
-medusa-backend/apps/backend/.medmkp/ingestion/latest/failures.csv
-medusa-backend/apps/backend/.medmkp/ingestion/latest/summary.json
+medusa-backend/apps/backend/.tracedds/ingestion/latest/products.csv
+medusa-backend/apps/backend/.tracedds/ingestion/latest/failures.csv
+medusa-backend/apps/backend/.tracedds/ingestion/latest/summary.json
 ```
 
 Commit after review:
@@ -98,7 +98,7 @@ npm run supplier:ingest:db -- \
 
 Persistent source URL:
 
-1. Update `medmkp_supplier.catalog_source_urls` for the supplier.
+1. Update `tracedds_supplier.catalog_source_urls` for the supplier.
 2. Store a JSON array of category/search/catalog URLs.
 3. Optionally describe the source strategy in `catalog_source_notes`.
 4. Run the normal DB-backed ingestion command.
@@ -121,8 +121,8 @@ Run production refreshes in this order:
 2. Inspect `products.csv` and `failures.csv`.
 3. Increase `--limit` gradually.
 4. Commit only after product rows pass review.
-5. Query Postgres to verify `medmkp_supplier_product` and
-   `medmkp_supplier_price_snapshot`.
+5. Query Postgres to verify `tracedds_supplier_product` and
+   `tracedds_supplier_price_snapshot`.
 
 Recommended production command pattern:
 
@@ -155,7 +155,7 @@ should be added for important suppliers.
 
 ## Add A Supplier
 
-1. Add or seed the supplier into `medmkp_supplier`.
+1. Add or seed the supplier into `tracedds_supplier`.
 
 Required fields:
 
@@ -240,27 +240,27 @@ Do not use generated debug CSVs as long-term source files.
 weekly on Sunday by running `supplier:ingest:db --commit` per supplier with tuned
 concurrency flags. Henry Schein has a dedicated `henry_schein` DAG at 16:00 UTC
 that runs `henryschein:ingest --commit`, including public web-price enrichment.
-The DAGs need the `medmkp_backend_dir` Airflow Variable and an env file with the
+The DAGs need the `tracedds_backend_dir` Airflow Variable and an env file with the
 target `DATABASE_URL` (Render Postgres: `DB_SSL=true`) — set the
-`medmkp_env_file` Variable to `.env.production` on hosts that target the remote
+`tracedds_env_file` Variable to `.env.production` on hosts that target the remote
 database (`.env` is reserved for local development). Ingestion commands export
 `ALLOW_REMOTE_DB_DESTRUCTIVE=true` to pass the db-safety guard that otherwise
 blocks destructive scripts on non-local databases.
 
 The supported deployment is Docker: `airflow/docker-compose.yml` runs Airflow
 standalone (LocalExecutor + Postgres metadata DB) from a custom image with
-Node 20 (`airflow/Dockerfile`), bind-mounts the repo at `/opt/medmkp`, and sets
+Node 20 (`airflow/Dockerfile`), bind-mounts the repo at `/opt/tracedds`, and sets
 the DAG's Airflow Variables via `AIRFLOW_VAR_*` environment entries — commits
-are disabled by default until `AIRFLOW_VAR_MEDMKP_SUPPLIER_INGEST_COMMIT` is
+are disabled by default until `AIRFLOW_VAR_TRACEDDS_SUPPLIER_INGEST_COMMIT` is
 flipped to `true`. Setup commands are documented at the top of the compose file.
 
 After committing and pushing changes, deploy the NUC instance from your
 development machine with `npm run deploy:airflow` at the repo root. The deploy
-helper SSHes to `nuc`, fast-forwards `/opt/medmkp` from the current branch,
+helper SSHes to `nuc`, fast-forwards `/opt/tracedds` from the current branch,
 and runs `docker compose up -d --build` in `airflow/`. Override defaults with
 `NUC_HOST`, `NUC_REPO_DIR`, or `BRANCH` when needed.
 
-Before a supplier can be scheduled it must exist in `medmkp_supplier`. Sky
+Before a supplier can be scheduled it must exist in `tracedds_supplier`. Sky
 Dental and Shasta Dental seed rows are tracked in
 `medusa-backend/apps/backend/data/supplier-vetting/sky-shasta-catalog-sources.json`:
 
@@ -351,7 +351,7 @@ Frontier Dental (frontierdental.com) is currently not ingestible.
 
 Marketplaces have no catalog we can crawl, so they use a different,
 search-driven pipeline. Instead of `discover -> index -> extract`, we ask the
-marketplace whether it carries the products MedMKP already knows about:
+marketplace whether it carries the products TraceDDS already knows about:
 
 ```text
 list canonical products -> search by name -> parse results -> persist
@@ -489,14 +489,14 @@ Because the marketplace fetch costs ScraperAPI credits, the DAGs default to
 **manual trigger** (`schedule=None`). Set a cron to refresh prices periodically:
 
 ```text
-airflow variables set medmkp_marketplace_amazon_schedule "0 9 * * 1"   # weekly Mon
+airflow variables set tracedds_marketplace_amazon_schedule "0 9 * * 1"   # weekly Mon
 ```
 
-The host's env file (`medmkp_env_file`) must define `MARKETPLACE_SCRAPER_URL`
+The host's env file (`tracedds_env_file`) must define `MARKETPLACE_SCRAPER_URL`
 (keep the key there, not in the DAG). Other knobs are Airflow Variables:
-`medmkp_marketplace_commit`, `medmkp_marketplace_concurrency`,
-`medmkp_marketplace_seeds_file`, `medmkp_marketplace_<name>_results`,
-`medmkp_marketplace_<name>_anchor_min`. See the DAG docstring for the full list.
+`tracedds_marketplace_commit`, `tracedds_marketplace_concurrency`,
+`tracedds_marketplace_seeds_file`, `tracedds_marketplace_<name>_results`,
+`tracedds_marketplace_<name>_anchor_min`. See the DAG docstring for the full list.
 
 ### Official APIs vs scraping
 

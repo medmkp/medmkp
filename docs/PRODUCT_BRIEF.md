@@ -1,8 +1,8 @@
-# MedMKP Product Brief
+# TraceDDS Product Brief
 
 ## Wedge
 
-MedMKP is a concierge procurement marketplace for medical offices. The first target is dental practices and DSOs because the supplies are frequently purchased, fragmented across vendors, and painful to compare.
+TraceDDS is a concierge procurement marketplace for medical offices. The first target is dental practices and DSOs because the supplies are frequently purchased, fragmented across vendors, and painful to compare.
 
 The buyer promise:
 
@@ -138,10 +138,10 @@ This is closer to Amazon Business plus concierge procurement than pure drop-ship
 
 - Suppliers create their own accounts.
 - Buyers can search or upload needs.
-- MedMKP normalizes products so buyers compare comparable offers.
-- Buyer pays supplier, MedMKP takes commission.
+- TraceDDS normalizes products so buyers compare comparable offers.
+- Buyer pays supplier, TraceDDS takes commission.
 - Stripe ACH is preferred for lower B2B payment cost. Stripe Connect can support payouts and commission tracking. Plaid may help later for bank/account verification.
-- Early pricing can be a procurement/reorder platform fee for small healthcare operators, with commission routed only once orders move through MedMKP.
+- Early pricing can be a procurement/reorder platform fee for small healthcare operators, with commission routed only once orders move through TraceDDS.
 
 ## Matching Criteria
 

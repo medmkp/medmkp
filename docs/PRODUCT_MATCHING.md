@@ -1,17 +1,17 @@
 # Product Matching Runbook
 
-This document explains how MedMKP matches identical products across supplier
+This document explains how TraceDDS matches identical products across supplier
 catalogs, how to regenerate matches after a catalog refresh, and how invoice
 line item matching builds on top of product matching.
 
 ## What Product Matching Produces
 
-Product matching reads `medmkp_supplier_product` (plus latest prices from
-`medmkp_supplier_price_snapshot`) and writes:
+Product matching reads `tracedds_supplier_product` (plus latest prices from
+`tracedds_supplier_price_snapshot`) and writes:
 
-- `medmkp_canonical_product` — one row per real-world product
+- `tracedds_canonical_product` — one row per real-world product
   (ids `mcp_auto_*`, handles `auto-*`).
-- `medmkp_canonical_product_match` — links each supplier product to its
+- `tracedds_canonical_product_match` — links each supplier product to its
   canonical product with a `match_status`, an integer `confidence_score`
   (0–100), and a `match_reason` explaining the decision.
 
@@ -174,7 +174,7 @@ reset clause cleans up any rows pointing at stale `mcp_auto_*` ids.
 
 ### Verification Outputs
 
-Each run writes `medusa-backend/apps/backend/.medmkp/matching/latest/`:
+Each run writes `medusa-backend/apps/backend/.tracedds/matching/latest/`:
 
 - `review.html` — open in a browser. ~80 sampled match groups side by side
   with brands, SKUs, pack sizes, prices, and clickable supplier links;
@@ -208,17 +208,17 @@ these tests passing.
 
 ```sql
 -- Match coverage
-SELECT match_status, count(*) FROM medmkp_canonical_product_match
+SELECT match_status, count(*) FROM tracedds_canonical_product_match
 WHERE deleted_at IS NULL GROUP BY 1;
 
 -- Price comparison for one canonical product
 SELECT c.name, p.supplier_id, p.name, s.price_cents / 100.0 AS price
-FROM medmkp_canonical_product c
-JOIN medmkp_canonical_product_match m
+FROM tracedds_canonical_product c
+JOIN tracedds_canonical_product_match m
   ON m.canonical_product_id = c.id AND m.match_status IN ('exact', 'variant')
-JOIN medmkp_supplier_product p ON p.id = m.supplier_product_id
+JOIN tracedds_supplier_product p ON p.id = m.supplier_product_id
 JOIN LATERAL (
-  SELECT price_cents FROM medmkp_supplier_price_snapshot s
+  SELECT price_cents FROM tracedds_supplier_price_snapshot s
   WHERE s.supplier_product_id = p.id
   ORDER BY captured_at DESC LIMIT 1
 ) s ON true
@@ -226,8 +226,8 @@ WHERE c.id = '<canonical_product_id>'
 ORDER BY price;
 
 -- Integrity: should always return 0
-SELECT count(*) FROM medmkp_canonical_product_match m
-LEFT JOIN medmkp_canonical_product c ON c.id = m.canonical_product_id
+SELECT count(*) FROM tracedds_canonical_product_match m
+LEFT JOIN tracedds_canonical_product c ON c.id = m.canonical_product_id
 WHERE m.deleted_at IS NULL AND m.match_status <> 'unmatched' AND c.id IS NULL;
 ```
 
@@ -235,8 +235,8 @@ WHERE m.deleted_at IS NULL AND m.match_status <> 'unmatched' AND c.id IS NULL;
 
 This section describes how invoice line item matching should work on top of
 product matching. The schema already supports it
-(`medmkp_invoice_line_item.canonical_product_id` and `match_status` use the
-same enum; `medmkp_savings_opportunity` holds the output); the matching code
+(`tracedds_invoice_line_item.canonical_product_id` and `match_status` use the
+same enum; `tracedds_savings_opportunity` holds the output); the matching code
 below is the part still to build.
 
 ### Why It Is the Same Problem
@@ -259,7 +259,7 @@ For each line item on an ingested invoice:
 
 2. **Resolve by supplier SKU first.** If the invoice's supplier is one of
    our ingested suppliers and `supplier_sku` matches
-   `medmkp_supplier_product.sku` for that supplier, the line item resolves
+   `tracedds_supplier_product.sku` for that supplier, the line item resolves
    directly to that supplier product's canonical product. This is the highest
    confidence path and should handle most line items from known suppliers.
 
@@ -279,7 +279,7 @@ For each line item on an ingested invoice:
    canonical product's match group (the price-comparison query above):
 
    - A supplier selling the same canonical product cheaper per unit →
-     `medmkp_savings_opportunity` row of type `exact_match_cheaper`, with
+     `tracedds_savings_opportunity` row of type `exact_match_cheaper`, with
      `recommended_supplier_product_id`, both unit prices, and projected
      monthly/annual savings from the practice's purchase history.
    - A `substitute` match of the canonical product cheaper per unit → type
@@ -300,4 +300,4 @@ For each line item on an ingested invoice:
   are known on both sides (the invoice side and the catalog side) — the same
   `pack_certainty` caution as in the price-comparison report.
 - Line items are practice data: matching writes to the line item and to
-  `medmkp_savings_opportunity`, never back into catalog tables.
+  `tracedds_savings_opportunity`, never back into catalog tables.

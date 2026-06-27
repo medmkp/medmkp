@@ -8,7 +8,7 @@ A domain-grounded ranking of the dental consumables that practices reorder most
 frequently and spend the most on annually. It is meant to prioritize supplier
 onboarding and catalog coverage.
 
-**This is not computed from MedMKP usage data.** As of this writing the app has
+**This is not computed from TraceDDS usage data.** As of this writing the app has
 no persisted demand-side history: uploaded invoices/requests are stored
 ephemerally (`lib/requestStore.js`), the working reorder list lives in the
 browser's `localStorage`, and there is no order/line-item table in the Medusa
@@ -114,7 +114,7 @@ by either.
 ## Making this data-backed
 
 1. **Ground against the catalog.** Map each of these 50 to the matching SKUs in
-   the `medmkp_supplier_product` rows and attach real per-unit price spreads
+   the `tracedds_supplier_product` rows and attach real per-unit price spreads
    across Pearson / American Dental / Sky / Shasta.
 2. **Persist demand.** Once invoice uploads are stored server-side (today they
    are ephemeral), aggregate real line items into an actual reorder-frequency +

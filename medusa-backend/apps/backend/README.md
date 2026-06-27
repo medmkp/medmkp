@@ -42,24 +42,24 @@ Visit the [Quickstart Guide](https://docs.medusajs.com/learn/installation) to se
 
 Visit the [Docs](https://docs.medusajs.com/learn/installation#get-started) to learn more about our system requirements.
 
-## MedMKP First Pass
+## TraceDDS First Pass
 
 This backend starts from the Medusa v2 starter and adds a small procurement
 module for the marketplace demo:
 
-- `src/modules/medmkp` defines suppliers, catalog items, procurement requests,
+- `src/modules/tracedds` defines suppliers, catalog items, procurement requests,
   and quotes as Medusa custom module models.
-- `src/api/store/medmkp/categories` exposes buyer-facing category discovery with
+- `src/api/store/tracedds/categories` exposes buyer-facing category discovery with
   a best-value item per category.
-- `src/api/admin/medmkp/requests` exposes the concierge/admin request queue.
-- `src/api/admin/medmkp/quotes` exposes quote-builder data.
-- `src/workflows/medmkp/create-procurement-request.ts` is the first workflow
+- `src/api/admin/tracedds/requests` exposes the concierge/admin request queue.
+- `src/api/admin/tracedds/quotes` exposes quote-builder data.
+- `src/workflows/tracedds/create-procurement-request.ts` is the first workflow
   placeholder for turning an uploaded buyer need into a normalized request.
 
-The current routes use `src/seed/medmkp-fixtures.ts` so we can develop the
+The current routes use `src/seed/tracedds-fixtures.ts` so we can develop the
 product flow before requiring a local Postgres database and migrations. The next
-backend step is to run Medusa migrations for the `medmkp` module and replace
-fixture reads with `MedMKPModuleService` calls.
+backend step is to run Medusa migrations for the `tracedds` module and replace
+fixture reads with `TraceDDSModuleService` calls.
 
 ## What is Medusa
 

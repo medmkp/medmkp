@@ -36,7 +36,7 @@ describe("reorder-list merge", () => {
     expect(visible(draft(existing, incoming))).toEqual(["Gauze", "Gloves", "Masks"])
   })
 
-  // Patrice's bug: a stale device that still remembers cleared items must not
+  // Regression case: a stale device that still remembers cleared items must not
   // resurrect them. The server-side tombstone always beats the stale visible copy.
   it("a tombstone is not resurrected by a stale included:true copy", () => {
     const existing = { draftItems: [item({ barcode: "B", included: false, updatedAt: T })] }
@@ -85,7 +85,7 @@ describe("reorder-list merge", () => {
     expect(draft(existing, incoming)).toHaveLength(1)
   })
 
-  // The scenario Patrice called out: removed on one device, re-added on another.
+  // Regression scenario: removed on one device, re-added on another.
   describe("remove on one device, re-add on the other", () => {
     it("converges to removed when the removal is the later action", () => {
       const desktopReadd = { draftItems: [item({ barcode: "B", included: true, updatedAt: T - 1000 })] }
