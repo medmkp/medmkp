@@ -28,11 +28,18 @@ const SHADE_TOKEN_RE = /^[a-d][1-4](\.5)?$/
 // wrapped) must be stripped from the family key so all three styles can share
 // one family, just like size tokens are stripped from glove families.
 const COTTON_ROLL_STYLE_TOKENS = new Set(["econo", "economy", "braided", "wrapped"])
+// Needle length words (short/long) split distinct needle SKUs in the matcher but
+// must be stripped from the family key so the two lengths share one family and
+// surface as a Short/Long selector. extractNumericAttrs only emits needle_length
+// for needle listings, so this strip is harmless elsewhere.
+const NEEDLE_LENGTH_TOKENS = new Set(["short", "long"])
 
 // Axes we will collapse into a selector, in the order we prefer to label by.
-// Keys match extractNumericAttrs() unit keys.
+// Keys match extractNumericAttrs() unit keys. needle_length sits ahead of the
+// measured units (ga, mm, ...) because needle SKUs share a gauge across lengths,
+// so length is the axis that actually varies.
 const AXIS_PRIORITY = [
-  "size", "shade", "cotton_roll_style", "taper", "#", "mm", "cm", "in", "ga", "ml", "cc", "oz", "gr", "kg", "lb", "l", "%",
+  "size", "shade", "cotton_roll_style", "needle_length", "taper", "#", "mm", "cm", "in", "ga", "ml", "cc", "oz", "gr", "kg", "lb", "l", "%",
 ] as const
 
 const SIZE_RANK: Record<string, number> = {
@@ -45,7 +52,11 @@ const SIZE_LABEL: Record<string, string> = {
 
 function familyTokens(coreTokens: string[]): string[] {
   return coreTokens.filter(
-    (token) => !SIZE_TOKENS.has(token) && !SHADE_TOKEN_RE.test(token) && !COTTON_ROLL_STYLE_TOKENS.has(token)
+    (token) =>
+      !SIZE_TOKENS.has(token) &&
+      !SHADE_TOKEN_RE.test(token) &&
+      !COTTON_ROLL_STYLE_TOKENS.has(token) &&
+      !NEEDLE_LENGTH_TOKENS.has(token)
   )
 }
 
@@ -115,6 +126,11 @@ function formatVariant(axis: string, value: string): { label: string; rank: numb
     const label = value.charAt(0).toUpperCase() + value.slice(1)
     return { label, rank: STYLE_RANK[value] ?? 99 }
   }
+  if (axis === "needle_length") {
+    const LENGTH_RANK: Record<string, number> = { short: 0, long: 1 }
+    const label = value.charAt(0).toUpperCase() + value.slice(1)
+    return { label, rank: LENGTH_RANK[value] ?? 99 }
+  }
   if (axis === "shade") {
     const upper = value.toUpperCase()
     const rank = upper.charCodeAt(0) * 1000 + Math.round((parseFloat(upper.slice(1)) || 0) * 100)
@@ -150,6 +166,8 @@ function cleanFamilyName(name: string): string {
     .replace(/\b[a-dA-D][1-4](?:\.5)?\b/g, "")
     // cotton roll style words
     .replace(/\b(?:econo(?:my)?|braided|wrapped)\b/gi, "")
+    // needle length words
+    .replace(/\b(?:short|long)\b/gi, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\s*[-–]\s*$/g, "")
     .replace(/\(\s*\)/g, "")

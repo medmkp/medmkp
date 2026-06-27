@@ -80,6 +80,32 @@ describe("variant families", () => {
     )
   })
 
+  it("groups short/long injection needles into one family with Short/Long options", () => {
+    const rows = [
+      ...variantPair(
+        "MedMix",
+        "Transcodent Painless Steel Dental Injection Needles 25 Gauge Short Red",
+        "162241"
+      ),
+      ...variantPair(
+        "MedMix",
+        "Transcodent Painless Steel Dental Injection Needles 25 Gauge Long Red",
+        "162242"
+      ),
+    ]
+    const { byRepName } = familiesByName(rows)
+    const families = [...byRepName.values()].filter((f): f is FamilyInfo => Boolean(f))
+
+    // Both length clusters land in one family with a Short/Long selector.
+    expect(new Set(families.map((f) => f.familyId)).size).toBe(1)
+    expect(families.length).toBe(2)
+    expect(new Set(families.map((f) => f.variantLabel))).toEqual(new Set(["Short", "Long"]))
+    expect(families.every((f) => f.variantAxis === "needle_length")).toBe(true)
+    // Family title drops the length word, and Short sorts ahead of Long.
+    expect(families[0].familyName).not.toMatch(/\bshort\b|\blong\b/i)
+    expect(families[0].familyName.toLowerCase()).toContain("injection needles")
+  })
+
   it("keeps a different product line out of the family", () => {
     const rows = [
       ...variantPair("Alasta", "Alasta Aloe Nitrile Glove Small 100/Box", "ALASTA-NIT-S"),
