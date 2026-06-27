@@ -435,6 +435,66 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(materialSets.some((values) => values.size === 1 && values.has("gutta_percha"))).toBe(true)
   })
 
+  it("does not merge distinct WallShoulders X-ray apron hanger models", () => {
+    // Prod regression: Patterson's sparse WallShoulders names shared brand and
+    // near-identical text, so same-supplier edges bridged WS3130B/WS3130W/etc.
+    // into one canonical even though the manufacturer SKU is the model.
+    const rows = [
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Debroeck Company Inc",
+        manufacturer_sku: "WS3130B",
+        name: "wallShoulders X ray Apron Hanger - Bisque",
+        pack_size: "1/Pkg",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Debroeck Company Inc",
+        manufacturer_sku: "WS3130W",
+        name: "wallShoulders X ray Apron Hanger - Glacier White",
+        pack_size: "1/Pkg",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "WS3130B",
+        name: "Wall Shoulders X-Ray Apron Hanger WS3130 Bisque Ea",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "WS3130W",
+        name: "Wall Shoulders X-Ray Apron Hanger WS3130 White Ea",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "GS1126B",
+        name: "Wall Shoulders X-Ray Apron Hanger GS1126 Bisque Ea",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "DeBroeck Company",
+        manufacturer_sku: "GS1126W",
+        name: "Wall Shoulders X-Ray Apron Hanger GS1126 White Ea",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const clusterModels = result.clusters
+      .map((cluster) =>
+        cluster.members
+          .map((member) => member.numericAttrs.get("wallshoulders_model"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+      .map((models) => [...new Set(models)].sort())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+
+    expect(result.clusters).toHaveLength(2)
+    expect(clusterModels).toEqual([["WS3130B"], ["WS3130W"]])
+    expect(result.reviewPairs).toHaveLength(0)
+  })
+
   it("keeps same-SKU products with matching color mergeable", () => {
     const decision = score(
       {
