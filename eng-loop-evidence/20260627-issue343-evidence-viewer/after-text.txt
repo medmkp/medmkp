@@ -1,0 +1,44 @@
+TraceDDS
+Hygiene Cabinet Evidence
+
+Read-only presentation mode
+
+Hygiene Cabinet
+Location type
+Cabinet
+Opened from QR label
+Last shelf audit
+May 16, 2026
+Evidence status
+SDS linked
+Verified
+IFU linked
+Verified
+Expiration proof
+Partial
+Lot capture
+Missing
+Last shelf audit
+May 16, 2026
+Open files
+gloves_sds.pdf
+PDF
+caviwipes_ifu.pdf
+PDF
+epi_expiration_photo.jpg
+JPG
+price_quote_hs_0516.xlsx
+XLSX
+Evidence activity
+Shelf scan completed, evidence created
+May 16, 2026 at 9:15 AM
+Document uploaded, auto-detected as SDS
+May 16, 2026 at 9:16 AM
+Match reviewed, evidence linked
+May 16, 2026 at 9:18 AM
+PDF
+DOC
+XLS
+eng-loop-issue-20260627-063016
+· DB: PROD
+· :3031

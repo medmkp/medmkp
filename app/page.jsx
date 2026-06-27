@@ -10,6 +10,7 @@ import { ScannerView } from "./scansessions";
 import { MobileReorderScan } from "./scanmobile";
 import { getScanAudioCtx, loadMatchChime, playMatchChime, vibrateNoMatch } from "./scanSound";
 import { EvidenceView, EvidenceBinderView } from "./evidence";
+import { EvidenceMobileViewer } from "./evidenceviewer";
 import { ReportsView } from "./reports";
 import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
@@ -115,6 +116,7 @@ export default function Home() {
   // ?since= so an unchanged list is a cheap no-op; our own writes bump it, so the
   // next poll re-fetches and re-applies (harmless, and pulls any concurrent edit).
   const lastServerVersionRef = useRef(null);
+  const isEvidenceViewerRoute = view === "evidenceViewer";
 
   // Apply a saved app-state blob (from localStorage or the per-practice server
   // store) to component state.
@@ -248,6 +250,7 @@ export default function Home() {
   // this device in sync. `mergeDraftState(server, local)` keeps the server's
   // scalars (name/prefs) while reconciling items by the one shared rule.
   useEffect(() => {
+    if (isEvidenceViewerRoute) return;
     if (authed !== true || serverLoadStartedRef.current) return;
     serverLoadStartedRef.current = true;
     (async () => {
@@ -273,7 +276,7 @@ export default function Home() {
       setServerReady(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed]);
+  }, [authed, isEvidenceViewerRoute]);
 
   // Live cross-device propagation: while signed in and the tab is visible, poll
   // the server every 3s (the same pattern the paired-scan view uses) and apply
@@ -281,7 +284,7 @@ export default function Home() {
   // cheap no-op. This is what makes a phone scan / delete show up on the desktop
   // on its own — no manual refresh, no debounce-vs-refresh race.
   useEffect(() => {
-    if (authed !== true || !serverReady) return;
+    if (isEvidenceViewerRoute || authed !== true || !serverReady) return;
     const tick = async () => {
       if (document.visibilityState === "hidden") return;
       try {
@@ -303,7 +306,7 @@ export default function Home() {
     const id = window.setInterval(tick, 3000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed, serverReady]);
+  }, [authed, serverReady, isEvidenceViewerRoute]);
 
   // One-time backfill of the catalog brand for matched-but-offer-less items
   // (e.g. Henry Schein, which has no purchasable offer). Lists saved before the
@@ -348,7 +351,7 @@ export default function Home() {
     // a burst (e.g. rapid scans) into one PUT; it still lands well inside the 3s
     // poll cycle. The server merges, so this is never a destructive overwrite.
     // Gated on serverReady so a save can't race ahead of the initial load.
-    if (authed === true && serverReady) {
+    if (!isEvidenceViewerRoute && authed === true && serverReady) {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       pendingSaveRef.current = true;
       saveTimerRef.current = setTimeout(() => {
@@ -357,7 +360,7 @@ export default function Home() {
       }, 250);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, submittedSuppliers, listStage, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady]);
+  }, [stateLoaded, draftItems, uploadedDocs, archivedLists, handoffs, currentHandoffId, submittedSuppliers, listStage, listTouched, listName, buyingPrefs, defaultBuyingPrefs, authed, serverReady, isEvidenceViewerRoute]);
 
   // Flush a pending (debounced) save when the tab is hidden or unloaded, so a
   // refresh/close within the debounce window can't drop the latest edits.
@@ -368,7 +371,7 @@ export default function Home() {
   // cover it past 64KB anyway. localStorage still holds the blob for next load.
   // pagehide covers the bfcache and mobile-Safari cases beforeunload misses.
   useEffect(() => {
-    if (authed !== true) return;
+    if (isEvidenceViewerRoute || authed !== true) return;
     const flush = () => {
       if (!pendingSaveRef.current || !latestBlobRef.current) return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -400,7 +403,7 @@ export default function Home() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed]);
+  }, [authed, isEvidenceViewerRoute]);
 
   // Supplier names for the preferred-supplier picker, plus each supplier's
   // shipping policy for landed-cost estimates on the reorder list.
@@ -1724,7 +1727,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon, count]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels")) || (target === "evidence" && view === "evidenceBinder") ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1822,6 +1825,10 @@ export default function Home() {
 
           {view === "evidenceBinder" && (
             <EvidenceBinderView onBack={() => navigate("/app/evidence")} />
+          )}
+
+          {view === "evidenceViewer" && (
+            <EvidenceMobileViewer onBack={() => navigate("/app/evidence")} />
           )}
 
           {view === "reports" && (
@@ -1959,4 +1966,3 @@ export default function Home() {
     </>
   );
 }
-

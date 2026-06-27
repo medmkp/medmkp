@@ -40,7 +40,7 @@ const STATUS_META = {
   missing: { label: "Missing proof", tone: "bad", icon: "icon-x-circle" },
 };
 
-const MOCK = {
+export const EVIDENCE_MOCK = {
   practiceName: "Bright Smiles Dental",
   // Headline counts across the whole library (the table below is one page of it).
   stats: { total: 286, verified: 214, missing: 31, linked: 172, locations: 5 },
@@ -341,7 +341,7 @@ function Select({ label, value, onChange, options }) {
 // ---------------------------------------------------------------------------
 // Evidence Library (main surface)
 // ---------------------------------------------------------------------------
-export function EvidenceView({ data = MOCK, onToast, onBuildPacket }) {
+export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket }) {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -732,7 +732,7 @@ function DocumentDrawer({ doc, onClose, onToast }) {
 // score, then a section per document type. "Export PDF" is the browser's
 // print-to-PDF (honest: no server render needed for a FE-first slice).
 // ---------------------------------------------------------------------------
-export function EvidenceBinderView({ data = MOCK, onBack }) {
+export function EvidenceBinderView({ data = EVIDENCE_MOCK, onBack }) {
   const readiness = useMemo(() => computeReadiness(data.coverage, data.documents), [data]);
   const gaps = useMemo(() => deriveGaps(data.coverage), [data.coverage]);
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });

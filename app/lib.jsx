@@ -56,6 +56,7 @@ export const routeByView = {
   qrLabels: "/app/locations/qr-labels",
   scanner: "/app/scan-session",
   evidence: "/app/evidence",
+  evidenceViewer: "/app/evidence/viewer",
   evidenceBinder: "/app/evidence/binder",
   reports: "/app/reports",
   plan: "/app/review",
@@ -93,6 +94,7 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/scan-session" || path === "/app/scan-sessions")
     return { view: "scanner", isLoggedIn: true, scanLocationId: query.get("location") || "", scanMode: query.get("mode") || "" };
   if (path.startsWith("/app/scan-sessions/")) return { view: "scanner", isLoggedIn: true };
+  if (path === "/app/evidence/viewer") return { view: "evidenceViewer", isLoggedIn: true };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
   if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
   if (path === "/app/reports") return { view: "reports", isLoggedIn: true };

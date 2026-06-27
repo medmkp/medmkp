@@ -1,0 +1,13 @@
+Start scanning
+
+Pick a location and scan its shelves — every scan is saved as you go.
+
+Scan a location
+Pick a location and scan its shelves
+Exact matches land straight on the location; anything else waits in Needs Attention.
+PDF
+DOC
+XLS
+eng-loop-issue-20260627-063016
+· DB: PROD
+· :3031
