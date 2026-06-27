@@ -29,6 +29,16 @@ describe("attachInventoryImages", () => {
     expect(out[0].image_url).toBe("https://cdn/photo.jpg")
   })
 
+  it("falls back to an item's direct supplier product image", async () => {
+    const items = [{ id: "inv_1", canonical_product_id: null, supplier_product_id: "sp_1", photo_url: null }]
+    const medmkp = fakeMedmkp(
+      [],
+      [{ id: "sp_1", image_url: "https://cdn/direct.jpg" }]
+    )
+    const out = await attachInventoryImages(medmkp, items)
+    expect(out[0].image_url).toBe("https://cdn/direct.jpg")
+  })
+
   it("skips empty images and takes the first non-empty offer per product", async () => {
     const items = [{ id: "inv_1", canonical_product_id: "can_1", photo_url: null }]
     const medmkp = fakeMedmkp(
