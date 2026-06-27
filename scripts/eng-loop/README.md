@@ -1,8 +1,8 @@
 # Engineering quality loop
 
 An unattended loop (for the NUC) that continuously improves TraceDDS — **QA/design,
-bug-fixing, and catalog data quality** — and **piles up pull requests** (and
-data-quality issues). Each PR is **one focused change** with **before/after
+bug-fixing, and catalog data quality** — and opens pull requests (plus data-quality
+issues). Each PR is **one cohesive, bounded change** with **before/after
 verification** (screenshots for UI, a dry-run metrics diff for clustering). It is
 **usage-aware**: it prefers **Claude** when >50% of its limit remains, otherwise
 falls back to **Codex** when >25% of *its* limit remains, otherwise skips the tick.
@@ -23,9 +23,9 @@ A cron job runs `run-loop.sh` every few hours. Each tick:
    and `ocr`, with `pricing` opt-in. Categories whose prerequisites aren't met
    (e.g. no DB URL, harvester down) are skipped that tick.
 5. Hands a **headless Claude run** the common rules (`loop-prompt.md`) plus the
-   chosen **playbook** (`playbooks/*.md`): find one defect, capture **before**,
-   fix it, capture **after**, and open a PR — or, for a data-quality problem with
-   no safe code fix, file one `data-quality` issue.
+   chosen **playbook** (`playbooks/*.md`): find one cohesive defect/slice, capture
+   **before**, fix it, capture **after**, and open a PR — or, for a data-quality
+   problem with no safe code fix, file one `data-quality` issue.
 6. Tears down the worktree and logs the outcome (PR URL or "no PR").
 
 ### Why this design
@@ -231,6 +231,10 @@ gives a one-line readout (say "web"/"open" to get the HTML page instead).
   can't complete (with a comment) so it won't retry them forever. Data-quality
   problems it finds but can't safely auto-fix are filed as `data-quality` issues
   (deduped, at most one per tick) — which then feed back into its own queue.
+- **Related issues get bundled:** when an issue is picked, the prompt tells the loop
+  to scan the open `eng-loop` queue for siblings on the same route/component/user
+  flow. If they touch the same files and can share one verification pass, the loop
+  should close them in one PR instead of opening overlapping micro-PRs.
 - **Give feedback on a PR (revise mode):** review the PR with **"Request changes"**
   and a plain-English comment — you can judge the **Vercel preview** and not read the
   code. On its next tick (prioritized **above** new work), the loop checks out that

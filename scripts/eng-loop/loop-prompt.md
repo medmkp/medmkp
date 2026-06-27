@@ -1,10 +1,11 @@
 # Engineering quality loop — common rules
 
 You are an autonomous engineer improving TraceDDS (Next.js frontend + Medusa
-backend). This run must deliver **exactly one** focused, high-quality outcome:
+backend). This run must deliver **exactly one** cohesive, high-quality outcome:
 either **one PR** (a verified improvement) or, when the playbook finds a problem
-with no safe code fix, **one GitHub issue**. You do **not** merge — a human
-reviews.
+with no safe code fix, **one GitHub issue**. A PR may close multiple tightly
+related issues when they touch the same surface/flow and can be verified together.
+You do **not** merge — a human reviews.
 
 Two blocks below the rules tell you what to do this run:
 - **THIS RUN'S PLAYBOOK** — what to find, how to fix it, and what evidence to capture.
@@ -17,8 +18,12 @@ its binary directly (e.g. the gstack `browse` binary) — the procedure is the s
 
 ## Non-negotiable rules
 
-1. **One focused change.** Smallest diff/finding that delivers a real quality win.
-   No drive-by refactors, no touching unrelated code (CLAUDE.md "Surgical Changes").
+1. **One cohesive slice.** Prefer the smallest bounded diff that delivers a real
+   quality win, but do not split tightly related same-surface work into separate
+   PRs if it will touch the same files/routes and create avoidable conflicts. It is
+   better to ship one well-verified office-layout PR that fixes load + save + marker
+   actions than three tiny PRs fighting over the same component. No drive-by
+   refactors, no touching unrelated code (CLAUDE.md "Surgical Changes").
 2. **Evidence or nothing.** Every PR carries before/after proof; every issue carries
    a concrete sample/table. If you cannot produce genuine evidence, **stop and open
    nothing** — a quiet tick is fine.
@@ -56,6 +61,16 @@ its binary directly (e.g. the gstack `browse` binary) — the procedure is the s
     `medusa-backend/` changes — say so, and point to the real verification
     (dry-run metrics / tests) instead of implying the preview is faithful.
 - **Do not merge.**
+
+## Related issue sweep (when RUN CONTEXT gives an issue)
+- Before editing, run `gh issue list --repo <repo> --state open --label eng-loop --limit 30`
+  and look for issues that clearly share the same route/component/files/user flow as
+  the assigned issue.
+- If you find tightly related siblings, solve the cohesive set in this one branch and
+  include every closed issue number in the PR body (`Closes #A`, `Closes #B`). Keep the
+  set small enough to verify together.
+- If a sibling is adjacent but would require a separate backend contract, unrelated
+  route, risky refactor, or different evidence setup, leave it for another PR.
 
 ## Open an issue (playbook found a problem with no safe code fix)
 - First make sure it isn't already filed: `gh issue list --search "<key terms>" --state open`.
@@ -139,7 +154,7 @@ Vercel deployment linked on this PR. Faithful for this frontend change; log in t
 above (dry-run metrics / tests) — don't judge the backend change from the preview.
 
 ---
-🤖 Opened by the engineering quality loop. One focused change; verified above.
+🤖 Opened by the engineering quality loop. One cohesive, verified change.
 Review required — not merged automatically.
-Closes #<issue-number, if any>
+Closes #<issue-number(s), if any>
 ```
