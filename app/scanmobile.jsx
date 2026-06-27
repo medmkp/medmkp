@@ -92,6 +92,7 @@ export function MobileScanStart({
         locations={locations}
         starting={starting}
         onPick={(loc) => onStart(loc)}
+        onReorder={() => onNavigate?.("/app/scan")}
         onBack={() => setStep("home")}
         onManage={() => onNavigate?.("/app/locations")}
       />
@@ -150,7 +151,7 @@ export function MobileScanStart({
 // Scanning is scoped to one location and its items file there, so picking the
 // location is the first action — it opens that location's scanner, then scanning
 // begins. No scan "mode" to choose first.
-function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage }) {
+function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage, onReorder }) {
   const [sheetOpen, setSheetOpen] = useState(true);
 
   return (
@@ -187,6 +188,7 @@ function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage 
           currentId={null}
           onClose={() => setSheetOpen(false)}
           onPick={(loc) => { if (!starting) onPick(loc); }}
+          onReorder={onReorder}
           onManage={onManage}
         />
       )}
@@ -1014,22 +1016,37 @@ function SearchSheet({ title, hint, onClose, onPick }) {
   );
 }
 
-function LocationSheet({ locations, currentId, onClose, onPick, onManage }) {
+function LocationSheet({ locations, currentId, onClose, onPick, onManage, onReorder }) {
+  const reorderRow = onReorder ? (
+    <button type="button" className={`${s.locRow} ${s.reorderRow}`} onClick={onReorder}>
+      <span className={`${s.locRowIcon} ${s.reorderIcon}`}><Icon name="icon-nav-reorder" /></span>
+      <span className={s.reorderBody}>
+        <span className={s.reorderTitle}>Quick reorder list</span>
+        <span className={s.reorderSub}>Scan items onto your buy list, not filed to a shelf</span>
+      </span>
+      <span className={s.locRowChevron}><Icon name="icon-chevron-right" /></span>
+    </button>
+  ) : null;
+
   return (
     <SheetShell title="Scanning location" onClose={onClose}>
       {locations.length === 0 ? (
-        <div className={s.sheetEmpty}>
-          <span className={s.sheetEmptyIcon}><Icon name="icon-map-pin" /></span>
-          <strong>No locations yet</strong>
-          <p>Add a room, cabinet, or shelf to scan items into it.</p>
-          <button type="button" className={s.sheetBtn} onClick={onManage}>
-            <Icon name="icon-plus" /> Add a location
-          </button>
-        </div>
+        <>
+          {reorderRow && <div className={s.locList}>{reorderRow}</div>}
+          <div className={s.sheetEmpty}>
+            <span className={s.sheetEmptyIcon}><Icon name="icon-map-pin" /></span>
+            <strong>No locations yet</strong>
+            <p>Add a room, cabinet, or shelf to scan items into it.</p>
+            <button type="button" className={s.sheetBtn} onClick={onManage}>
+              <Icon name="icon-plus" /> Add a location
+            </button>
+          </div>
+        </>
       ) : (
         <>
           <div className={s.sheetScroll}>
             <div className={s.locList}>
+              {reorderRow}
               {locations.map((loc) => (
                 <button key={loc.id} type="button" className={s.locRow} onClick={() => onPick(loc)}>
                   <span className={s.locRowIcon}><Icon name={typeMeta(loc.type).icon} /></span>

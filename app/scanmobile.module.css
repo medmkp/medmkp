@@ -281,6 +281,15 @@
 .locRowName { flex: 1; min-width: 0; font-size: 16px; font-weight: 500; color: #14202E; }
 .locRowChevron { color: #b6c0cd; flex-shrink: 0; }
 .locRowChevron svg { width: 19px; height: 19px; }
+.reorderRow {
+  align-items: flex-start;
+  background: var(--blue-2);
+}
+.reorderRow:active { background: color-mix(in srgb, var(--blue) 12%, var(--surface)); }
+.reorderIcon { color: var(--blue); padding-top: 1px; }
+.reorderBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.reorderTitle { font-size: 16px; font-weight: 600; color: var(--ink); }
+.reorderSub { font-size: 13px; font-weight: 400; line-height: 1.35; color: var(--muted); }
 
 .recent {
   display: flex;
