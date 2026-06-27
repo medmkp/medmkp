@@ -3,6 +3,7 @@ import CatalogItem from "./models/catalog-item"
 import CanonicalProductMatch from "./models/canonical-product-match"
 import CanonicalProduct from "./models/canonical-product"
 import DentalPractice from "./models/dental-practice"
+import EvidenceDocument from "./models/evidence-document"
 import InvoiceLineItem from "./models/invoice-line-item"
 import Invoice from "./models/invoice"
 import PracticeSubscription from "./models/practice-subscription"
@@ -22,6 +23,7 @@ import InventoryItem from "./models/inventory-item"
 
 class MedMKPModuleService extends MedusaService({
   DentalPractice,
+  EvidenceDocument,
   PracticeSubscription,
   Invoice,
   InvoiceLineItem,

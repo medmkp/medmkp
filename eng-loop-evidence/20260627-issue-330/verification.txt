@@ -1,0 +1,48 @@
+Issue #330 verification
+
+Change scope:
+- Added MedMKP evidence-document metadata model/table.
+- Registered EvidenceDocument with MedMKPModuleService.
+- Added idempotent migration for medmkp_evidence_document.
+- No file bytes, blobs, base64 content, OCR, upload, or object-storage integration added.
+
+Commands run:
+
+1. npm run build --prefix medusa-backend/apps/backend
+
+Result:
+> @dtc/backend@0.0.1 build
+> medusa build
+info:    Generating types...
+info:    Types generated successfully
+info:    Starting build...
+info:    Compiling backend source...
+info:    Backend build completed successfully (11.38s)
+info:    Frontend build completed successfully (36.47s)
+
+2. rg -n "EvidenceDocument|evidence_document|listEvidenceDocuments|createEvidenceDocuments" medusa-backend/apps/backend/.medusa medusa-backend/apps/backend/src/modules/medmkp -g "*.{ts,js,json}"
+
+Relevant output:
+medusa-backend/apps/backend/.medusa/types/query-entry-points.d.ts:53:export type MedmkpEvidenceDocumentDocumentTypeEnum =
+medusa-backend/apps/backend/.medusa/types/query-entry-points.d.ts:63:export type MedmkpEvidenceDocumentStatusEnum =
+medusa-backend/apps/backend/.medusa/types/query-entry-points.d.ts:71:export type MedmkpEvidenceDocument = {
+medusa-backend/apps/backend/.medusa/types/query-entry-points.d.ts:3077:    medmkp_evidence_document: MedmkpEvidenceDocument
+medusa-backend/apps/backend/.medusa/types/query-entry-points.d.ts:3078:    medmkp_evidence_documents: MedmkpEvidenceDocument
+medusa-backend/apps/backend/.medusa/server/src/modules/medmkp/service.js:11:const evidence_document_1 = __importDefault(require("./models/evidence-document"));
+medusa-backend/apps/backend/.medusa/server/src/modules/medmkp/service.js:30:    EvidenceDocument: evidence_document_1.default,
+medusa-backend/apps/backend/src/modules/medmkp/migrations/Migration20260627120000.ts:9:    this.addSql(`create table if not exists "medmkp_evidence_document" (
+medusa-backend/apps/backend/src/modules/medmkp/models/evidence-document.ts:6:const EvidenceDocument = model.define("medmkp_evidence_document", {
+medusa-backend/apps/backend/src/modules/medmkp/service.ts:26:  EvidenceDocument,
+
+3. npm run test:unit --prefix medusa-backend/apps/backend -- --runTestsByPath src/api/medmkp/reorder-list/__tests__/merge.unit.spec.ts src/utils/__tests__/scan-evidence-dedup.unit.spec.ts
+
+Result:
+PASS src/api/medmkp/reorder-list/__tests__/merge.unit.spec.ts
+PASS src/utils/__tests__/scan-evidence-dedup.unit.spec.ts
+Test Suites: 2 passed, 2 total
+Tests:       26 passed, 26 total
+
+Full unit suite note:
+- npm run test:unit --prefix medusa-backend/apps/backend was also run.
+- It reported 39 passing suites and 3 pre-existing unrelated failures:
+  src/matching/__tests__/family.unit.spec.ts, src/utils/__tests__/scan-inventory-action.unit.spec.ts, and src/ingestion/supplier-pipeline/__tests__/charset.unit.spec.ts.
