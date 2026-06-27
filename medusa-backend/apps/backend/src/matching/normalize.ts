@@ -404,6 +404,16 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     }
   }
 
+  // Injection/hypodermic needles share gauge, pack, and brand, but short and
+  // long variants are distinct products. Keep this axis scoped to needle
+  // listings so generic "short"/"long" adjectives elsewhere do not veto.
+  if (/\bneedles?\b/.test(lowered)) {
+    const needleLengthRe = /\b(short|long)\b/g
+    while ((match = needleLengthRe.exec(lowered))) {
+      add("needle_length", match[1])
+    }
+  }
+
   // Endodontic paper points and gutta-percha points often share the same
   // brand, shape range (F1/F2/F3), and "points" vocabulary, but they are
   // different materials and must not bridge transitively through assorted

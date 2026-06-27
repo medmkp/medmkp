@@ -323,6 +323,12 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(extractNumericAttrs("Bracket Hook 5-0 Trial").get("suture_size")).toBeUndefined()
   })
 
+  it("captures short/long needle length as a hard-conflict attribute", () => {
+    expect([...(extractNumericAttrs("Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Long, Red").get("needle_length") ?? [])]).toEqual(["long"])
+    expect([...(extractNumericAttrs("Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Short, Red").get("needle_length") ?? [])]).toEqual(["short"])
+    expect(extractNumericAttrs("Long Shank Finishing Bur 12/Pk").get("needle_length")).toBeUndefined()
+  })
+
   it("captures endodontic point material as a hard-conflict attribute", () => {
     const paper = extractNumericAttrs("Dia Pro T Paper Points - Assorted (F1/F2/F3)")
     const guttaPercha = extractNumericAttrs("Dia-ProT Assorted Gutta Percha (F1/F2/F3) 60/Pk")
@@ -911,6 +917,67 @@ describe("end-to-end clustering", () => {
     ]
     const result = runMatching(rows.map(normalizeProduct))
     expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 2])
+  })
+
+  it("does not let long and short injection needles weld into one canonical", () => {
+    // Prod regression: Transcodent/Transoject 25 gauge Long and Short needles
+    // shared brand, gauge, pack, and near-identical names, so same-supplier
+    // name edges bridged the two SKU-specific cross-supplier matches.
+    const rows = [
+      product({
+        supplier_id: "msup_pearsondental_com",
+        manufacturer_sku: "162242",
+        brand: "MedMix",
+        name: "Transoject Painless Steel Needles 25 Gauge Long (100)",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "162242",
+        brand: "MedMix US Inc",
+        name: "Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Long, Red",
+        pack_size: "100/Pkg",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "162242",
+        brand: "Medmix US Inc.",
+        name: "Trancodent Painless Steel Needle Plastic Hub 25 Gauge Long Red 100/Bx",
+        pack_size: "100/Bx",
+      }),
+      product({
+        supplier_id: "msup_pearsondental_com",
+        manufacturer_sku: "162241",
+        brand: "MedMix",
+        name: "Transoject Painless Steel Needles 25 Gauge Short (100)",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "162241",
+        brand: "MedMix US Inc",
+        name: "Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Short, Red",
+        pack_size: "100/Pkg",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "162241",
+        brand: "Medmix US Inc.",
+        name: "Trancodent Painless Steel Needle Plastic Hub 25 Gauge Short Red 100/Bx",
+        pack_size: "100/Bx",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const lengthSets = result.clusters.map((cluster) =>
+      new Set(
+        cluster.members
+          .map((member) => member.numericAttrs.get("needle_length"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+    )
+
+    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([3, 3])
+    expect(lengthSets.some((values) => values.size === 1 && values.has("long"))).toBe(true)
+    expect(lengthSets.some((values) => values.size === 1 && values.has("short"))).toBe(true)
   })
 
   it("does not let a size-less bridge collapse Small and X-Small into one canonical", () => {
