@@ -120,7 +120,6 @@ export function IconSprite() {
       </symbol>
       <symbol id="icon-scan" viewBox="0 0 24 24">
         <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
-        <path d="M4 12h16" />
       </symbol>
       <symbol id="icon-play" viewBox="0 0 24 24">
         <path d="M8 5.5v13l11-6.5-11-6.5Z" />
@@ -326,7 +325,6 @@ export function IconSprite() {
       </symbol>
       <symbol id="icon-nav-scan" viewBox="0 0 24 24">
         <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
-        <path d="M4 12h16" />
       </symbol>
       <symbol id="icon-nav-reorder" viewBox="0 0 24 24">
         <path d="M4 5h1.6l1.9 9.5a1.3 1.3 0 0 0 1.3 1h7a1.3 1.3 0 0 0 1.3-1l1.2-6H6.2" />

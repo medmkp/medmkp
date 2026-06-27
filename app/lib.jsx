@@ -608,6 +608,59 @@ export function supplierLogoSrc(name) {
   return SUPPLIER_LOGOS.find((supplier) => key.includes(supplier.match))?.src || null;
 }
 
+// Small manufacturer/brand marks surfaced on product detail pages. Supplier
+// house brands reuse the supplier image already checked into public/suppliers.
+
+export const BRAND_LOGOS = [
+  { match: "darby", src: "/suppliers/darbydental.png" },
+  { match: "dental city", src: "/suppliers/dentalcity.png" },
+  { match: "henry schein", src: "/suppliers/henryschein.png" },
+  { match: "metrex", src: "/brands/metrex.png" },
+  { match: "solventum", src: "/brands/solventum.png" },
+  { match: "3m", src: "/brands/3m.png" },
+  { match: "medicom", src: "/brands/medicom.png" },
+  { match: "coltene", src: "/brands/coltene.png" },
+  { match: "whaledent", src: "/brands/coltene.png" },
+  { match: "hu-friedy", src: "/brands/hu-friedy.png" },
+  { match: "crosstex", src: "/brands/crosstex.png" },
+  { match: "microbrush", src: "/brands/microbrush.png" },
+  { match: "national keystone", src: "/brands/keystone.png" },
+  { match: "keystone", src: "/brands/keystone.png" },
+  { match: "premier", src: "/brands/premier-dental.png" },
+  { match: "gc america", src: "/brands/gc-america.png" },
+  { match: "dentsply", src: "/brands/dentsply-sirona.png" },
+  { match: "maillefer", src: "/brands/dentsply-sirona.png" },
+  { match: "kerr", src: "/brands/kerr.png" },
+  { match: "septodont", src: "/brands/septodont.png" },
+  { match: "tidi", src: "/brands/tidi.png" },
+  { match: "ivoclar", src: "/brands/ivoclar.png" },
+  { match: "myco medical", src: "/brands/myco-medical.png" },
+  { match: "parkell", src: "/brands/parkell.png" },
+  { match: "tokuyama", src: "/brands/tokuyama.png" },
+  { match: "diadent", src: "/brands/diadent.png" },
+  { match: "pac-dent", src: "/brands/pac-dent.png" },
+  { match: "mydent", src: "/brands/mydent-defend.png" },
+  { match: "defend", src: "/brands/mydent-defend.png" },
+  { match: "lg h&h", src: "/brands/lg-hh.png" },
+  { match: "osung", src: "/brands/osung.png" },
+  { match: "dental resources", src: "/brands/dental-resources.png" },
+  { match: "horico", src: "/brands/horico.png" },
+  { match: "medesy", src: "/brands/medesy.png" },
+  { match: "edt", src: "/brands/edt.png" },
+  { match: "steri-dent", src: "/brands/steri-dent.png" },
+  { match: "c-pac", src: "/brands/steri-dent.png" },
+  { match: "motives", src: "/brands/motives-international.png" },
+  { match: "vh technologies", src: "/brands/vh-technologies.png" },
+  { match: "bisco", src: "/brands/bisco.png" },
+];
+
+
+export function brandLogoSrc(name) {
+  if (!name) return null;
+  const key = name.toLowerCase();
+  return BRAND_LOGOS.find((brand) => key.includes(brand.match))?.src || null;
+}
+
 
 export const SCAN_CATALOG = {
   "MBRREG-BLU-100": { product: "Microbrush Regular Superfine Blue", supplier: "Henry Schein", sku: "MBRREG-BLU-100", unit: "Bag", price: 12.45, confidence: 0.96 },
@@ -1723,4 +1776,3 @@ export function meFromForm(form, prevMe) {
     },
   };
 }
-
