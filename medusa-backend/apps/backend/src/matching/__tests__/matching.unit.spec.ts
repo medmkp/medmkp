@@ -426,6 +426,29 @@ describe("identity matching (golden pairs from production data)", () => {
     )
     expect(["exact", "variant"]).toContain(decision.status)
   })
+
+  it("does not auto-merge different bur product lines sharing only a geometry code", () => {
+    // 801-016M is a bur shape/diameter/grit code used across product lines; a
+    // row carrying it as its own SKU must not auto-merge into another line just
+    // because that code appears in the other row's name.
+    const decision = score(
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "801-016M",
+        brand: "S S White Dental Inc.",
+        name: "Piranha Diamond Bur Friction Grip Medium Round 801-016M 25/PK",
+        pack_size: "25/PK",
+      },
+      {
+        supplier_id: "msup_dentalcity_com",
+        manufacturer_sku: "P801016M",
+        brand: "Dental City",
+        name: "Priva Diamonds Round Medium 5/Pack 801-016M",
+        pack_size: "5/Pack",
+      }
+    )
+    expect(["exact", "variant"]).not.toContain(decision.status)
+  })
 })
 
 describe("name+brand matching (no shared catalog code)", () => {

@@ -119,14 +119,32 @@ export function skuEvidence(a: NormalizedProduct, b: NormalizedProduct): { score
   const bInA = b.mfrSku.length >= 5 && a.skuLikeTokens.includes(b.mfrSku)
   if (aInB || bInA) {
     const sku = aInB ? a.mfrSku : b.mfrSku
+    if (isBurGeometryCode(sku) && isBurOrDiamondPair(a, b)) {
+      return { score: 0.3, kind: "bur-geometry-code", code: sku }
+    }
     return { score: Math.min(0.9, skuStrengthOf(a, b, sku) * 0.95), kind: "name-embedded-sku", code: sku }
   }
   for (const token of a.skuLikeTokens) {
     if (token.length >= 6 && b.skuLikeTokens.includes(token)) {
+      if (isBurGeometryCode(token) && isBurOrDiamondPair(a, b)) {
+        return { score: 0.3, kind: "bur-geometry-code", code: token }
+      }
       return { score: 0.55, kind: "shared-name-code", code: token }
     }
   }
   return { score: 0, kind: "none", code: "" }
+}
+
+function isBurGeometryCode(sku: string): boolean {
+  return /^\d{6}[A-Z]{0,2}$/.test(sku)
+}
+
+function isBurOrDiamondPair(a: NormalizedProduct, b: NormalizedProduct): boolean {
+  return isBurOrDiamond(a) || isBurOrDiamond(b)
+}
+
+function isBurOrDiamond(product: NormalizedProduct): boolean {
+  return product.nameTokens.some((token) => token === "bur" || token === "diamond")
 }
 
 function skuStrengthOf(a: NormalizedProduct, b: NormalizedProduct, sku: string): number {
