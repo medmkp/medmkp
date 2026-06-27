@@ -424,6 +424,14 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     while ((match = sutureSizeRe.exec(lowered))) {
       add("suture_size", `${match[1]}-0`)
     }
+    const sutureLengthRe = /\b(\d{1,2})\s*(?:"|\bin(?:ch(?:es)?)?\b)/g
+    while ((match = sutureLengthRe.exec(lowered))) {
+      add("suture_length", match[1])
+    }
+    const sutureNeedleRe = /\b([a-z]{1,3})\s*-?\s*(\d{1,2}[a-z]?)\b/g
+    while ((match = sutureNeedleRe.exec(lowered))) {
+      add("suture_needle", `${match[1]}${match[2]}`)
+    }
   }
 
   // Injection/hypodermic needles share gauge, pack, and brand, but short and

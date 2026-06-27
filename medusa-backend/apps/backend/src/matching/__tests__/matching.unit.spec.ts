@@ -323,6 +323,15 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(extractNumericAttrs("Bracket Hook 5-0 Trial").get("suture_size")).toBeUndefined()
   })
 
+  it("captures suture length and needle code as hard-conflict attributes", () => {
+    const ps2 = extractNumericAttrs('Vicryl Rapide Suture 4-0 18" Polyglactin 910 Braid PS-2 Undyed 12/Bx')
+    const pc3 = extractNumericAttrs('Vicryl Rapide Suture 4-0 18" Polyglactin 910 Braid PC-3 Undyed 12/Bx')
+    expect([...(ps2.get("suture_length") ?? [])]).toEqual(["18"])
+    expect([...(ps2.get("suture_needle") ?? [])]).toEqual(["ps2"])
+    expect([...(pc3.get("suture_needle") ?? [])]).toEqual(["pc3"])
+    expect(extractNumericAttrs('Impression Tray 18" C-6').get("suture_needle")).toBeUndefined()
+  })
+
   it("captures short/long needle length as a hard-conflict attribute", () => {
     expect([...(extractNumericAttrs("Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Long, Red").get("needle_length") ?? [])]).toEqual(["long"])
     expect([...(extractNumericAttrs("Transcodent Painless Steel Dental Injection Needles - 25 Gauge, Short, Red").get("needle_length") ?? [])]).toEqual(["short"])
@@ -380,6 +389,65 @@ describe("identity matching (golden pairs from production data)", () => {
       }
     )
     expect(decision.status).toBe("reject")
+  })
+
+  it("does not merge Vicryl Rapide suture variants with different length or needle codes", () => {
+    const rows = [
+      product({
+        supplier_id: "msup_dentalcity_com",
+        brand: "Dental City",
+        manufacturer_sku: "VR496",
+        name: 'Ethicon Suture 4-0 18" Undyed Braided Needle PS-2 3/8 Circle 12/Box VR496',
+        pack_size: "12/Box",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "J & J Healthcare Systems",
+        manufacturer_sku: "VR496",
+        name: 'Vicryl Rapide Suture 4-0 18" Polyglactin 910 Braid PS-2 Undyed 12/Bx',
+        pack_size: "12/Bx",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Ethicon",
+        manufacturer_sku: "VR496",
+        name: 'Vicryl Rapide Sutures, 4-0, 18", 12/Box, PS-2',
+        pack_size: "12/Box",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Ethicon Inc",
+        manufacturer_sku: "VR426",
+        name: 'Coated VICRYL RAPIDE Sutures Absorbable - PS-2, 4-0, 27"',
+        pack_size: "12/Pkg",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Ethicon",
+        manufacturer_sku: "VR426",
+        name: 'Vicryl Rapide Sutures, 4-0, 27", 12/Box, PS-2',
+        pack_size: "12/Box",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "J & J Healthcare Systems",
+        manufacturer_sku: "VR845",
+        name: 'Vicryl Rapide Suture 4-0 18" Polyglactin 910 Braid PC-3 Undyed 12/Bx',
+        pack_size: "12/Bx",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 3])
+    const attrSets = result.clusters.map((cluster) =>
+      new Set(
+        cluster.members
+          .map((member) => [
+            ...(member.numericAttrs.get("suture_length") ?? []),
+            ...(member.numericAttrs.get("suture_needle") ?? []),
+          ].join(":"))
+      )
+    )
+    expect(attrSets.every((values) => values.size === 1)).toBe(true)
   })
 
   it("does not merge Dia Pro T paper points with gutta-percha points through assorted range codes", () => {
