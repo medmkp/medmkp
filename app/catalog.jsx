@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "./icons";
-import { CATALOG_RECENT_KEY, availabilityInfo, cap, catMoney, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel } from "./lib";
+import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, cap, catMoney, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel } from "./lib";
 import { CatalogSupplierAvatar, QtyStepper, UomSelect } from "./ui";
 import { CATALOG_CATEGORIES, CATALOG_TINTS, bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
 
@@ -1103,6 +1103,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const supplierCount = offers.length;
   const image = product.image_url || offers.find((offer) => offer.image_url)?.image_url || "";
   const brand = best?.brand || attrs.brands?.[0] || "";
+  const brandLogo = brandLogoSrc(brand);
   const packSize = normalizePackText(attrs.pack_sizes?.[0] || best?.name?.match(/(\d+\s*\/\s*[A-Za-z.]+)/)?.[1]) || "—";
   const uomLabel = (uom || "unit").toLowerCase();
   // Whether the group's per-unit prices are comparable (same base unit), and the
@@ -1203,7 +1204,12 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                   </span>
                 )}
               </div>
-              {brand && <span className="pdp-brand-link">{brand}<Icon name="icon-link" className="button-icon" /></span>}
+              {brand && (
+                <span className={`pdp-brand-link ${brandLogo ? "has-logo" : ""}`}>
+                  {brandLogo && <img className="pdp-brand-logo" src={brandLogo} alt="" />}
+                  <span>{brand}</span>
+                </span>
+              )}
               {variants.length > 1 && (
                 <div className="pdp-variants" role="group" aria-label={`Choose ${variantGroupLabel}`}>
                   <span className="pdp-variants-label">{variantGroupLabel}: <strong>{product.variant_label}</strong></span>
@@ -1521,4 +1527,3 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
     </div>
   );
 }
-

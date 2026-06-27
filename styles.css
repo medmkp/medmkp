@@ -9506,8 +9506,9 @@ th {
 .pdp-badge.muted { background: var(--surface-2, #f1f3f6); color: var(--muted); }
 .pdp-row-empty { display: block; padding: 20px 14px; }
 .pdp-row-empty p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.pdp-brand-link { display: inline-flex; align-items: center; gap: 5px; color: var(--blue); font-weight: 500; font-size: 14px; width: fit-content; }
-.pdp-brand-link .button-icon { width: 14px; height: 14px; }
+.pdp-brand-link { display: inline-flex; align-items: center; gap: 8px; color: var(--blue); font-weight: 500; font-size: 14px; width: fit-content; min-height: 34px; }
+.pdp-brand-link.has-logo { padding: 4px 10px 4px 4px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); }
+.pdp-brand-logo { width: 42px; height: 26px; flex: 0 0 42px; border-radius: 6px; object-fit: contain; background: #fff; padding: 3px; }
 
 .pdp-variants { display: grid; gap: 8px; }
 .pdp-variants-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
