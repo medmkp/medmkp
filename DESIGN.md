@@ -4,7 +4,8 @@ The visual language of TraceDDS, in one place, so any new screen feels like the
 same product. It documents what `styles.css`, the screen `*.jsx` files, and the
 shared components already do, picks the canonical version where they disagree,
 folds in the patterns from the latest desktop + mobile wireframes
-(`wireframes/`), and gives you a checklist for building the next view.
+(indexed in [`design/SURFACES.md`](design/SURFACES.md)), and gives you a checklist
+for building the next view.
 
 **Live mirror:** [`/styleguide`](app/styleguide.jsx) renders these tokens,
 scales, and components as a real page. Open it at `/styleguide` (no login). If
@@ -307,7 +308,7 @@ The right-side slide-in is TraceDDS's primary **detail + edit** surface (Product
 details, Product/Lot Detail, Reorder Basis, Forecast & Usage, Evidence Detail).
 The structural reference is `evidence.module.css .drawer*` +
 `evidence.jsx DocumentDrawer`; the richer compliance drawers
-(`wireframes/Updated Screen Frames/4,5`) extend it.
+(`design/frames/lot-detail.png`, `design/frames/reorder-basis.png`) extend it.
 
 ### 11.1 Container & motion
 
@@ -391,8 +392,10 @@ Two canonical arrangements (`drawerFoot`):
 The mobile surface (`scanmobile.jsx` + `scanmobile.module.css`, ≤900px) is a
 **scanner-first** flow, not a shrunk desktop. Big tap targets, full-screen
 camera, bottom sheets, one action in view at a time. Tighter, chunkier radii
-(§4). Reference wireframes: `wireframes/TraceDDS (New)/3–10` and
-`wireframes/Updated Screen Frames/1–3`.
+(§4). Reference frames: the `mobile-*` rows in
+[`design/SURFACES.md`](design/SURFACES.md) (e.g. `design/frames/mobile-scanner.png`,
+`mobile-receiving-scan.png`, `mobile-shelf-audit.png`). **Note the drift:** the shipped
+scanner is session-less and single-mode — see the mobile-scan-flow drift note there.
 
 ### 16.1 Shell
 
@@ -402,12 +405,17 @@ camera, bottom sheets, one action in view at a time. Tighter, chunkier radii
 
 ### 16.2 Scan-mode model (Receiving vs Shelf Audit)
 
+> **Drift:** the shipped scanner is **session-less and single-mode** — the explicit
+> Receiving/Shelf-Audit switch below was removed and capture type is now inferred per
+> scan. Keep this section as the visual/copy reference; see the mobile-scan-flow note in
+> [`design/SURFACES.md`](design/SURFACES.md) for the shipped interaction model.
+
 The same scanner records two different things — make the mode explicit and never
 imply perpetual inventory.
 
 - **Mode-select cards** (`Scan Mode`): two cards — **Receiving** ("Use when a new shipment arrives") and **Shelf Audit** ("Use when verifying items already on the shelf"). Each lists what it **Records:** as a row of blue **pill-chips with checks** (`Lot`, `Expiry`, `Received date`, `Location`, `Optional qty received`). Shelf Audit also shows **status-example** colored pills (`Present` green, `Moved` gold, `Expired` red). A blue info callout explains the split.
 - **Segmented mode toggle:** inside the scanner, a 2-segment control `Receiving | 🛡 Shelf Audit`; the selected segment is a solid `var(--blue)` fill, the other is quiet. 999px radius.
-- **Copy rules** (from `wireframes/Updated Screen Frames/usage.md`): say **"Create intake record" / "Save receiving record,"** never "Add stock." Quantity is **"Quantity received" (optional)**, never "Quantity on hand." Shelf-audit statuses are **Present · Moved · Not found · Removed** — *Expired* is **derived** from the date, shown as an issue banner ("Expired — verify removal or replacement"), not a manual status.
+- **Copy rules** (see [`design/SURFACES.md`](design/SURFACES.md) § Copy & framing): say **"Create intake record" / "Save receiving record,"** never "Add stock." Quantity is **"Quantity received" (optional)**, never "Quantity on hand." Shelf-audit statuses are **Present · Moved · Not found · Removed** — *Expired* is **derived** from the date, shown as an issue banner ("Expired — verify removal or replacement"), not a manual status.
 
 ### 16.3 Full-screen camera
 
