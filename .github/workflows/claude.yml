@@ -43,6 +43,3 @@ jobs:
           # Generate with `claude setup-token`; store as a repo secret.
           # Long-lived but not permanent — regenerate + update the secret when it expires.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # TEMP (diagnostic): surface the real SDK error instead of the
-          # "output hidden for security" placeholder. Remove once @claude works.
-          show_full_output: true
