@@ -315,7 +315,14 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     add(unit, match[1])
     if (match[2]) {
       add(unit, match[2])
+      if (unit === "mm" || unit === "cm" || unit === "in") {
+        add(`${unit}_dim`, `${match[1]}x${match[2]}`)
+      }
     }
+  }
+  const physicalDimRe = /(\d+(?:\.\d+)?)\s*(mm|cm|in)\s*x\s*(\d+(?:\.\d+)?)\s*\2\b/g
+  while ((match = physicalDimRe.exec(lowered))) {
+    add(`${match[2]}_dim`, `${match[1]}x${match[3]}`)
   }
 
   // Composite/restorative shade: a color code (A1..D7, optional .5) with an

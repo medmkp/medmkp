@@ -459,6 +459,31 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(decision.status).toBe("reject")
   })
 
+  it("rejects physical dimension variants that share one measurement", () => {
+    expect([...(extractNumericAttrs("Lucitone Digi Fit Dark Pink 98x20mm").get("mm_dim") ?? [])]).toEqual([
+      "98x20",
+    ])
+    expect([...(extractNumericAttrs("KeyMill Acrylic Disc Light Red Pink 98mm x 30mm Ea").get("mm_dim") ?? [])]).toEqual([
+      "98x30",
+    ])
+
+    const decision = score(
+      {
+        supplier_id: "msup_pearsondental_com",
+        manufacturer_sku: "906122",
+        brand: "Dentsply Sirona",
+        name: "Lucitone Digi Fit Dark Pink 98x20mm",
+      },
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "906124",
+        brand: "Dentsply International",
+        name: "Lucitone Digital Fit Denture Disc Dark Pink 98x30mm Ea",
+      }
+    )
+    expect(decision.status).toBe("reject")
+  })
+
   it("flags same product with different pack counts as variant", () => {
     const decision = score(
       {
