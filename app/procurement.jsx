@@ -758,7 +758,7 @@ export function SupplierHandoffView({ handoff, onArchive, onBuildCart, onNavigat
       <footer className="ho-footer">
         <div className="ho-footer-copy">
           <strong>Order placed?</strong>
-          <small>Save this list to your History and start a fresh reorder list. This frozen handoff stays available.</small>
+          <small>Save this list to your reorder history and start a fresh reorder list. This frozen handoff stays available.</small>
         </div>
         <button className="primary-action compact" type="button" onClick={onArchive}><Icon name="icon-clipboard" className="button-icon" />Save list &amp; start new</button>
       </footer>
@@ -767,7 +767,7 @@ export function SupplierHandoffView({ handoff, onArchive, onBuildCart, onNavigat
 }
 
 
-export function HistoryView({ onOpen, onReopen, onDuplicate, onDelete, archivedLists = [] }) {
+export function ReorderHistoryView({ onOpen, onReopen, onDuplicate, onDelete, archivedLists = [] }) {
   // Show the buyer's real saved lists; fall back to the sample lists only when
   // there are none yet, so the page reads as designed for new accounts.
   const hasReal = archivedLists.length > 0;
@@ -775,7 +775,7 @@ export function HistoryView({ onOpen, onReopen, onDuplicate, onDelete, archivedL
   return (
     <div className="crl">
       <header className="crl-header">
-        <div className="crl-title"><h2>History</h2></div>
+        <div className="crl-title"><h2>Reorder history</h2></div>
       </header>
       <div className="history-list">
         {lists.map((list) => {
@@ -811,7 +811,7 @@ export function HistoryView({ onOpen, onReopen, onDuplicate, onDelete, archivedL
 }
 
 
-export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename, onReopen, onDuplicate, onDelete, onViewHandoff }) {
+export function ReorderHistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename, onReopen, onDuplicate, onDelete, onViewHandoff }) {
   const lists = [...archivedLists, ...ARCHIVED_LISTS];
   const list = lists.find((entry) => entry.id === id) || lists[0];
   const rows = list?.rows || [];
@@ -822,7 +822,7 @@ export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], o
     <div className="crl">
       <header className="crl-header">
         <div className="crl-title">
-          <button className="history-back" type="button" onClick={onBack}><Icon name="icon-chevron-left" className="button-icon" />History</button>
+          <button className="history-back" type="button" onClick={onBack}><Icon name="icon-chevron-left" className="button-icon" />Reorder history</button>
           {isReal ? (
             <input
               className="history-rename-input"
@@ -893,4 +893,3 @@ export function HistoryDetail({ id, onBack, archivedLists = [], handoffs = [], o
     </div>
   );
 }
-

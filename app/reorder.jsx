@@ -638,7 +638,7 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
                 <div className="crl-add-menu m-actions-menu" role="menu">
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onArchiveList?.(); }}>
                     <Icon name="icon-clipboard" className="button-icon" />
-                    <span><strong>Save list</strong><small>Save a copy to History</small></span>
+                    <span><strong>Save list</strong><small>Save a copy to reorder history</small></span>
                   </button>
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onClearList?.(); }}>
                     <Icon name="icon-trash" className="button-icon crl-menu-danger" />
@@ -1299,7 +1299,7 @@ export function CurrentReorderList({
                 <div className="crl-add-menu m-actions-menu" role="menu">
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onArchiveList?.(); }}>
                     <Icon name="icon-archive-down" className="button-icon" />
-                    <span><strong>Save list</strong><small>Save a copy to History</small></span>
+                    <span><strong>Save list</strong><small>Save a copy to reorder history</small></span>
                   </button>
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onClearList?.(); }}>
                     <Icon name="icon-trash-ios" className="button-icon crl-menu-danger" />
