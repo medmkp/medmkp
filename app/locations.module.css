@@ -1513,20 +1513,37 @@
 }
 .table tbody tr { cursor: pointer; }
 .table tbody tr:hover { background: #f6f9ff; }
+.table tbody tr.rowSelected { background: #eef5ff; }
+.table tbody tr.rowSelected:hover { background: #e8f1ff; }
 /* Open-row highlight — mirrors the reorder list's active row so clicking a row to
    open its detail drawer reads the same on both surfaces. */
 .table tbody tr.rowActive { background: #eef4ff; }
-.table tbody tr.rowActive td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
+.table tbody tr.rowActive td:nth-child(2) { box-shadow: inset 3px 0 0 var(--blue); }
 
-/* Fixed column widths so the 8 columns always fit the panel — no horizontal scroll. */
-.table th:nth-child(1), .table td:nth-child(1) { width: 25%; }   /* Item */
-.table th:nth-child(2), .table td:nth-child(2) { width: 7%; }    /* SDS */
-.table th:nth-child(3), .table td:nth-child(3) { width: 12%; }   /* Expiration */
-.table th:nth-child(4), .table td:nth-child(4) { width: 14%; }   /* Lot */
-.table th:nth-child(5), .table td:nth-child(5) { width: 13%; }   /* Price */
-.table th:nth-child(6), .table td:nth-child(6) { width: 13%; }   /* Status */
-.table th:nth-child(7), .table td:nth-child(7) { width: 11%; }   /* Last counted */
-.table th:nth-child(8), .table td:nth-child(8) { width: 5%; }    /* Actions */
+/* Fixed column widths so the 9 columns always fit the panel — no horizontal scroll. */
+.table th:nth-child(1), .table td:nth-child(1) { width: 4%; }    /* Select */
+.table th:nth-child(2), .table td:nth-child(2) { width: 24%; }   /* Item */
+.table th:nth-child(3), .table td:nth-child(3) { width: 6%; }    /* SDS */
+.table th:nth-child(4), .table td:nth-child(4) { width: 11%; }   /* Expiration */
+.table th:nth-child(5), .table td:nth-child(5) { width: 13%; }   /* Lot */
+.table th:nth-child(6), .table td:nth-child(6) { width: 12%; }   /* Price */
+.table th:nth-child(7), .table td:nth-child(7) { width: 13%; }   /* Status */
+.table th:nth-child(8), .table td:nth-child(8) { width: 12%; }   /* Last counted */
+.table th:nth-child(9), .table td:nth-child(9) { width: 5%; }    /* Actions */
+
+.selectCell {
+  text-align: center;
+  overflow: visible;
+}
+.selectCell input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.selectCell input:disabled { cursor: default; opacity: 0.45; }
 
 .tItem { font-weight: 500; color: var(--ink); }
 .tItemCell { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -1569,6 +1586,43 @@
 /* The shared Select (.field) and the Filters button size to the toolbar height. */
 .itemsToolbar .field { flex: 0 0 150px; }
 .itemsToolbar .filterBtn { flex: 0 0 auto; }
+.bulkActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 8px 0 12px;
+  border: 1px solid #cfe0ff;
+  border-radius: 10px;
+  background: #f3f7ff;
+  color: #2454b5;
+  font-size: 13px;
+  font-weight: 500;
+}
+.bulkClearBtn,
+.bulkDeleteBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.bulkClearBtn {
+  padding: 5px 6px;
+  color: #536274;
+}
+.bulkClearBtn:hover { background: #e7eefc; color: var(--ink); }
+.bulkDeleteBtn {
+  padding: 6px 8px;
+  color: #c5392e;
+}
+.bulkDeleteBtn svg { width: 14px; height: 14px; }
+.bulkDeleteBtn:hover { background: #fdeceb; }
 /* The list-actions kebab sits at the end of the row, stretched to match the
    Filters button's height and radius. */
 .itemsToolbar .headKebabWrap { flex: 0 0 auto; }
