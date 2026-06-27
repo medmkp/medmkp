@@ -186,7 +186,7 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
           <section className={s.tableCard}>
             <div className={s.cardHead}>
               <h2 className={s.cardTitle}>Action required <span className={s.countPill}>{actionCount}</span></h2>
-              <button type="button" className={s.cardLink} onClick={() => onNavigate?.("/app/needs-attention")}>Open needs attention <Icon name="icon-arrow-right" /></button>
+              <button type="button" className={s.cardLink} onClick={() => onNavigate?.("/app")}>Open dashboard <Icon name="icon-arrow-right" /></button>
             </div>
             <div className={s.toolbar}>
               <label className={s.search}>

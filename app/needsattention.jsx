@@ -6,7 +6,7 @@ import { initials } from "./lib";
 import s from "./needsattention.module.css";
 import { sortNeedsAttentionIssues } from "./needsAttentionSort";
 
-// Needs Attention — the operational worklist. Every open item or issue that
+// Dashboard — the operational worklist. Every open item or issue that
 // needs a human to look at it: low/out-of-stock, expiring lots, and missing
 // compliance proof, pulled together from the same signals that drive the
 // Locations, Reorder, and Evidence surfaces. This is the "what do I do next"
@@ -209,7 +209,7 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast }) {
   return (
     <div className={s.page}>
       <header className={s.head}>
-        <h1 className={s.title}>Needs Attention</h1>
+        <h1 className={s.title}>Dashboard</h1>
         <p className={s.subtitle}>Items and issues that require your review and action to keep operations running smoothly.</p>
       </header>
 
