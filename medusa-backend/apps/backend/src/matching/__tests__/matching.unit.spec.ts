@@ -449,6 +449,28 @@ describe("identity matching (golden pairs from production data)", () => {
     )
     expect(["exact", "variant"]).not.toContain(decision.status)
   })
+
+  it("matches Opti-Cide 3 rows whose distributor brands disagree but catalog code matches", () => {
+    // Real prod split: Biotrol, Mydent, and house-label rows all carry the same
+    // DOCS12-024 Opti-Cide 3 spray product, but brand conflict left them in two
+    // canonicals. Keep the override tied to the product line + exact DOC code
+    // rather than making the whole Mydent/Biotrol brand families equivalent.
+    const decision = score(
+      {
+        supplier_id: "msup_pearsondental_com",
+        manufacturer_sku: "DOCS12-024",
+        brand: "Biotrol",
+        name: "OptiCide3 Disinfectant Spray 24oz",
+      },
+      {
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "DOCS12-024",
+        brand: "Mydent",
+        name: "Opti-Cide 3 Spray Disinfectant 24 oz 24oz",
+      }
+    )
+    expect(["exact", "variant"]).toContain(decision.status)
+  })
 })
 
 describe("name+brand matching (no shared catalog code)", () => {
