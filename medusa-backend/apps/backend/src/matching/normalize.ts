@@ -365,6 +365,9 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     if (/\b(?:lt|low\s+translucency)\b/.test(lowered)) {
       add("cad_block_translucency", "lt")
     }
+    if (/\b(?:mt|medium\s+translucency)\b/.test(lowered)) {
+      add("cad_block_translucency", "mt")
+    }
 
     const sizeWordRe = /\bsize\s*(\d{1,2}l?)\b/g
     while ((match = sizeWordRe.exec(lowered))) {

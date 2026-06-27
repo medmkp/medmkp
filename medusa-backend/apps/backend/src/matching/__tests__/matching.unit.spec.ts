@@ -339,11 +339,13 @@ describe("identity matching (golden pairs from production data)", () => {
   it("captures CAD block size and translucency as hard-conflict attributes", () => {
     const low12 = extractNumericAttrs("Grandio Blocs - A2, Low Translucency, Size 12")
     const high14 = extractNumericAttrs("Grandio blocs HT Milling Blocks High Translucency 14L A2 For CEREC 5/Pk")
+    const mediumC14 = extractNumericAttrs("CEREC Tessera MT Milling Blocks Medium Translucency C14 A2 For CEREC 4/Bx")
 
     expect([...(low12.get("cad_block_size") ?? [])]).toEqual(["12"])
     expect([...(low12.get("cad_block_translucency") ?? [])]).toEqual(["lt"])
     expect([...(high14.get("cad_block_size") ?? [])]).toEqual(["14l"])
     expect([...(high14.get("cad_block_translucency") ?? [])]).toEqual(["ht"])
+    expect([...(mediumC14.get("cad_block_translucency") ?? [])]).toEqual(["mt"])
   })
 
   it("rejects same-SKU color variants instead of merging them", () => {
@@ -513,6 +515,55 @@ describe("identity matching (golden pairs from production data)", () => {
 
     expect(result.clusters).toHaveLength(4)
     expect(skuSets.every((skus) => skus.size === 1)).toBe(true)
+  })
+
+  it("keeps CEREC Tessera HT and MT milling block variants in separate clusters", () => {
+    // Prod regression: CEREC Tessera HT and MT blocks both carried the same
+    // shade and block size wording, but MT/medium translucency was not modeled,
+    // so the medium-translucency rows merged into the high-translucency cluster.
+    const rows = [
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "5365431215",
+        brand: "Dentsply Sirona Restorative",
+        name: "CEREC Tessera HT Milling Blocks High Translucency C14 A2 For CEREC 4/Bx",
+        pack_size: "4/Bx",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "5365431215",
+        brand: "DENTSPLY Caulk",
+        name: "CEREC Tessera Advanced Lithium Disilicate CAD CAM Blocks - High Translucency, Shade A2",
+        pack_size: "4/Pkg",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "5365431515",
+        brand: "Dentsply Sirona Restorative",
+        name: "CEREC Tessera MT Milling Blocks Medium Translucency C14 A2 For CEREC 4/Bx",
+        pack_size: "4/Bx",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        manufacturer_sku: "5365431515",
+        brand: "DENTSPLY Caulk",
+        name: "CEREC Tessera Advanced Lithium Disilicate CAD CAM Blocks - Medium Translucency, Shade A2",
+        pack_size: "4/Pkg",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const clusterTranslucencies = result.clusters.map((cluster) =>
+      new Set(
+        cluster.members
+          .map((member) => member.numericAttrs.get("cad_block_translucency"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+    )
+
+    expect(result.clusters).toHaveLength(2)
+    expect(clusterTranslucencies.every((values) => values.size === 1)).toBe(true)
+    expect([...clusterTranslucencies[0], ...clusterTranslucencies[1]].sort()).toEqual(["ht", "mt"])
   })
 
   it("does not merge distinct WallShoulders X-ray apron hanger models", () => {
