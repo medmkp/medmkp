@@ -10817,6 +10817,21 @@ th {
   align-items: start;
 }
 
+.ol-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  text-align: center;
+}
+.ol-state .nav-icon { width: 24px; height: 24px; color: var(--blue); }
+.ol-state strong { color: var(--ink); font-size: 15px; font-weight: 600; }
+.ol-state p { margin: 0; max-width: 40ch; font-size: 13px; line-height: 1.5; }
+
 /* Snap-to-grid canvas */
 .ol-grid {
   display: grid;

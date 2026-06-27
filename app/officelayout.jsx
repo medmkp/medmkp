@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./icons";
+import { traceApi, traceErrorMessage } from "./lib";
 
 // Mock locations for the standalone demo. The real page passes its own
 // `locations` from the parent; this is only the default so the component
@@ -77,6 +78,13 @@ export function OfficeLayoutView({ locations = MOCK_LOCATIONS, onMoveLocation, o
   const [draggingId, setDraggingId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // `${x},${y}` | "tray" | null
 
+  useEffect(() => {
+    setItems(locations);
+    setSelectedId(null);
+    setDraggingId(null);
+    setDropTarget(null);
+  }, [locations]);
+
   const placed = useMemo(() => items.filter((l) => l.layout_x != null && l.layout_y != null), [items]);
   const unplaced = useMemo(() => items.filter((l) => l.layout_x == null || l.layout_y == null), [items]);
 
@@ -145,80 +153,147 @@ export function OfficeLayoutView({ locations = MOCK_LOCATIONS, onMoveLocation, o
         </button>
       </div>
 
-      <div className="ol-board">
-        <div
-          className="ol-grid"
-          style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
-          role="group"
-          aria-label="Floor-plan grid"
-        >
-          {cells.map(({ x, y }) => {
-            const tile = tileAt(x, y);
-            const key = `${x},${y}`;
-            const isTarget = dropTarget === key;
-            const occupiedByOther = tile && tile.id !== draggingId;
-            return (
-              <div
-                key={key}
-                className={`ol-cell ${isTarget && !occupiedByOther ? "drop-target" : ""} ${draggingId && occupiedByOther ? "occupied" : ""}`}
-                onDragOver={(event) => {
-                  if (!draggingId || occupiedByOther) return;
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                  setDropTarget(key);
-                }}
-                onDragLeave={() => setDropTarget((current) => (current === key ? null : current))}
-                onDrop={(event) => { event.preventDefault(); dropOnCell(x, y); }}
-              >
-                {tile ? (
+      {items.length === 0 ? (
+        <div className="ol-state">
+          <Icon name="icon-map-pin" className="nav-icon" />
+          <strong>No locations yet</strong>
+          <p>Add a location first, then come back to place it on the office layout.</p>
+        </div>
+      ) : (
+        <div className="ol-board">
+          <div
+            className="ol-grid"
+            style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
+            role="group"
+            aria-label="Floor-plan grid"
+          >
+            {cells.map(({ x, y }) => {
+              const tile = tileAt(x, y);
+              const key = `${x},${y}`;
+              const isTarget = dropTarget === key;
+              const occupiedByOther = tile && tile.id !== draggingId;
+              return (
+                <div
+                  key={key}
+                  className={`ol-cell ${isTarget && !occupiedByOther ? "drop-target" : ""} ${draggingId && occupiedByOther ? "occupied" : ""}`}
+                  onDragOver={(event) => {
+                    if (!draggingId || occupiedByOther) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    setDropTarget(key);
+                  }}
+                  onDragLeave={() => setDropTarget((current) => (current === key ? null : current))}
+                  onDrop={(event) => { event.preventDefault(); dropOnCell(x, y); }}
+                >
+                  {tile ? (
+                    <LocationTile
+                      location={tile}
+                      selected={selectedId === tile.id}
+                      onSelect={selectLocation}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                    />
+                  ) : (
+                    <span className="ol-cell-empty" aria-hidden="true" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <aside
+            className={`ol-tray ${dropTarget === "tray" ? "drop-target" : ""}`}
+            onDragOver={(event) => {
+              if (!draggingId) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              setDropTarget("tray");
+            }}
+            onDragLeave={() => setDropTarget((current) => (current === "tray" ? null : current))}
+            onDrop={(event) => { event.preventDefault(); dropOnTray(); }}
+          >
+            <header className="ol-tray-head">
+              <strong>Unplaced</strong>
+              <small>{unplaced.length} location{unplaced.length === 1 ? "" : "s"}</small>
+            </header>
+            {unplaced.length ? (
+              <div className="ol-tray-list">
+                {unplaced.map((location) => (
                   <LocationTile
-                    location={tile}
-                    selected={selectedId === tile.id}
+                    key={location.id}
+                    location={location}
+                    selected={selectedId === location.id}
                     onSelect={selectLocation}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                   />
-                ) : (
-                  <span className="ol-cell-empty" aria-hidden="true" />
-                )}
+                ))}
               </div>
-            );
-          })}
+            ) : (
+              <p className="ol-tray-empty">Every location is on the grid. Drag a tile here to take it off the floor plan.</p>
+            )}
+          </aside>
         </div>
-
-        <aside
-          className={`ol-tray ${dropTarget === "tray" ? "drop-target" : ""}`}
-          onDragOver={(event) => {
-            if (!draggingId) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-            setDropTarget("tray");
-          }}
-          onDragLeave={() => setDropTarget((current) => (current === "tray" ? null : current))}
-          onDrop={(event) => { event.preventDefault(); dropOnTray(); }}
-        >
-          <header className="ol-tray-head">
-            <strong>Unplaced</strong>
-            <small>{unplaced.length} location{unplaced.length === 1 ? "" : "s"}</small>
-          </header>
-          {unplaced.length ? (
-            <div className="ol-tray-list">
-              {unplaced.map((location) => (
-                <LocationTile
-                  key={location.id}
-                  location={location}
-                  selected={selectedId === location.id}
-                  onSelect={selectLocation}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="ol-tray-empty">Every location is on the grid. Drag a tile here to take it off the floor plan.</p>
-          )}
-        </aside>
-      </div>
+      )}
     </div>
   );
+}
+
+export function OfficeLayoutPage({ onAddLocation }) {
+  const [locations, setLocations] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setError("");
+    traceApi.listLocations()
+      .then((data) => {
+        if (alive) setLocations(data.locations || []);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        const message = traceErrorMessage(err, "Couldn't load locations.");
+        setError(message);
+        setLocations([]);
+      });
+    return () => { alive = false; };
+  }, []);
+
+  if (locations === null) {
+    return (
+      <div className="ol">
+        <div className="ol-head">
+          <div>
+            <h1 className="ol-title">Office layout</h1>
+            <p className="ol-lede">Loading saved practice locations…</p>
+          </div>
+        </div>
+        <div className="ol-state" aria-live="polite">
+          <Icon name="icon-map-pin" className="nav-icon" />
+          <strong>Loading locations</strong>
+          <p>Fetching the saved office layout for this practice.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="ol">
+        <div className="ol-head">
+          <div>
+            <h1 className="ol-title">Office layout</h1>
+            <p className="ol-lede">Saved practice locations could not be loaded.</p>
+          </div>
+        </div>
+        <div className="ol-state" role="alert">
+          <Icon name="icon-alert-triangle" className="nav-icon" />
+          <strong>Couldn't load locations</strong>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <OfficeLayoutView locations={locations} onAddLocation={onAddLocation} />;
 }

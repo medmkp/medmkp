@@ -5,6 +5,7 @@ import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogVie
 import { BrandMark, Icon, IconSprite } from "./icons";
 import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
+import { OfficeLayoutPage } from "./officelayout";
 import { QrLabelView } from "./qrlabels";
 import { ScannerView } from "./scansessions";
 import { MobileReorderScan } from "./scanmobile";
@@ -1789,6 +1790,12 @@ export default function Home() {
               onOpenLocation={(id) => navigate(`/app/locations/${id}`)}
               onNavigate={navigate}
               onToast={showToast}
+            />
+          )}
+
+          {view === "officeLayout" && (
+            <OfficeLayoutPage
+              onAddLocation={() => navigate("/app/locations/new")}
             />
           )}
 
