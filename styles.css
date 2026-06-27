@@ -8989,7 +8989,7 @@ th {
 .crl-paid-savings strong { color: var(--green); font-weight: 600; }
 .m-card-save { color: var(--green); font-weight: 600; }
 
-/* Placeholder (History) */
+/* Placeholder (reorder history) */
 .crl-placeholder { display: grid; justify-items: center; gap: 8px; padding: 64px 24px; border: 1px dashed var(--line); border-radius: 12px; background: var(--surface); text-align: center; }
 .crl-placeholder-icon { width: 34px; height: 34px; color: var(--muted); fill: none; stroke: currentColor; stroke-width: 1.8; }
 .crl-placeholder strong { color: var(--ink); font-size: 16px; }
@@ -9414,7 +9414,7 @@ th {
 .auth-alt { margin-top: 16px; text-align: center; color: var(--muted); font-size: 13px; }
 .auth-alt a { color: var(--blue); font-weight: 500; text-decoration: none; }
 
-/* ===================== History (past lists) ===================== */
+/* ===================== Reorder history (past lists) ===================== */
 .history-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
 .history-row { display: flex; align-items: center; gap: 6px; padding-right: 12px; border-bottom: 1px solid var(--line); }
 .history-row:last-child { border-bottom: 0; }
@@ -9437,7 +9437,7 @@ th {
 .history-back .button-icon { width: 16px; height: 16px; }
 
 /* List lifecycle pill (Draft / Verified / Handed off) — shown on the live list
-   header and on every History entry. */
+   header and on every reorder history entry. */
 .list-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; width: fit-content; }
 .list-pill-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
 .list-pill--draft { background: var(--surface-2); color: var(--muted); }
@@ -9446,7 +9446,7 @@ th {
 .list-pill--ordered { background: #e3f6ed; color: var(--green); }
 .list-pill--handoff { background: var(--blue-2); color: var(--blue); }
 
-/* Inline rename field in the History detail header (mirrors .crl-listname-input). */
+/* Inline rename field in the reorder history detail header (mirrors .crl-listname-input). */
 .history-rename-input { font: inherit; color: var(--ink); font-size: 20px; font-weight: 600; border: 0; background: transparent; padding: 2px 4px; border-radius: 6px; }
 .history-rename-input:hover { background: var(--surface-2); }
 .history-rename-input:focus { outline: none; background: var(--surface-2); box-shadow: 0 0 0 2px var(--blue-2); }

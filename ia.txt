@@ -27,7 +27,7 @@ Home
             ├── Open supplier websites
             └── Archive list / start new list
 
-History
+Reorder history
 ├── Archived Reorder Lists
 │   └── Reopen / Duplicate / View related handoff
 └── Supplier Handoffs

@@ -15,7 +15,7 @@ import { EvidenceMobileViewer } from "./evidenceviewer";
 import { ReportsView } from "./reports";
 import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
-import { CartBuilderModal, HistoryDetail, HistoryView, ProcurementPlanView, SupplierHandoffView } from "./procurement";
+import { CartBuilderModal, ProcurementPlanView, ReorderHistoryDetail, ReorderHistoryView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, SavingsView } from "./reorder";
 import { SettingsView } from "./settings";
 import StyleGuide from "./styleguide";
@@ -1235,7 +1235,7 @@ export default function Home() {
       return;
     }
     const rows = deriveMatchRows(activeDraftItems, buyingPrefs);
-    // Snapshot the landed total (items + estimated shipping) so History matches
+    // Snapshot the landed total (items + estimated shipping) so reorder history matches
     // the Plan Preview the buyer saw when archiving.
     const totals = computePlanTotals(rows, supplierShipping);
     const now = new Date();
@@ -1246,7 +1246,7 @@ export default function Home() {
       items: rows.length,
       suppliers: totals.suppliers,
       total: money.format(totals.landedTotal),
-      // Final lifecycle status + the handoff it was tied to, for the History pill.
+      // Final lifecycle status + the handoff it was tied to, for the reorder history pill.
       status: deriveListStatus(rows, Boolean(currentHandoffId), listStage, submittedSuppliers),
       handoffId: currentHandoffId,
       rows,
@@ -1276,7 +1276,7 @@ export default function Home() {
     }
     setConfirmDialog({
       title: "Save this list?",
-      body: "The reorder list will be saved to History and a fresh, empty list will start. You can reopen or duplicate a saved list any time.",
+      body: "The reorder list will be saved to reorder history and a fresh, empty list will start. You can reopen or duplicate a saved list any time.",
       confirmLabel: "Save list",
       onConfirm: saveCurrentList,
     });
@@ -1412,7 +1412,7 @@ export default function Home() {
     const n = activeDraftItems.length;
     setConfirmDialog({
       title: `${verb} "${entryName}"?`,
-      body: `Your reorder list has ${n} unsaved item${n === 1 ? "" : "s"}. Save them to History first so you don't lose them, or discard them to continue.`,
+      body: `Your reorder list has ${n} unsaved item${n === 1 ? "" : "s"}. Save them to reorder history first so you don't lose them, or discard them to continue.`,
       confirmLabel: "Save current first",
       secondaryLabel: "Discard current",
       onConfirm: () => { saveCurrentList(); proceed(); },
@@ -1480,7 +1480,7 @@ export default function Home() {
   }
 
   // New TraceDDS rail (supply-management IA). Items flagged `soon` are visible
-  // but disabled until their phase lands. Catalog + History stay live so nothing
+  // but disabled until their phase lands. Catalog + reorder history stay live so nothing
   // from the old IA becomes unreachable (Savings is kept but demoted).
   const navItems = [
     ["dashboard", "icon-home", "Dashboard", true],
@@ -1491,7 +1491,7 @@ export default function Home() {
     ["evidence", "icon-shield-check", "Evidence"],
     ["reports", "icon-chart", "Reports"],
     ["catalog", "icon-store", "Catalog"],
-    ["history", "icon-clock", "History"],
+    ["history", "icon-clock", "Reorder history"],
     ["settings", "icon-settings", "Settings"],
   ];
 
@@ -1877,7 +1877,7 @@ export default function Home() {
           )}
 
           {view === "history" && (
-            <HistoryView
+            <ReorderHistoryView
               archivedLists={archivedLists}
               onOpen={(id) => navigate(`/app/history/${id}`)}
               onReopen={reopenList}
@@ -1887,7 +1887,7 @@ export default function Home() {
           )}
 
           {view === "historyDetail" && (
-            <HistoryDetail
+            <ReorderHistoryDetail
               id={historyId}
               archivedLists={archivedLists}
               handoffs={handoffs}
