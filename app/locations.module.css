@@ -1453,7 +1453,9 @@
 /* ── Detail body grid ───────────────────────────────────────────────── */
 .detailGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
+  /* Right column is a constant width whether it holds the rail or the open lot
+     drawer, so the items table never reflows / jumps when a row is clicked. */
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 18px;
   align-items: start;
 }
@@ -1509,7 +1511,12 @@
   text-overflow: ellipsis;
   color: var(--ink);
 }
+.table tbody tr { cursor: pointer; }
 .table tbody tr:hover { background: #f6f9ff; }
+/* Open-row highlight — mirrors the reorder list's active row so clicking a row to
+   open its detail drawer reads the same on both surfaces. */
+.table tbody tr.rowActive { background: #eef4ff; }
+.table tbody tr.rowActive td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
 
 /* Fixed column widths so the 8 columns always fit the panel — no horizontal scroll. */
 .table th:nth-child(1), .table td:nth-child(1) { width: 25%; }   /* Item */
@@ -1633,7 +1640,9 @@
 
 /* Per-row kebab (last table column) → a small "Remove item" menu. The cell opts
    out of the table's overflow:hidden so the dropdown isn't clipped. */
-.actionsCell { overflow: visible; text-align: right; }
+/* Higher specificity than `.table td { overflow: hidden }` (used for ellipsis on
+   the other cells) so the row-action dropdown isn't clipped by its own cell. */
+.table td.actionsCell { overflow: visible; text-align: right; }
 .rowKebabWrap { position: relative; display: inline-flex; }
 .rowKebab {
   display: inline-flex;
@@ -1904,3 +1913,82 @@
 }
 .mSearchBar svg { width: 17px; height: 17px; color: #8a96a6; flex-shrink: 0; }
 .mSearchBar input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 15px; color: var(--ink); }
+
+/* ── Product / Lot Detail drawer ─────────────────────────────────────────
+   Content styling for the desktop lot drawer; the shell (head/body/foot, sticky)
+   comes from the shared global .crl-detail / .crl-drawer-*. The drawer fills the
+   same fixed-width rail column (.detailGrid), so opening it never shifts the
+   table. */
+
+/* Medium product image at the top of the drawer body — sizes ProductThumb's
+   global .crl-thumb up from its 40px default. */
+.lotMedia { display: flex; justify-content: center; padding: 2px 0 2px; }
+.lotMedia :global(.crl-thumb) { width: 160px; height: 160px; border-radius: 12px; }
+
+/* Editable lot + expiry */
+.lotEdit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lotField { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lotField span { font-size: 11px; color: var(--muted); }
+.lotField input {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); min-width: 0;
+}
+.lotField input:focus { outline: none; border-color: var(--blue); }
+.lotSave {
+  justify-self: start;
+  padding: 8px 14px; border: 1px solid var(--blue); border-radius: 8px;
+  background: var(--blue); color: #fff; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.lotSave:disabled { opacity: 0.5; cursor: default; }
+
+/* Identity / capture chips */
+.lotChips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lotChip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500;
+}
+.lotChip svg { width: 13px; height: 13px; }
+.lotChipOk { color: #0a8553; background: #e3f6ec; }
+.lotChipWarn { color: #b06a08; background: #fdf0d8; }
+
+/* Lifecycle ladder — the live stage lights up, the rest sit quiet. */
+.lifecycle { display: flex; flex-wrap: wrap; gap: 6px; }
+.lifeStage {
+  padding: 4px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); font-size: 11.5px; font-weight: 500;
+}
+.lifeStageOn { border-color: var(--blue); background: #e8efff; color: var(--blue); font-weight: 600; }
+.lotStatusLine { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+
+/* Lot fact grid — two columns of label/value pairs. */
+.lotGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.lotFact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lotFactLabel { font-size: 11px; color: var(--muted); }
+.lotFactValue { font-size: 13px; font-weight: 500; color: var(--ink); }
+
+/* Activity timeline (honest stub) */
+.timeline { display: flex; flex-direction: column; gap: 10px; }
+.timeEvent { display: flex; align-items: flex-start; gap: 10px; }
+.timeDot { width: 8px; height: 8px; margin-top: 5px; flex: 0 0 auto; border-radius: 999px; background: var(--blue); }
+.timeBody { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.timeText { font-size: 13px; color: var(--ink); }
+.timeMeta { font-size: 11.5px; color: var(--muted); }
+.timeEmpty {
+  padding: 10px 12px; border: 1px dashed var(--line); border-radius: 9px;
+  color: var(--muted); font-size: 12px; text-align: center;
+}
+
+/* Footer + inline drawer actions (Close + Print live in the shared shell foot). */
+.drawerPull {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 1px solid var(--gold); border-radius: 8px;
+  background: var(--surface); color: var(--gold); font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.drawerPull:hover { background: #fdf0d8; }
+.drawerRemove {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0; border: 0; background: none; color: var(--red); font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.drawerRemove svg { width: 15px; height: 15px; }

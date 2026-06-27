@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
 import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc } from "./lib";
-import { BuyingPreferencesCard, CandidateName, CandidateStock, ListStatusPill, MatchSupplier, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
+import { BuyingPreferencesCard, CandidateName, CandidateStock, DetailDrawer, ListStatusPill, MatchSupplier, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
   const [captured, setCaptured] = useState(false);
@@ -354,22 +354,23 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
   }
 
   return (
-    <aside className="crl-detail" role="region" aria-label={title}>
-      <header className="crl-drawer-head">
-        <div className="crl-drawer-title">
-          <span className="crl-drawer-shield"><Icon name="icon-shield-check" className="button-icon" /></span>
-          <div>
-            <h3>{title}</h3>
-            <p>{subtitle}</p>
-          </div>
-        </div>
-        <div className="crl-drawer-head-actions">
-          <button type="button" aria-label={wide ? "Collapse panel" : "Expand panel"} onClick={onToggleWide}><span aria-hidden="true">⤢</span></button>
-          <button type="button" aria-label="Close" onClick={onClose}><Icon name="icon-x" className="button-icon" /></button>
-        </div>
-      </header>
-
-      <div className="crl-drawer-body">
+    <DetailDrawer
+      label={title}
+      lead={<span className="crl-drawer-shield"><Icon name="icon-shield-check" className="button-icon" /></span>}
+      title={title}
+      subtitle={subtitle}
+      wide={wide}
+      onToggleWide={onToggleWide}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="crl-ghost-btn" type="button" onClick={onClose}>{isView ? "Close" : "Cancel"}</button>
+          {!searching && (
+            <button className="primary-action compact" type="button" onClick={confirm}>{isView ? "Update Match" : "Confirm Selected Match"}</button>
+          )}
+        </>
+      )}
+    >
         <section className="crl-drawer-section">
           <div className="crl-drawer-section-head">
             <span className="crl-drawer-label">Imported item</span>
@@ -508,16 +509,7 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
           <textarea className="crl-drawer-notes" maxLength={500} placeholder="Add a note about this item…" value={notes} onChange={(event) => setNotes(event.target.value)} />
           <div className="crl-drawer-notes-count">{notes.length} / 500</div>
         </section>
-
-      </div>
-
-      <footer className="crl-drawer-foot">
-        <button className="crl-ghost-btn" type="button" onClick={onClose}>{isView ? "Close" : "Cancel"}</button>
-        {!searching && (
-          <button className="primary-action compact" type="button" onClick={confirm}>{isView ? "Update Match" : "Confirm Selected Match"}</button>
-        )}
-      </footer>
-    </aside>
+    </DetailDrawer>
   );
 }
 
@@ -563,6 +555,25 @@ export function MobileReorderCard({ row, onOpen, onRemove }) {
   }
 
   const notFound = row.status === "Not found";
+  const sup = row.supplier && row.supplier !== "—" ? row.supplier : row.matchBrand;
+  const supplierLine = sup ? (
+    <small className="m-card-supplier">
+      {supplierLogoSrc(sup) && <img className="m-card-supplier-logo" src={supplierLogoSrc(sup)} alt="" />}
+      {sup.toLowerCase().includes("schein") ? "Henry Schein" : sup}
+    </small>
+  ) : null;
+  const right = (
+    <>
+      {notFound
+        ? <em className="m-conf nomatch">Not found</em>
+        : <em className={`m-conf ${mrConfTone(row.confidence)}`}>{row.confidence}%</em>}
+      {row.priceMissing
+        ? <small className="m-card-noprice">Price not listed</small>
+        : row.price != null && <strong>{mrMoney(row.price)}</strong>}
+      {!row.priceMissing && showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
+      {row.lineSavings > 0 && <small className="m-card-save">Save {mrMoney(row.lineSavings)}</small>}
+    </>
+  );
   return (
     <div className={`m-swipe ${open ? "open" : ""}`}>
       <button
@@ -575,42 +586,15 @@ export function MobileReorderCard({ row, onOpen, onRemove }) {
         <Icon name="icon-trash-ios" className="m-swipe-remove-icon" />
         <span>Remove</span>
       </button>
-      <button
-        className="m-card"
-        type="button"
+      <ProductCard
+        thumb={row.image}
+        title={row.matchName || row.importedName}
+        meta={[row.importedSub, supplierLine]}
+        right={right}
         onClick={handleClick}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        swipeProps={{ onTouchStart, onTouchMove, onTouchEnd }}
         style={{ transform: `translateX(${dx}px)`, transition: dragging.current ? "none" : "transform .2s ease" }}
-      >
-        <ProductThumb image={row.image} alt={row.matchName || row.importedName} />
-        <span className="m-card-body">
-          <strong>{row.matchName || row.importedName}</strong>
-          <small>{row.importedSub}</small>
-          {(() => {
-            const sup = row.supplier && row.supplier !== "—" ? row.supplier : row.matchBrand;
-            if (!sup) return null;
-            return (
-              <small className="m-card-supplier">
-                {supplierLogoSrc(sup) && <img className="m-card-supplier-logo" src={supplierLogoSrc(sup)} alt="" />}
-                {sup.toLowerCase().includes("schein") ? "Henry Schein" : sup}
-              </small>
-            );
-          })()}
-        </span>
-        <span className="m-card-right">
-          {notFound
-            ? <em className="m-conf nomatch">Not found</em>
-            : <em className={`m-conf ${mrConfTone(row.confidence)}`}>{row.confidence}%</em>}
-          {row.priceMissing
-            ? <small className="m-card-noprice">Price not listed</small>
-            : row.price != null && <strong>{mrMoney(row.price)}</strong>}
-          {!row.priceMissing && showPerEa(row.perEa, row.price) && <small>${mrEa(row.perEa)} / ea</small>}
-          {row.lineSavings > 0 && <small className="m-card-save">Save {mrMoney(row.lineSavings)}</small>}
-        </span>
-        <Icon name="icon-chevron-right" className="button-icon m-card-chev" />
-      </button>
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Fragment, useState, useEffect, useRef, useCallback } from "react";
 import { Icon } from "./icons";
 import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, supplierInitials, supplierLogoSrc } from "./lib";
 
@@ -429,6 +429,74 @@ export function ProductThumb({ image, alt }) {
     );
   }
   return <span className="crl-thumb crl-thumb-empty"><Icon name="icon-image" className="button-icon" /></span>;
+}
+
+
+// Shared mobile product card. Both the reorder list and the location items list
+// render their phone rows through this so the two surfaces read as one system:
+// a 44px thumbnail, a title with up to a few muted meta lines, a right-aligned
+// slot (price block on reorder, status badge on location), and a chevron. The
+// card is a tappable <button>; the caller owns what tapping does. `swipeProps` +
+// `style` let the reorder card layer its swipe-to-delete gesture on top without
+// the location list having to know about it. Uses the existing global `.m-card*`
+// classes, so no new styling.
+export function ProductCard({ thumb, thumbAlt, title, meta, right, onClick, swipeProps, style, className }) {
+  return (
+    <button
+      type="button"
+      className={`m-card ${className || ""}`}
+      onClick={onClick}
+      style={style}
+      {...(swipeProps || {})}
+    >
+      <ProductThumb image={thumb} alt={thumbAlt || title} />
+      <span className="m-card-body">
+        <strong>{title}</strong>
+        {(meta || []).filter(Boolean).map((line, i) =>
+          typeof line === "string"
+            ? <small key={i}>{line}</small>
+            : <Fragment key={i}>{line}</Fragment>,
+        )}
+      </span>
+      <span className="m-card-right">{right}</span>
+      <Icon name="icon-chevron-right" className="button-icon m-card-chev" />
+    </button>
+  );
+}
+
+// Shared right-docked detail drawer shell. The reorder match panel and the
+// location product/lot drawer both render through this so they share one
+// "drawer setup": a sticky header (lead node + title/subtitle + optional
+// wide-toggle + close), a scrollable body the caller fills with
+// `.crl-drawer-section`s, and an optional sticky footer for actions. Class names
+// are the existing global `.crl-drawer-*` (also driving the ≤767px full-screen
+// behaviour via `.crl-detail`), so adopting it changes no styling. `lead` is an
+// arbitrary node — reorder passes its green shield, location passes a product
+// thumbnail — keeping the header flexible per surface.
+export function DetailDrawer({ lead, title, subtitle, label, wide, onToggleWide, onClose, footer, children, className }) {
+  return (
+    <aside className={`crl-detail ${className || ""}`} role="region" aria-label={label || title}>
+      <header className="crl-drawer-head">
+        <div className="crl-drawer-title">
+          {lead}
+          <div>
+            <h3>{title}</h3>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+        </div>
+        <div className="crl-drawer-head-actions">
+          {onToggleWide && (
+            <button type="button" aria-label={wide ? "Collapse panel" : "Expand panel"} onClick={onToggleWide}><span aria-hidden="true">⤢</span></button>
+          )}
+          <button type="button" aria-label="Close" onClick={onClose}><Icon name="icon-x" className="button-icon" /></button>
+        </div>
+      </header>
+
+      <div className="crl-drawer-body">{children}</div>
+
+      {footer && <footer className="crl-drawer-foot">{footer}</footer>}
+    </aside>
+  );
 }
 
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { daysUntil, formatTraceDate, money, SWIPE_REVEAL, traceApi, traceErrorMessage } from "./lib";
-import { ConfirmModal, ProductSearchResults, ProductThumb, useProductSearch } from "./ui";
+import { ConfirmModal, DetailDrawer, ProductSearchResults, ProductThumb, useProductSearch } from "./ui";
 import s from "./locations.module.css";
 import rs from "./scanmobile.module.css";
 
@@ -956,6 +956,176 @@ function missingHint(it) {
   return "Add details";
 }
 
+// Right-docked Product / Lot Detail drawer — the location surface's counterpart
+// to the reorder match panel, rendered through the same shared DetailDrawer shell
+// so the two surfaces share one drawer setup. Mirrors the "Product / Lot Detail"
+// wireframe: identity + capture status chips, a lifecycle ladder, a lot-fact
+// grid, an identify section for unlinked scans, and an activity timeline. Fields
+// the backend can't supply yet (received date, supplier-on-lot, full history)
+// show an honest placeholder rather than fabricated data.
+function ProductLotDrawer({ item, location, onClose, onIdentifyPick, onSaveLot, onPull, onRemove, onNavigate, onToast }) {
+  const { query, setQuery, results, loading } = useProductSearch(true);
+  const st = itemStatus(item);
+  const lc = item.lifecycle || deriveLifecycleClient(item);
+  const unidentified = isUnidentified(item);
+  const price = formatPriceRange(item);
+
+  // Editable lot + expiry — the traceability fields a scan often misses, so they
+  // can be corrected here (the loudest case is a "Needs details" / Needs Attention
+  // item). PATCHes the same evidence record the scanner's post-scan drawer writes.
+  const expInput = item.expiration_date ? item.expiration_date.slice(0, 10) : "";
+  const [lot, setLot] = useState(item.lot_number || "");
+  const [exp, setExp] = useState(expInput);
+  const [savingLot, setSavingLot] = useState(false);
+  const lotDirty = lot.trim() !== (item.lot_number || "") || exp !== expInput;
+  async function saveLot() {
+    setSavingLot(true);
+    try {
+      await onSaveLot?.(item, { lot_number: lot.trim() || null, expiration_date: exp || null });
+      onToast?.("Lot & expiry updated");
+    } catch {
+      onToast?.("Couldn't update lot & expiry.");
+    }
+    setSavingLot(false);
+  }
+
+  const chips = [
+    { label: unidentified ? "Unidentified" : "Identified", ok: !unidentified },
+    { label: item.lot_number ? "Lot captured" : "Lot missing", ok: Boolean(item.lot_number) },
+    { label: item.expiration_date ? "Expiry captured" : "Expiry missing", ok: Boolean(item.expiration_date) },
+  ];
+
+  const LIFECYCLE = [
+    { key: "active", label: "Active" },
+    { key: "expiring", label: "Expiring soon" },
+    { key: "expired", label: "Expired" },
+    { key: "pulled", label: "Pulled" },
+  ];
+
+  const facts = [
+    { label: "Est. quantity", value: item.quantity_on_hand ?? 0 },
+    { label: "Price range", value: price || "—" },
+    { label: "Last scanned", value: item.last_counted_at ? formatTraceDate(item.last_counted_at) : "—" },
+    { label: "Location", value: location?.name || "—" },
+    { label: "Received", value: "—", stub: true },
+    { label: "Supplier", value: "—", stub: true },
+  ];
+
+  const footer = (
+    <>
+      <button className="crl-ghost-btn" type="button" onClick={onClose}>Close</button>
+      {lc === "expired" && (
+        <button className={s.drawerPull} type="button" onClick={() => { onPull?.(item); onClose(); }}>Mark pulled</button>
+      )}
+      <button className="primary-action compact" type="button" onClick={() => onToast?.("Label printing lands in an upcoming phase.")}>Print label</button>
+    </>
+  );
+
+  return (
+    <DetailDrawer
+      label="Product / lot detail"
+      title={item.name || "Unidentified item"}
+      subtitle={[item.lot_number ? `Lot ${item.lot_number}` : null, location?.name].filter(Boolean).join(" · ") || "Scanned item"}
+      onClose={onClose}
+      footer={footer}
+    >
+      <div className={s.lotMedia}>
+        <ProductThumb image={item.image_url || item.photo_url} alt={item.name} />
+      </div>
+
+      <section className="crl-drawer-section">
+        <div className={s.lotChips}>
+          {chips.map((c) => (
+            <span key={c.label} className={`${s.lotChip} ${c.ok ? s.lotChipOk : s.lotChipWarn}`}>
+              <Icon name={c.ok ? "icon-check-circle" : "icon-alert-triangle"} />{c.label}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="crl-drawer-section">
+        <span className="crl-drawer-label">Lifecycle</span>
+        <div className={s.lifecycle}>
+          {LIFECYCLE.map((stage) => (
+            <span key={stage.key} className={`${s.lifeStage} ${stage.key === lc ? s.lifeStageOn : ""}`}>{stage.label}</span>
+          ))}
+        </div>
+        <div className={s.lotStatusLine}>Current status <span className={`${s.badge} ${PILL_TONE[st.tone]}`}>{st.label}</span></div>
+      </section>
+
+      <section className="crl-drawer-section">
+        <span className="crl-drawer-label">Lot &amp; expiry</span>
+        <p className="crl-drawer-hint">Correct the lot number or expiration captured for this item.</p>
+        <div className={s.lotEdit}>
+          <label className={s.lotField}>
+            <span>Lot number</span>
+            <input type="text" value={lot} onChange={(e) => setLot(e.target.value)} placeholder="e.g. 20240118" />
+          </label>
+          <label className={s.lotField}>
+            <span>Expiration</span>
+            <input type="date" value={exp} onChange={(e) => setExp(e.target.value)} />
+          </label>
+        </div>
+        <button type="button" className={s.lotSave} onClick={saveLot} disabled={savingLot || !lotDirty}>
+          {savingLot ? "Saving…" : "Save lot & expiry"}
+        </button>
+      </section>
+
+      <section className="crl-drawer-section">
+        <span className="crl-drawer-label">Lot details</span>
+        <div className={s.lotGrid}>
+          {facts.map((f) => (
+            <div key={f.label} className={s.lotFact}>
+              <span className={s.lotFactLabel}>{f.label}</span>
+              <span className={`${s.lotFactValue} ${f.stub || f.value === "—" ? s.tMuted : ""}`}>{f.value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {unidentified ? (
+        <section className="crl-drawer-section">
+          <span className="crl-drawer-label">Identify this item</span>
+          <p className="crl-drawer-hint">Link this scan to a catalog product to price it and start its compliance record.</p>
+          <label className="crl-search crl-drawer-search">
+            <Icon name="icon-search" className="button-icon" />
+            <input type="search" placeholder="Search the catalog…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
+          </label>
+          <ProductSearchResults query={query} results={results} loading={loading} onPick={onIdentifyPick} emptyHint="Type a product name to link it." />
+        </section>
+      ) : item.canonical_product_id ? (
+        <section className="crl-drawer-section">
+          <button type="button" className="crl-drawer-link" onClick={() => onNavigate?.(`/app/product/${item.canonical_product_id}`)}>
+            <Icon name="icon-arrow-right" className="button-icon" />View this product in the catalog
+          </button>
+        </section>
+      ) : null}
+
+      <section className="crl-drawer-section">
+        <span className="crl-drawer-label">Activity</span>
+        <div className={s.timeline}>
+          {item.last_counted_at && (
+            <div className={s.timeEvent}>
+              <span className={s.timeDot} />
+              <div className={s.timeBody}>
+                <span className={s.timeText}>Scanned at {location?.name || "this location"}</span>
+                <span className={s.timeMeta}>{relativeTime(item.last_counted_at) || formatTraceDate(item.last_counted_at)}</span>
+              </div>
+            </div>
+          )}
+          <div className={s.timeEmpty}>Full scan &amp; evidence history lands in an upcoming phase.</div>
+        </div>
+      </section>
+
+      <section className="crl-drawer-section">
+        <button type="button" className={s.drawerRemove} onClick={() => { onRemove?.(item); onClose(); }}>
+          <Icon name="icon-trash" />Remove this item
+        </button>
+      </section>
+    </DetailDrawer>
+  );
+}
+
 export function LocationDetailView({ locationId, onBack, onStartScan, onToast, onNavigate }) {
   const [location, setLocation] = useState(null);
   const [items, setItems] = useState([]);
@@ -963,7 +1133,8 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [traceFilter, setTraceFilter] = useState("all");
-  const [identify, setIdentify] = useState(null); // the unidentified item being linked
+  const [identify, setIdentify] = useState(null); // unidentified item linked via the mobile review modal
+  const [selected, setSelected] = useState(null); // item whose desktop lot-detail drawer is open
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -1086,9 +1257,9 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     }
   };
   // Link a catalog product to an unidentified scan, then re-derive its status.
-  const onIdentifyPick = async (product) => {
-    const target = identify;
-    setIdentify(null);
+  // Shared by the mobile review modal (onIdentifyPick, reads `identify`) and the
+  // desktop lot drawer (onDrawerIdentify, reads `selected`).
+  const identifyItem = async (target, product) => {
     if (!target) return;
     const best = product.best_offer || product.offers?.[0] || null;
     const id = product.id || "";
@@ -1103,6 +1274,16 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     } catch {
       onToast?.("Couldn't identify that item.");
     }
+  };
+  const onIdentifyPick = async (product) => { const target = identify; setIdentify(null); await identifyItem(target, product); };
+  const onDrawerIdentify = async (product) => { const target = selected; setSelected(null); await identifyItem(target, product); };
+  // Save a lot/expiry correction from the drawer: PATCH, then merge into the open
+  // item so its chips/lifecycle re-derive, and refresh the table. Throws on failure
+  // so the drawer can surface its own toast.
+  const onSaveLot = async (it, patch) => {
+    await traceApi.updateItem(it.id, patch);
+    setSelected((prev) => (prev && prev.id === it.id ? { ...prev, ...patch } : prev));
+    reload();
   };
   // "Clear list" permanently deletes every item captured here. It's a real
   // backend wipe (not a view-only blank), so it sticks and syncs to every device
@@ -1374,13 +1555,11 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                       const lc = it.lifecycle || deriveLifecycleClient(it);
                       const price = formatPriceRange(it);
                       return (
-                        <tr key={it.id}>
+                        <tr key={it.id} className={selected?.id === it.id ? s.rowActive : ""} onClick={() => setSelected(it)} title="Open lot detail">
                           <td>
                             <div className={s.tItemCell}>
                               <ProductThumb image={it.image_url || it.photo_url} alt={it.name} />
-                              {it.canonical_product_id ? (
-                                <button type="button" className={s.tItemLink} onClick={() => onNavigate?.(`/app/product/${it.canonical_product_id}`)} title="View this product in the catalog">{it.name}</button>
-                              ) : <span className={s.tItem}>{it.name}</span>}
+                              <span className={s.tItemLink}>{it.name}</span>
                             </div>
                           </td>
                           <td>
@@ -1393,11 +1572,11 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
                             <span className={`${s.badge} ${PILL_TONE[st.tone]}`}>{st.label}</span>
                           </td>
                           <td className={s.tMuted}>{it.last_counted_at ? formatTraceDate(it.last_counted_at) : "—"}</td>
-                          <td className={s.actionsCell}>
+                          <td className={s.actionsCell} onClick={(e) => e.stopPropagation()}>
                             <RowActions
                               onRemove={() => onRemove(it)}
                               onPull={lc === "expired" ? () => onPull(it) : undefined}
-                              onIdentify={isUnidentified(it) ? () => setIdentify(it) : undefined}
+                              onIdentify={isUnidentified(it) ? () => setSelected(it) : undefined}
                             />
                           </td>
                         </tr>
@@ -1410,6 +1589,20 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
           </section>
         </div>
 
+        {selected ? (
+          <ProductLotDrawer
+            key={selected.id}
+            item={selected}
+            location={location}
+            onClose={() => setSelected(null)}
+            onIdentifyPick={onDrawerIdentify}
+            onSaveLot={onSaveLot}
+            onPull={onPull}
+            onRemove={onRemove}
+            onNavigate={onNavigate}
+            onToast={onToast}
+          />
+        ) : (
         <aside className={s.detailRail}>
           <section className={s.railCard}>
             <h2 className={s.railTitle}>Issues in this location</h2>
@@ -1459,6 +1652,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
             </button>
           </section>
         </aside>
+        )}
       </div>
 
       {confirmingClear && (
