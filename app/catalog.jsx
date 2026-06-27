@@ -1113,13 +1113,16 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   // (wholesale/MOQ pricing isn't directly comparable). Shown in their own section.
   const marketplaceListings = product.marketplace_listings || [];
 
+  // When a variant selector is shown, its axis (e.g. Size for gloves) is already
+  // chosen above — don't repeat that attribute as a description chip.
+  const variantChipLabel = variants.length > 1 ? variantGroupLabel : null;
   const chips = [
     attrs.size && ["Size", titleCase(attrs.size)],
     attrs.family && ["Type", titleCase(attrs.family)],
     brand && ["Brand", brand],
     packSize !== "—" && ["Pack", packSize],
     product.category && ["Category", product.category],
-  ].filter(Boolean).slice(0, 5);
+  ].filter(Boolean).filter(([label]) => label !== variantChipLabel).slice(0, 5);
 
   const specs = [
     ["Category", product.category],
