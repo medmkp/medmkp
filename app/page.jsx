@@ -1483,9 +1483,8 @@ export default function Home() {
   // but disabled until their phase lands. Catalog + reorder history stay live so nothing
   // from the old IA becomes unreachable (Savings is kept but demoted).
   const navItems = [
-    ["dashboard", "icon-home", "Dashboard", true],
-    ["needsAttention", "icon-alert-triangle", "Needs attention", false, NEEDS_ATTENTION_BADGE],
-    ["home", "icon-cart", "Reorder list"],
+    ["home", "icon-home", "Dashboard", false, NEEDS_ATTENTION_BADGE],
+    ["reorderList", "icon-cart", "Reorder list"],
     ["locations", "icon-map-pin", "Locations"],
     ["savings", "icon-dollar-circle", "Savings"],
     ["evidence", "icon-shield-check", "Evidence"],
@@ -1646,7 +1645,7 @@ export default function Home() {
                 <div className="topbar-alerts-menu" role="menu">
                   <div className="topbar-menu-head">
                     <strong>Alerts</strong>
-                    <small>{alerts.length ? `${alerts.length} on your reorder list` : "Nothing needs attention"}</small>
+                    <small>{alerts.length ? `${alerts.length} on your dashboard` : "Nothing needs attention"}</small>
                   </div>
                   {alerts.length === 0 ? (
                     <div className="topbar-alerts-empty">
@@ -1682,7 +1681,7 @@ export default function Home() {
                         type="button"
                         onClick={() => { setAlertsOpen(false); setView("home"); }}
                       >
-                        {alerts.length > 6 ? `View all ${alerts.length} on your list` : "Open reorder list"}
+                        {alerts.length > 6 ? `View all ${alerts.length} on dashboard` : "Open dashboard"}
                         <Icon name="icon-arrow-right" className="button-icon" />
                       </button>
                     </>
@@ -1774,13 +1773,11 @@ export default function Home() {
               // the center Scan FAB returns here.
               scanStartEl
             ) : (
-              reorderListEl
+              <NeedsAttentionView onToast={showToast} />
             )
           )}
 
           {view === "reorderList" && reorderListEl}
-
-          {view === "needsAttention" && <NeedsAttentionView onToast={showToast} />}
 
           {view === "locations" && (
             <LocationsBoardView
