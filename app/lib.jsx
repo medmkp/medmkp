@@ -52,6 +52,7 @@ export const routeByView = {
   needsAttention: "/app/needs-attention",
   reorderList: "/app/reorder-list",
   locations: "/app/locations",
+  officeLayout: "/app/locations/office-layout",
   locationAdd: "/app/locations/new",
   qrLabels: "/app/locations/qr-labels",
   scanner: "/app/scan-session",
@@ -105,6 +106,7 @@ export function viewFromPath(pathname = "/") {
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
   if (path === "/app/locations/new") return { view: "locationAdd", isLoggedIn: true };
   if (path === "/app/locations/qr-labels") return { view: "qrLabels", isLoggedIn: true };
+  if (path === "/app/locations/office-layout") return { view: "officeLayout", isLoggedIn: true };
   if (path.startsWith("/app/locations/")) return { view: "locationDetail", isLoggedIn: true, locationId: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/locations") return { view: "locations", isLoggedIn: true };
   if (path === "/app/savings") return { view: "savings", isLoggedIn: true };
