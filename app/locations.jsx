@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
-import { daysUntil, formatTraceDate, money, traceApi, traceErrorMessage } from "./lib";
+import { daysUntil, formatTraceDate, money, SWIPE_REVEAL, traceApi, traceErrorMessage } from "./lib";
 import { ConfirmModal, ProductSearchResults, ProductThumb, useProductSearch } from "./ui";
 import s from "./locations.module.css";
+import rs from "./scanmobile.module.css";
 
 // Locations surface: the Location Board (real per-practice locations with scan
 // coverage), the Add Location form (creates a real location), and the per-
@@ -860,6 +861,101 @@ function RowActions({ onRemove, onPull, onIdentify }) {
   );
 }
 
+// Swipe a review row left to reveal a Remove action (matches the reorder list +
+// the old scan-session review). The front layer rides on .revRow and translates
+// under the thumb; the red Remove sits flush to the screen edge. Ported from the
+// pre-consolidation MobileScanSession so the phone's location review keeps the
+// exact look + gesture it had before.
+function SwipeRow({ onRemove, children }) {
+  const [dx, setDx] = useState(0);
+  const [open, setOpen] = useState(false);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const dragging = useRef(false);
+  const moved = useRef(false);
+
+  function onTouchStart(event) {
+    const touch = event.touches[0];
+    startX.current = touch.clientX;
+    startY.current = touch.clientY;
+    dragging.current = true;
+    moved.current = false;
+  }
+  function onTouchMove(event) {
+    if (!dragging.current) return;
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - startX.current;
+    const deltaY = touch.clientY - startY.current;
+    if (!moved.current && Math.abs(deltaX) < Math.abs(deltaY)) { dragging.current = false; return; }
+    if (Math.abs(deltaX) > 6) moved.current = true;
+    const base = open ? -SWIPE_REVEAL : 0;
+    setDx(Math.min(0, Math.max(-SWIPE_REVEAL, base + deltaX)));
+  }
+  function onTouchEnd() {
+    if (!dragging.current && !moved.current) return;
+    dragging.current = false;
+    const shouldOpen = dx <= -SWIPE_REVEAL / 2;
+    setOpen(shouldOpen);
+    setDx(shouldOpen ? -SWIPE_REVEAL : 0);
+  }
+  function onClickCapture(event) {
+    if (moved.current) { event.preventDefault(); event.stopPropagation(); moved.current = false; }
+  }
+
+  return (
+    <div className={`${rs.swipeWrap} ${open ? rs.swipeOpen : ""}`}>
+      <button
+        type="button"
+        className={rs.swipeRemove}
+        tabIndex={open ? 0 : -1}
+        aria-label="Remove item"
+        onClick={() => { setOpen(false); setDx(0); onRemove(); }}
+      >
+        <Icon name="icon-trash-ios" />
+        <span>Remove</span>
+      </button>
+      <div
+        className={rs.revRow}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onClickCapture={onClickCapture}
+        style={{ transform: `translateX(${dx}px)`, transition: dragging.current ? "none" : "transform .2s ease" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// One collapsible review band (Needs review / Missing details / Confirmed) with a
+// colored title carrying the inline count, matching the pre-consolidation design.
+function ReviewGroup({ tone, icon, title, count, red, defaultOpen = true, forceOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (!count) return null;
+  // A search in progress expands every group so matches aren't hidden inside a
+  // collapsed band; clearing the search restores the user's own toggle state.
+  const isOpen = forceOpen || open;
+  return (
+    <section className={`${rs.section} ${red ? rs.sectionRed : ""}`}>
+      <button type="button" className={rs.secHead} onClick={() => setOpen((v) => !v)} aria-expanded={isOpen}>
+        <span className={`${rs.secHeadIcon} ${tone}`}><Icon name={icon} /></span>
+        <span className={`${rs.secTitle} ${tone}`}>{title} ({count})</span>
+        <span className={`${rs.secToggle} ${isOpen ? rs.secToggleOpen : ""}`}><Icon name="icon-chevron-down" /></span>
+      </button>
+      {isOpen && <div className={rs.revList}>{children}</div>}
+    </section>
+  );
+}
+
+// What's missing on an identified-but-incomplete lot, for the amber result pill.
+function missingHint(it) {
+  if (!it.lot_number && !it.expiration_date) return "Add lot & expiry";
+  if (!it.expiration_date) return "Add expiration";
+  if (!it.lot_number) return "Add lot";
+  return "Add details";
+}
+
 export function LocationDetailView({ locationId, onBack, onStartScan, onToast, onNavigate }) {
   const [location, setLocation] = useState(null);
   const [items, setItems] = useState([]);
@@ -1029,80 +1125,106 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     }
   };
 
-  // Phone surface: a card list of everything captured at this location (the
-  // desktop table doesn't fit a 390px screen). This is where the scanner exits
-  // to, so the tech immediately sees what they just scanned for the room.
+  // Phone surface: the scan review the scanner exits to — full-screen, grouped
+  // into Needs review / Missing details / Confirmed. Restores the look + gesture
+  // of the pre-consolidation MobileScanSession review, now derived live from the
+  // location's own items (no scan session) and reusing its CSS module.
   if (isMobile) {
+    // visibleItems is the recency-sorted full list here (no mobile filters), so
+    // fresh phone scans float to the top of each group as they land.
+    const review = visibleItems.filter((it) => isUnidentified(it));
+    const needDetails = visibleItems.filter((it) => !isUnidentified(it) && (!it.lot_number || !it.expiration_date));
+    const confirmed = visibleItems.filter((it) => !isUnidentified(it) && it.lot_number && it.expiration_date);
+    const PILL = { green: rs.pillGreen, amber: rs.pillAmber, red: rs.pillRed, slate: rs.pillAmber };
+
+    const thumb = (it, fallbackIcon) => (
+      <span className={rs.revThumb}>
+        {it.image_url || it.photo_url ? <img src={it.image_url || it.photo_url} alt="" /> : <Icon name={fallbackIcon} />}
+      </span>
+    );
+
+    const q = query.trim();
     return (
-      <div className={s.mDetail}>
-        <header className={s.mHead}>
-          <button type="button" className={s.mBackBtn} onClick={() => onBack?.()} aria-label="Back to locations">
-            <Icon name="icon-chevron-left" />
-          </button>
-          <span className={s.mHeadTitle}>{location.name}</span>
-          <span className={s.mHeadSpacer} />
+      <div className={`${rs.screen} ${rs.reviewScroll}`}>
+        <header className={`${rs.topbar} ${rs.reviewTopbar}`}>
+          <button type="button" className={rs.iconBtn} onClick={() => onBack?.()} aria-label="Back to locations"><Icon name="icon-chevron-left" /></button>
+          <div className={s.mTitleStack}>
+            <span className={rs.barTitle}>{location.name}</span>
+            <span className={s.mTitleSub}>{meta.label} · {items.length} item{items.length === 1 ? "" : "s"}</span>
+          </div>
         </header>
-        <div className={s.mBody}>
-          <div className={s.mLocCard}>
-            <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>
-            <div className={s.mLocText}>
-              <span className={s.mLocName}>{location.name}</span>
-              <span className={s.mLocSub}>{meta.label}{location.qr_code ? ` · ${location.qr_code}` : ""}</span>
-            </div>
-            <span className={`${s.badge} ${status.badge}`}>{status.label}</span>
-          </div>
 
-          <button type="button" className={s.mScanBtn} onClick={() => onStartScan?.()}>
-            <Icon name="icon-scan" /> Scan this location
-          </button>
-
-          <div className={s.mStats}>
-            <div className={s.mStat}><span className={s.mStatVal}>{top.tracked}</span><span className={s.mStatLabel}>Items</span></div>
-            <div className={s.mStat}><span className={s.mStatVal}>{tracePct}%</span><span className={s.mStatLabel}>Lot &amp; expiry</span></div>
-            <div className={s.mStat}><span className={s.mStatVal}>{top.expiring}</span><span className={s.mStatLabel}>Expiring</span></div>
-            <div className={s.mStat}><span className={s.mStatVal}>{top.expired}</span><span className={s.mStatLabel}>Pull now</span></div>
-          </div>
-
-          <div className={s.mListHead}>
-            <h2 className={s.mListTitle}>Items in this location</h2>
-            <span className={s.mListCount}>{items.length}</span>
-          </div>
-
+        <div className={`${rs.body} ${rs.reviewBodyScroll}`}>
           {items.length > 0 && (
-            <label className={s.mSearch}>
+            <label className={s.mSearchBar}>
               <Icon name="icon-search" />
-              <input type="search" placeholder="Search items…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search items" />
+              <input type="search" placeholder="Search items or lots…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search items" />
             </label>
           )}
 
           {items.length === 0 ? (
-            <div className={s.mEmpty}>No items captured here yet. Scan this location to build its inventory.</div>
+            <div className={rs.banner}><Icon name="icon-info" /> Nothing scanned here yet. Tap “Scan this location” below to capture it.</div>
+          ) : visibleItems.length === 0 ? (
+            <div className={rs.banner}><Icon name="icon-info" /> No items match “{q}”.</div>
           ) : (
-            <div className={s.mItemList}>
-              {visibleItems.map((it) => {
-                const st = itemStatus(it);
-                return (
-                  <button
-                    key={it.id}
-                    type="button"
-                    className={s.mItem}
-                    onClick={() => it.canonical_product_id && onNavigate?.(`/app/product/${it.canonical_product_id}`)}
-                  >
-                    <ProductThumb image={it.image_url || it.photo_url} alt={it.name} />
-                    <div className={s.mItemBody}>
-                      <span className={s.mItemName}>{it.name}</span>
-                      <span className={s.mItemMeta}>
-                        {it.lot_number ? `Lot ${it.lot_number}` : "No lot"} · {it.expiration_date ? `Exp ${formatTraceDate(it.expiration_date)}` : "No expiry"}
-                      </span>
-                      <span className={s.mItemMeta}>Est. qty {it.quantity_on_hand ?? 0}</span>
+            <>
+              <ReviewGroup tone={rs.txRed} icon="icon-alert-triangle" title="Needs review" count={review.length} red forceOpen={Boolean(q)}>
+                {review.map((it) => (
+                  <SwipeRow key={it.id} onRemove={() => onRemove(it)}>
+                    {thumb(it, "icon-alert-triangle")}
+                    <div className={rs.revBody}>
+                      <span className={rs.revName}>{it.name || it.barcode || "Unidentified item"}</span>
+                      <span className={rs.revMeta}>{it.barcode ? `Barcode ${it.barcode}` : "No catalog match"}</span>
+                      <span className={rs.revLoc}><Icon name="icon-map-pin" /> {location.name}</span>
                     </div>
-                    <span className={`${s.badge} ${PILL_TONE[st.tone]}`}>{st.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+                    <button type="button" className={rs.revBtn} onClick={() => setIdentify(it)}>Review</button>
+                  </SwipeRow>
+                ))}
+              </ReviewGroup>
+
+              <ReviewGroup tone={rs.txAmber} icon="icon-clock" title="Missing details" count={needDetails.length} forceOpen={Boolean(q)}>
+                {needDetails.map((it) => (
+                  <SwipeRow key={it.id} onRemove={() => onRemove(it)}>
+                    {thumb(it, "icon-clock")}
+                    <div className={rs.revBody}>
+                      <span className={rs.revName}>{it.name}</span>
+                      <span className={rs.revMeta}>{it.lot_number ? `Lot ${it.lot_number}` : "No lot"}</span>
+                    </div>
+                    <div className={rs.revRight}>
+                      <span className={`${rs.resultPill} ${rs.pillAmber}`}>{missingHint(it)}</span>
+                    </div>
+                  </SwipeRow>
+                ))}
+              </ReviewGroup>
+
+              <ReviewGroup tone={rs.txGreen} icon="icon-check-circle" title="Confirmed" count={confirmed.length} defaultOpen={confirmed.length <= 8} forceOpen={Boolean(q)}>
+                {confirmed.map((it) => {
+                  const st = itemStatus(it);
+                  return (
+                    <SwipeRow key={it.id} onRemove={() => onRemove(it)}>
+                      {thumb(it, "icon-check-circle")}
+                      <div className={rs.revBody}>
+                        <span className={rs.revName}>{it.name}</span>
+                        <span className={rs.revMeta}>Lot {it.lot_number} · Exp {formatTraceDate(it.expiration_date)}</span>
+                      </div>
+                      <span className={`${rs.resultPill} ${PILL[st.tone] || rs.pillGreen}`}>
+                        {st.tone === "green" ? <Icon name="icon-check-circle" /> : null}{st.label}
+                      </span>
+                    </SwipeRow>
+                  );
+                })}
+              </ReviewGroup>
+            </>
           )}
         </div>
+
+        <div className={`${rs.footer} ${rs.reviewFooter}`}>
+          <button type="button" className={rs.btnPrimary} style={{ flex: 1 }} onClick={() => onStartScan?.()}><Icon name="icon-scan" /> Scan this location</button>
+        </div>
+
+        {identify && (
+          <IdentifyModal item={identify} onClose={() => setIdentify(null)} onPick={onIdentifyPick} />
+        )}
       </div>
     );
   }
