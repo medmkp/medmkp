@@ -1487,7 +1487,6 @@ export default function Home() {
     ["needsAttention", "icon-alert-triangle", "Needs attention", false, NEEDS_ATTENTION_BADGE],
     ["home", "icon-cart", "Reorder list"],
     ["locations", "icon-map-pin", "Locations"],
-    ["scanner", "icon-scan", "Scan"],
     ["savings", "icon-dollar-circle", "Savings"],
     ["evidence", "icon-shield-check", "Evidence"],
     ["reports", "icon-chart", "Reports"],
