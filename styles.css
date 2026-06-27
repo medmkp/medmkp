@@ -10838,12 +10838,78 @@ th {
 .ol-title { margin: 0 0 4px; font-size: 24px; font-weight: 600; color: var(--ink); }
 .ol-lede { margin: 0; max-width: 56ch; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .ol-add { white-space: nowrap; }
+.ol-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ol-save-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.ol-save-status.dirty {
+  border-color: color-mix(in srgb, var(--gold) 32%, var(--line));
+  background: color-mix(in srgb, var(--gold) 12%, var(--surface));
+  color: var(--gold);
+}
+.ol-alert,
+.ol-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ol-alert {
+  border-color: color-mix(in srgb, var(--red) 28%, var(--line));
+  background: color-mix(in srgb, var(--red) 8%, var(--surface));
+  color: var(--ink);
+}
+.ol-alert .nav-icon {
+  color: var(--red);
+  flex: 0 0 auto;
+}
 
 .ol-board {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: 18px;
   align-items: start;
+}
+
+.ol-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  text-align: center;
+}
+.ol-state .nav-icon { width: 24px; height: 24px; color: var(--blue); }
+.ol-state strong { color: var(--ink); font-size: 15px; font-weight: 600; }
+.ol-state p { margin: 0; max-width: 40ch; font-size: 13px; line-height: 1.5; }
+.ol-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 /* Snap-to-grid canvas */
@@ -10967,9 +11033,100 @@ th {
   text-align: center;
 }
 
+.ol-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ol-detail.empty {
+  align-items: center;
+  padding: 20px 14px;
+  text-align: center;
+}
+.ol-detail-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: var(--blue);
+  background: var(--blue-2);
+}
+.ol-detail-empty-icon .nav-icon { width: 21px; height: 21px; }
+.ol-detail h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.ol-detail p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ol-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.ol-detail-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  flex: 0 0 auto;
+}
+.ol-detail-icon .nav-icon { width: 22px; height: 22px; }
+.ol-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.ol-detail-stats div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.ol-detail-stats .wide { grid-column: 1 / -1; }
+.ol-detail-stats dt {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ol-detail-stats dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ol-detail-stats dd.attention { color: var(--gold); }
+.ol-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ol-detail-actions .primary-action,
+.ol-detail-actions .secondary-action {
+  width: 100%;
+  justify-content: center;
+}
 @media (max-width: 900px) {
   .ol-board { grid-template-columns: 1fr; }
-  .ol-tray { order: -1; }
+  .ol-rail { order: -1; }
 }
 
 /* ===== Phase 3 — Evidence audit packet (print) ===== */

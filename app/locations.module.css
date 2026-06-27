@@ -339,6 +339,40 @@
   margin-left: auto;
 }
 
+.viewToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.viewToggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.viewToggle button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.viewToggle button.viewToggleActive {
+  background: var(--blue-2);
+  color: var(--blue);
+}
+
 /* The toolbar buttons have no vertical padding (they were sized by stretching
    to match the search/filter row). With those hidden on mobile — and the row
    wrapping on desktop — they collapse to text height, so give them a normal

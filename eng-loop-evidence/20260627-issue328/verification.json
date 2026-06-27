@@ -1,0 +1,26 @@
+{
+  "dataSource": "Read-only DATABASE_URL query, practice mdp_01KV9Z08PSDY3WFGK53YEF4CQV; browser API responses stubbed with that real sample because no test credentials were available.",
+  "beforeText": "⌘K\nEL\nEng Loop\nBright Smiles Dental\nDashboard\nSOON\nNeeds attention\n14\nReorder list\nLocations\nScan\nSavings\nEvidence\nReports\nCatalog\nHistory\nSettings\nCollapse\nLocation not found.\nCouldn't load this location.\nPDF\nDOC\nXLS\ndetached\n· DB: PROD\n· :3034",
+  "selected": {
+    "id": "loc_01KVSG4YPF3BCK4MMGM13M7FF6",
+    "name": "Hygiene Cabinet",
+    "item_count": 21,
+    "needs_attention_count": 18,
+    "last_scanned_at": "2026-06-27T05:40:52.384Z"
+  },
+  "detailIncludes": {
+    "name": true,
+    "type": true,
+    "items": true,
+    "attention": true,
+    "lastScanned": true,
+    "openAction": true,
+    "scanAction": true
+  },
+  "openUrl": "http://localhost:3033/app/locations/loc_01KVSG4YPF3BCK4MMGM13M7FF6",
+  "scanUrl": "http://localhost:3033/app/scan-session?location=loc_01KVSG4YPF3BCK4MMGM13M7FF6",
+  "consoleErrors": {
+    "before": [],
+    "after": []
+  }
+}

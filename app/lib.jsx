@@ -106,6 +106,8 @@ export function viewFromPath(pathname = "/") {
   if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
   if (path === "/app/locations/new") return { view: "locationAdd", isLoggedIn: true };
   if (path === "/app/locations/qr-labels") return { view: "qrLabels", isLoggedIn: true };
+  if (path === "/app/office-layout") return { view: "officeLayout", isLoggedIn: true };
+  if (path === "/app/locations/layout") return { view: "officeLayout", isLoggedIn: true };
   if (path === "/app/locations/office-layout") return { view: "officeLayout", isLoggedIn: true };
   if (path.startsWith("/app/locations/")) return { view: "locationDetail", isLoggedIn: true, locationId: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/locations") return { view: "locations", isLoggedIn: true };
@@ -886,6 +888,7 @@ export const traceApi = {
   createLocation: (body) => traceFetch("/api/locations", jsonBody("POST", body)),
   getLocation: (id) => traceFetch(`/api/locations/${encodeURIComponent(id)}`),
   updateLocation: (id, body) => traceFetch(`/api/locations/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),
+  saveLocationLayout: (positions) => traceFetch("/api/locations/layout", jsonBody("PATCH", { positions })),
   deleteLocation: (id, force) =>
     traceFetch(`/api/locations/${encodeURIComponent(id)}${force ? "?force=1" : ""}`, { method: "DELETE" }),
   // Permanently delete every inventory item captured at a location ("Clear list").

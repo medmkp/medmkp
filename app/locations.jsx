@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { daysUntil, formatTraceDate, money, SWIPE_REVEAL, traceApi, traceErrorMessage } from "./lib";
+import { OfficeLayoutView } from "./officelayout";
 import { ConfirmModal, DetailDrawer, ProductSearchResults, ProductThumb, useProductSearch } from "./ui";
 import s from "./locations.module.css";
 import rs from "./scanmobile.module.css";
@@ -286,6 +287,8 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
   const [status, setStatus] = useState("all");
   const [roomType, setRoomType] = useState("all");
   const [sort, setSort] = useState("attention");
+  const [surface, setSurface] = useState("board");
+  const [loadError, setLoadError] = useState("");
   const [isMobile, setIsMobile] = useState(false);
 
   // Mobile has no global nav, so the board needs an explicit way back to the
@@ -296,8 +299,16 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
   useEffect(() => {
     let alive = true;
     traceApi.listLocations()
-      .then((l) => { if (alive) setLocations(l.locations || []); })
-      .catch(() => { if (alive) setLocations([]); });
+      .then((l) => {
+        if (!alive) return;
+        setLocations(l.locations || []);
+        setLoadError("");
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setLocations([]);
+        setLoadError(traceErrorMessage(err, "Couldn't load locations."));
+      });
     return () => { alive = false; };
   }, []);
 
@@ -357,6 +368,11 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
   function handleCardAction(action, loc) {
     if (action === "resume") return onStartScan?.(loc.id);
     return onOpenLocation?.(loc.id);
+  }
+
+  function handleLayoutSaved(updated) {
+    setLocations(updated);
+    onToast?.("Office layout saved.");
   }
 
   return (
@@ -429,6 +445,16 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
           </>
         )}
         <div className={s.toolbarActions}>
+          <div className={s.viewToggle} role="tablist" aria-label="Locations view">
+            <button type="button" className={surface === "board" ? s.viewToggleActive : ""} onClick={() => setSurface("board")} role="tab" aria-selected={surface === "board"}>
+              <Icon name="icon-grid" />
+              Board
+            </button>
+            <button type="button" className={surface === "layout" ? s.viewToggleActive : ""} onClick={() => setSurface("layout")} role="tab" aria-selected={surface === "layout"}>
+              <Icon name="icon-map-pin" />
+              Layout
+            </button>
+          </div>
           <button type="button" className={s.addBtn} onClick={() => onAddLocation?.()}>
             <Icon name="icon-plus" />
             Add location
@@ -448,53 +474,63 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
         </div>
       </div>
 
-      <div className={s.layout}>
-        <div className={s.cards}>
-          {loading ? (
-            <div className={s.empty}>Loading locations…</div>
-          ) : cards.length === 0 ? (
-            <div className={s.empty}>No locations yet. Add your first location to start tracking inventory.</div>
-          ) : visible.length === 0 ? (
-            <div className={s.empty}>No locations match your filters.</div>
-          ) : (
-            visible.map((loc) => <LocationCard key={loc.id} loc={loc} onAction={handleCardAction} onOpen={onOpenLocation} />)
-          )}
-        </div>
+      {surface === "layout" ? (
+        <OfficeLayoutView
+          locations={locations || []}
+          loading={loading}
+          loadError={loadError}
+          onAddLocation={onAddLocation}
+          onLayoutSaved={handleLayoutSaved}
+        />
+      ) : (
+        <div className={s.layout}>
+          <div className={s.cards}>
+            {loading ? (
+              <div className={s.empty}>Loading locations…</div>
+            ) : cards.length === 0 ? (
+              <div className={s.empty}>No locations yet. Add your first location to start tracking inventory.</div>
+            ) : visible.length === 0 ? (
+              <div className={s.empty}>No locations match your filters.</div>
+            ) : (
+              visible.map((loc) => <LocationCard key={loc.id} loc={loc} onAction={handleCardAction} onOpen={onOpenLocation} />)
+            )}
+          </div>
 
-        <aside className={s.rail}>
-          {recentlyScanned.length > 0 && (
-            <section className={s.railCard}>
-              <h2 className={s.railTitle}>Recently scanned</h2>
-              {recentlyScanned.map((ev) => (
-                <div className={s.activityRow} key={ev.id}>
-                  <span className={`${s.activityIcon} ${TONE[ev.tone] || s.tSlate}`}><Icon name={ev.icon} /></span>
-                  <div className={s.activityBody}>
-                    <div className={s.activityText}>{ev.text}</div>
-                    <div className={s.activityMeta}>{ev.meta}</div>
+          <aside className={s.rail}>
+            {recentlyScanned.length > 0 && (
+              <section className={s.railCard}>
+                <h2 className={s.railTitle}>Recently scanned</h2>
+                {recentlyScanned.map((ev) => (
+                  <div className={s.activityRow} key={ev.id}>
+                    <span className={`${s.activityIcon} ${TONE[ev.tone] || s.tSlate}`}><Icon name={ev.icon} /></span>
+                    <div className={s.activityBody}>
+                      <div className={s.activityText}>{ev.text}</div>
+                      <div className={s.activityMeta}>{ev.meta}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </section>
+            )}
+
+            <section className={s.railCard}>
+              <h2 className={s.railTitle}>Scan shortcuts</h2>
+              <button type="button" className={s.shortcut} onClick={() => onStartScan?.(null)}>
+                <span className={s.shortcutIcon}><Icon name="icon-map-pin" /></span>
+                Choose a location to scan
+                <Icon name="icon-chevron-right" className={s.shortcutChevron} />
+              </button>
             </section>
-          )}
 
-          <section className={s.railCard}>
-            <h2 className={s.railTitle}>Scan shortcuts</h2>
-            <button type="button" className={s.shortcut} onClick={() => onStartScan?.(null)}>
-              <span className={s.shortcutIcon}><Icon name="icon-map-pin" /></span>
-              Choose a location to scan
-              <Icon name="icon-chevron-right" className={s.shortcutChevron} />
-            </button>
-          </section>
-
-          <section className={s.promo}>
-            <span className={s.promoIcon}><Icon name="icon-scan" /></span>
-            <div>
-              <div className={s.promoTitle}>Scan on the go</div>
-              <p className={s.promoText}>Scan on your phone to capture lot &amp; expiry off each package.</p>
-            </div>
-          </section>
-        </aside>
-      </div>
+            <section className={s.promo}>
+              <span className={s.promoIcon}><Icon name="icon-scan" /></span>
+              <div>
+                <div className={s.promoTitle}>Scan on the go</div>
+                <p className={s.promoText}>Scan on your phone to capture lot &amp; expiry off each package.</p>
+              </div>
+            </section>
+          </aside>
+        </div>
+      )}
 
       <div className={s.tip}>
         <Icon name="icon-info" />

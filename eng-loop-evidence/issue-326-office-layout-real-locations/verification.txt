@@ -1,0 +1,17 @@
+Before (origin/main): OfficeLayoutView defaulted to MOCK_LOCATIONS and no /app/office-layout route existed.
+9:const MOCK_LOCATIONS = [
+74:export function OfficeLayoutView({ locations = MOCK_LOCATIONS, onMoveLocation, onSelectLocation, onAddLocation }) {
+
+After (HEAD): /app/office-layout resolves to officeLayout, renders OfficeLayoutPage, and OfficeLayoutPage calls traceApi.listLocations().
+app/officelayout.jsx:242:export function OfficeLayoutPage({ onAddLocation }) {
+app/officelayout.jsx:249:    traceApi.listLocations()
+app/officelayout.jsx:298:  return <OfficeLayoutView locations={locations} onAddLocation={onAddLocation} />;
+app/lib.jsx:55:  officeLayout: "/app/office-layout",
+app/lib.jsx:109:  if (path === "/app/office-layout") return { view: "officeLayout", isLoggedIn: true };
+app/page.jsx:8:import { OfficeLayoutPage } from "./officelayout";
+app/page.jsx:1796:          {view === "officeLayout" && (
+app/page.jsx:1797:            <OfficeLayoutPage
+
+Configured-backend route exercise: /api/locations response captured via HAR with forged gate cookie (no test credentials available).
+GET http://localhost:3047/api/locations 401 Unauthorized {"message":"Unauthorized"}
+GET http://localhost:3047/api/locations 401 Unauthorized {"message":"Unauthorized"}
