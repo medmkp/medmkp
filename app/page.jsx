@@ -751,6 +751,7 @@ export default function Home() {
         pack_quantity: product.best_offer?.pack_quantity,
         pack_basis: product.best_offer?.pack_basis,
         base_unit: product.base_unit,
+        image_url: product.image_url,
         handle: product.handle,
         price_range_cents: product.price_range_cents,
         offer_count: product.offer_count,
@@ -765,6 +766,7 @@ export default function Home() {
         category: category.name,
         supplier_name: item.supplier_name,
         price_cents: item.unit_price_cents,
+        image_url: item.image_url,
         handle: "",
       };
     });

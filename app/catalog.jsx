@@ -31,14 +31,21 @@ export function SearchResults({ results, query = "", loading, onNavigate }) {
 
         return (
           <a className="search-result" key={result.id} href={href} onClick={go(href)}>
-            <span>
+            <span className="search-result-thumb" aria-hidden="true">
+              {result.image_url ? (
+                <img src={result.image_url} alt="" loading="lazy" />
+              ) : (
+                <Icon name="icon-image" className="nav-icon" />
+              )}
+            </span>
+            <span className="search-result-main">
               <strong>{result.name}</strong>
               <small>{result.category || "Uncategorized"} · {result.supplier_name || "Supplier pending"}</small>
             </span>
-            <em style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+            <em className="search-result-price">
               <span>{price}</span>
               {perUnit && (
-                <small style={{ color: "var(--muted)", fontWeight: 500, fontStyle: "normal" }}>
+                <small>
                   {perUnit}{packLabel ? ` · ${packLabel}` : ""}
                 </small>
               )}
