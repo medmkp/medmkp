@@ -816,7 +816,10 @@ main:has(.upload-view) {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 3;
+  /* Above the content's sticky table header (.crl-row-head, z-index: 3): the
+     topbar and that header both bubble to the root stacking context, so a tie
+     would let the header paint over the topbar's open search dropdown. */
+  z-index: 4;
   display: flex;
   justify-content: flex-end;
   align-items: center;
