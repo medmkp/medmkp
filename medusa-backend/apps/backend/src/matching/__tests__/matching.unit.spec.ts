@@ -1,4 +1,4 @@
-import { pickCategory } from "../db"
+import { pickCategory, pickTaxonomy } from "../db"
 import { runMatching } from "../engine"
 import { buildOffers } from "../line-items"
 import {
@@ -1720,5 +1720,23 @@ describe("category selection", () => {
 
   it("picks the most common specific category, ignoring the catch-all", () => {
     expect(pickCategory(["Gloves", "Gloves", "Masks", "Dental supplies"])).toBe("Gloves")
+  })
+
+  it("normalizes supplier category aliases into buyer-facing taxonomy", () => {
+    const taxonomy = pickTaxonomy([
+      product({ category: "Cosmetic Dentistry", name: "Flowable Composite A2 Syringe" }),
+      product({ category: "Surgical & Restoratives", name: "Composite Restorative Refill" }),
+    ])
+    expect(taxonomy.department).toBe("Composites & Restoratives")
+    expect(taxonomy.subcategory).toBe("Composite")
+  })
+
+  it("uses product names when every supplier category is generic", () => {
+    const taxonomy = pickTaxonomy([
+      product({ category: "Dental supplies", name: "Nitrile Exam Gloves Large 100/Box" }),
+      product({ category: "", name: "Nitrile Powder Free Gloves Large" }),
+    ])
+    expect(taxonomy.department).toBe("Gloves")
+    expect(taxonomy.subcategory).toBe("Nitrile Gloves")
   })
 })
