@@ -47,6 +47,7 @@ if [ -f "$LOOP_HOME/PAUSE" ]; then
 fi
 
 log "=== tick start (dry_run=$DRY_RUN) ==="
+tick_start="$(date +%s)"   # for health.jsonl duration_s
 
 # --- 3. Usage gate → pick engine (claude if >50% left, else codex if >25%) ---
 engine="$("$here/usage-gate.sh" 2>>"$LOG")" || true
@@ -299,6 +300,7 @@ if [ "$engine" = "codex" ]; then
       --dangerously-bypass-approvals-and-sandbox "${cmodel[@]}" <<<"$prompt"
   ) >>"$LOOP_HOME/logs/run-$stamp.codex.log" 2>&1
   rc=$?
+  transcript="$LOOP_HOME/logs/run-$stamp.codex.log"; engine_fmt="codex"
   log "codex run exit=$rc (transcript: logs/run-$stamp.codex.log)"
 else
   model_args=(); [ -n "${CLAUDE_MODEL:-}" ] && model_args=(--model "$CLAUDE_MODEL")
@@ -310,15 +312,19 @@ else
       --output-format stream-json --verbose "${model_args[@]}"
   ) >>"$LOOP_HOME/logs/run-$stamp.jsonl" 2>&1
   rc=$?
+  transcript="$LOOP_HOME/logs/run-$stamp.jsonl"; engine_fmt="claude"
   log "claude run exit=$rc (transcript: logs/run-$stamp.jsonl)"
 fi
 
 # --- 10. Report -------------------------------------------------------------
+pr_action="none"; pr_number=""   # for health.jsonl (emit downgrades to none on FAIL)
 if [ -n "$pr_active" ]; then
+  pr_action="reconciled"; [ -n "$revise_pr" ] && pr_action="revised"; pr_number="$pr_active"
   log "$mode done: PR #$pr_active updated (re-review). exit=$rc"
 else
   pr_num="$(cd "$wt" 2>/dev/null && gh pr view --json number -q .number 2>/dev/null || true)"
   if [ -n "$pr_num" ]; then
+    pr_action="created"; pr_number="$pr_num"
     gh label create "eng-loop:$category" --repo "$LOOP_REPO" --color ededed 2>/dev/null || true
     # Add the category label via the REST labels endpoint (a PR is an "issue" in
     # the API). We deliberately do NOT use `gh pr edit --add-label`: on the older
@@ -343,4 +349,19 @@ else
     log "no PR this tick (quiet tick, a data-quality issue may have been filed, or aborted for lack of evidence)."
   fi
 fi
+
+# --- 11. Health record + edge-triggered alert -------------------------------
+# Classify this tick into logs/health.jsonl, then let health.sh decide whether
+# the loop has crossed into DOWN/STALLED and fire the webhook if so.
+mode_kind="autonomous"
+[ -n "${issue_num:-}" ]     && mode_kind="issue"
+[ -n "${reconcile_pr:-}" ]  && mode_kind="reconcile"
+[ -n "${revise_pr:-}" ]     && mode_kind="revise"
+EL_ENGINE="$engine" EL_ENGINE_FMT="${engine_fmt:-}" EL_MODEL="${CLAUDE_MODEL:-${CODEX_MODEL:-default}}" \
+EL_MODE="$mode" EL_MODE_KIND="$mode_kind" EL_CATEGORY="${category:-}" EL_RC="$rc" \
+EL_DUR="$(( $(date +%s) - tick_start ))" EL_PR_ACTION="$pr_action" EL_PR_NUMBER="$pr_number" \
+EL_TRANSCRIPT="${transcript:-}" LOOP_HOME="$LOOP_HOME" \
+  bash "$here/health.sh" emit 2>>"$LOG" || log "WARN: health emit failed"
+bash "$here/health.sh" alert >>"$LOG" 2>&1 || log "WARN: health alert failed"
+
 log "=== tick end ==="

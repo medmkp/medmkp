@@ -22,6 +22,27 @@ CODEX_THRESHOLD="${CODEX_THRESHOLD:-25}"    # Codex: min % remaining to fall bac
 
 log() { printf '[usage-gate] %s\n' "$*" >&2; }
 
+# Did the most recent claude tick die on a HARD engine error (a model the account
+# can't use, auth failure, rate limit)? Such runs cost 0 tokens, so usage never
+# rises and this gate would otherwise keep picking a dead engine forever. When it
+# did, treat claude as unavailable this tick and fall back to codex.
+claude_is_dead() {
+  local hl="${LOOP_HOME:-$HOME/eng-loop}/logs/health.jsonl"
+  [ -f "$hl" ] || return 1
+  tail -n 6 "$hl" | python3 -c '
+import sys, json
+hard = {"model_not_found", "auth", "rate_limit"}
+last = None
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try: r = json.loads(line)
+    except Exception: continue
+    if r.get("engine") == "claude": last = r
+sys.exit(0 if (last and last.get("outcome") == "FAIL" and last.get("error_class") in hard) else 1)
+' 2>/dev/null
+}
+
 # --- Claude remaining (from `claude -p "/usage"`, which prints "% used") ------
 raw="$(timeout 90 "$CLAUDE_BIN" -p "/usage" 2>&1 \
   | sed -E 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr -d '\r')" || true
@@ -41,7 +62,11 @@ if [ -n "${used:-}" ]; then
   claude_remaining=$(( 100 - used ))
   log "claude: window=$GATE_WINDOW remaining=${claude_remaining}% (need >${GATE_THRESHOLD}%) [week=${week_used:-?}% session=${session_used:-?}%]"
   if [ "$claude_remaining" -gt "$GATE_THRESHOLD" ]; then
-    echo "claude"; exit 0
+    if claude_is_dead; then
+      log "claude has budget but its last run hit a hard engine error — skipping claude, trying codex"
+    else
+      echo "claude"; exit 0
+    fi
   fi
 else
   log "claude usage unreadable — treating as not-enough and considering fallback"

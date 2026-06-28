@@ -107,6 +107,7 @@ echo "###now_human###"; date "+%Y-%m-%d %H:%M:%S %Z"
 echo "###cron###"; crontab -l 2>/dev/null | grep -F "# eng-loop"
 echo "###pause###"; [ -f "$H/PAUSE" ] && echo yes || echo no
 echo "###rotation###"; cat "$H/.rotation" 2>/dev/null
+echo "###health###"; bash "$H/checkout/scripts/eng-loop/health.sh" json 2>/dev/null
 echo "###cronlog_mtime###"; stat -c %Y "$H/logs/cron.log" 2>/dev/null
 echo "###worktrees###"; ls -1 "$H/worktrees/" 2>/dev/null
 echo "###usage###"; tail -n 800 "$(ls -1t "$H"/logs/[0-9]*.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "usage-gate|usage-codex" | tail -4
@@ -130,6 +131,16 @@ else
   cron_line="$(section cron)"; pause="$(section pause)"; rotation="$(section rotation)"
   mtime="$(section cronlog_mtime)"
   worktrees="$(section worktrees | grep -c . || true)"
+
+  # Health verdict (from health.sh on the NUC) — lead with it so DOWN/STALLED is
+  # the first thing on screen. Absent (empty) until health.sh is deployed.
+  health_json="$(section health)"
+  hv="$(printf '%s' "$health_json" | grep -oE '"verdict":"[A-Z]+"' | grep -oE '[A-Z]+' | head -1)"
+  hd="$(printf '%s' "$health_json" | sed -nE 's/.*"detail":"([^"]*)".*/\1/p' | head -1)"
+  if [ -n "$hv" ]; then
+    case "$hv" in OK) hc="$GRN" ;; DEGRADED) hc="$YEL" ;; STALLED|DOWN) hc="$RED" ;; *) hc="$DIM" ;; esac
+    printf '  %-14s %s%s%s  %s%s%s\n' "Health:" "$hc" "$hv" "$R" "$DIM" "$hd" "$R"
+  fi
 
   printf '  %-14s %s%s%s  (%s)\n' "NUC:" "$GRN" "${host:-$NUC_HOST}" "$R" "$now_human"
   if [ -n "$cron_line" ]; then
