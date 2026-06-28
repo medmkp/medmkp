@@ -625,6 +625,164 @@ export const VARIANT_SPECS: VariantSpec[] = [
       return []
     },
   },
+
+  // ---- Axes surfaced by the Tier-3 discovery pass (npm run products:propose-axes) ----
+
+  // Rim Lock impression trays are sold per arch position (Upper/Lower quadrant +
+  // tooth number, e.g. "U15", "L18") — otherwise-identical trays. Position is the
+  // sole variant, so it surfaces as a selector.
+  {
+    id: "tooth_arch_position",
+    extract: ({ lowered }) => {
+      if (!(/\brim\s*lock\b/.test(lowered) && /\bimpression\b/.test(lowered) && /\btrays?\b/.test(lowered))) {
+        return []
+      }
+      const out: Array<[string, string]> = []
+      const re = /\b([ul][12][1-8])\b/g
+      let match: RegExpExecArray | null
+      while ((match = re.exec(lowered))) {
+        out.push(["tooth_arch_position", match[1]])
+      }
+      return out
+    },
+    family: {
+      tooth_arch_position: {
+        priority: 30,
+        axisLabel: "Tray Position",
+        label: (value) => value.toUpperCase(),
+        rank: (value) => (value[0] === "u" ? 0 : 100) + (parseInt(value.slice(1), 10) || 0),
+        stripPattern: /^[ul][12][1-8]$/,
+      },
+    },
+  },
+
+  // Macan rigid electrodes differ only by model code ("#R-F15", "#R-L32"). The
+  // code is the variant; the rest of the listing is identical.
+  {
+    id: "electrode_model",
+    extract: ({ lowered }) => {
+      if (!(/\belectrode\b/.test(lowered) && /\brigid\b/.test(lowered))) {
+        return []
+      }
+      const out: Array<[string, string]> = []
+      const re = /\br[-\s]?([cfl]\d{1,2})\b/g
+      let match: RegExpExecArray | null
+      while ((match = re.exec(lowered))) {
+        out.push(["electrode_model", match[1]])
+      }
+      return out
+    },
+    family: {
+      electrode_model: {
+        priority: 31,
+        axisLabel: "Model",
+        label: (value) => value.toUpperCase(),
+        rank: () => 0,
+        stripPattern: /^[cfl]\d{1,2}$/,
+      },
+    },
+  },
+
+  // Piezo scaler tips (e.g. Hu-Friedy "PWR Piezo Tip – S1 / ER2 / P10") differ
+  // only by tip code, which selects the clinical use.
+  {
+    id: "piezo_tip_model",
+    extract: ({ lowered }) => {
+      if (!(/\bpiezo\b/.test(lowered) && /\btips?\b/.test(lowered))) {
+        return []
+      }
+      const out: Array<[string, string]> = []
+      const re = /\b((?:er|s|p)\d{1,2}r?)\b/g
+      let match: RegExpExecArray | null
+      while ((match = re.exec(lowered))) {
+        out.push(["piezo_tip_model", match[1]])
+      }
+      return out
+    },
+    family: {
+      piezo_tip_model: {
+        priority: 32,
+        axisLabel: "Tip",
+        label: (value) => value.toUpperCase(),
+        rank: () => 0,
+        stripPattern: /^(?:er|s|p)\d{1,2}r?$/,
+      },
+    },
+  },
+
+  // Carbide "Bur Goldies" differ by ISO bur number ("41-P", "61-A/81-A") — the
+  // shape/size designation. The cut type (Regular vs Diamond) stays in the name,
+  // so each cut line forms its own family with an ISO-number selector.
+  {
+    id: "bur_iso_number",
+    extract: ({ lowered }) => {
+      if (!(/\bcarbide\b/.test(lowered) && /\bburs?\b/.test(lowered) && /\bgoldies?\b/.test(lowered))) {
+        return []
+      }
+      const out: Array<[string, string]> = []
+      const re = /\b(\d{2}-[a-z](?:\/\d{2}-[a-z])?)\b/g
+      let match: RegExpExecArray | null
+      while ((match = re.exec(lowered))) {
+        out.push(["bur_iso_number", match[1]])
+      }
+      return out
+    },
+    family: {
+      bur_iso_number: {
+        priority: 33,
+        axisLabel: "ISO Number",
+        label: (value) => value.toUpperCase(),
+        rank: (value) => parseInt(value, 10) || 0,
+      },
+    },
+  },
+
+  // Diamond burs are differentiated by abrasive GRIT (Coarse/Fine/Medium/Super-),
+  // stated either as a word or as the trailing letters on a size code ("862-012Sf"
+  // → super-fine, "801-014C" → coarse, "767.5C" → coarse). Modeled as a hard
+  // conflict so a Coarse bur never clusters with a Fine one. Conflict-only (no
+  // selector): these lines also vary by shape and size, so a clean single-axis
+  // grit selector would mis-group — a size+grit selector is a follow-up.
+  {
+    id: "diamond_bur_grit",
+    extract: ({ lowered }) => {
+      const isDiamondBur =
+        /\bdiamonds?\b/.test(lowered) &&
+        /\b(?:burs?|hsb|striper|flame|round|taper|needle|cylinder|football|wheel|cone|pear|chamfer|inverted|fg)\b/.test(
+          lowered
+        )
+      if (!isDiamondBur) {
+        return []
+      }
+      // A stated grit word wins (and is taken alone) to avoid a word/code mismatch
+      // giving one product two grit values.
+      let word: string | null = null
+      if (/\bsuper\s*coarse\b/.test(lowered)) word = "supercoarse"
+      else if (/\bsuper\s*fine\b/.test(lowered)) word = "superfine"
+      else if (/\bextra\s*coarse\b/.test(lowered)) word = "extracoarse"
+      else if (/\bextra\s*fine\b/.test(lowered)) word = "extrafine"
+      else if (/\bcoarse\b/.test(lowered)) word = "coarse"
+      else if (/\bmedium\b/.test(lowered)) word = "medium"
+      else if (/\bfine\b/.test(lowered)) word = "fine"
+      if (word) {
+        return [["diamond_bur_grit", word]]
+      }
+      const GRIT: Record<string, string> = {
+        sf: "superfine", sc: "supercoarse", xf: "extrafine", xc: "extracoarse",
+        c: "coarse", f: "fine", m: "medium",
+      }
+      const out: Array<[string, string]> = []
+      const re = /\b\d{2,3}[.\-]\d{1,3}(sf|sc|xf|xc|c|f|m)\b/g
+      let match: RegExpExecArray | null
+      while ((match = re.exec(lowered))) {
+        const grit = GRIT[match[1]]
+        if (grit) {
+          out.push(["diamond_bur_grit", grit])
+        }
+      }
+      return out
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
