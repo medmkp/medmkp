@@ -316,6 +316,25 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(extractNumericAttrs("EZ-ID Tape System and Rolls, Roll, 10 ft., Green").get("color") ?? [])]).toEqual(["green"])
   })
 
+  it("captures ExciTE F DSC as a product-line variant", () => {
+    expect([...(extractNumericAttrs("ExciTE F Adhesive 0.1 Gm Soft Touch Single Dose Refill 50/Pk").get("excite_f_variant") ?? [])]).toEqual(["regular"])
+    expect([...(extractNumericAttrs("ExciTE F DSC Adhesive 0.1 Gm Soft Touch Single Dose Refill Package 50/Pk").get("excite_f_variant") ?? [])]).toEqual(["dsc"])
+    expect(score(
+      {
+        brand: "Ivoclar Vivadent Inc",
+        manufacturer_sku: "630377WW",
+        name: "ExciTE F Adhesive 0.1 Gm Soft Touch Single Dose Refill 50/Pk",
+        pack_size: "50/Pk",
+      },
+      {
+        brand: "Ivoclar Vivadent Inc",
+        manufacturer_sku: "630378AN",
+        name: "ExciTE F DSC Adhesive 0.1 Gm Soft Touch Single Dose Refill Package 50/Pk",
+        pack_size: "50/Pk",
+      }
+    ).status).toBe("reject")
+  })
+
   it("captures bur diameter and length as separate hard-conflict attributes", () => {
     const attrs = extractNumericAttrs(
       "NTI Diamond Burs - Medium, Gray, Inverted Cone, # M805, 1.2 mm Diameter, 1.5 mm Length"
@@ -1400,6 +1419,54 @@ describe("end-to-end clustering", () => {
     expect(result.clusters.map((c) => c.members.length).sort()).toEqual([3, 3])
     expect(lengthSets.some((values) => values.size === 1 && values.has("long"))).toBe(true)
     expect(lengthSets.some((values) => values.size === 1 && values.has("short"))).toBe(true)
+  })
+
+  it("does not let ExciTE F DSC rows weld into the regular ExciTE F canonical", () => {
+    // Prod regression: regular 630377WW and DSC 630378AN/630380AN shared the
+    // ExciTE F adhesive family vocabulary closely enough for the same-supplier
+    // DSC rows to join the regular single-dose cluster.
+    const rows = [
+      product({
+        supplier_id: "msup_dcdental_com",
+        manufacturer_sku: "579-630377WW",
+        brand: "Vivadent",
+        name: "ExciTE F Single Dose Refill 50/Pk",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "630377WW",
+        brand: "Ivoclar Vivadent Inc",
+        name: "ExciTE F Adhesive 0.1 Gm Soft Touch Single Dose Refill 50/Pk",
+        pack_size: "50/Pk",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "630378AN",
+        brand: "Ivoclar Vivadent Inc",
+        name: "ExciTE F DSC Adhesive 0.1 Gm Soft Touch Single Dose Refill Package 50/Pk",
+        pack_size: "50/Pk",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        manufacturer_sku: "630380AN",
+        brand: "Ivoclar Vivadent Inc",
+        name: "ExciTE F DSC Adhesive 0.1 Gm Soft Touch Single Dose Refill Package 50/Pk",
+        pack_size: "50/Pk",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const regularCluster = result.clusters.find((cluster) =>
+      cluster.members.some((member) => member.row.manufacturer_sku === "630377WW")
+    )
+    const dscCluster = result.clusters.find((cluster) =>
+      cluster.members.some((member) => member.row.manufacturer_sku === "630378AN")
+    )
+
+    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 2])
+    expect(regularCluster).toBeDefined()
+    expect(dscCluster).toBeDefined()
+    expect(regularCluster).not.toBe(dscCluster)
+    expect(regularCluster!.members.map((m) => m.row.manufacturer_sku)).not.toContain("630378AN")
   })
 
   it("does not let a size-less bridge collapse Small and X-Small into one canonical", () => {

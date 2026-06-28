@@ -366,6 +366,14 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     add("shade", "w")
   }
 
+  // Ivoclar ExciTE F and ExciTE F DSC are distinct adhesive variants, but the
+  // names differ by one short token and share package/SKU-family vocabulary.
+  // Model DSC vs regular ExciTE F as a scoped hard-conflict axis so the DSC
+  // single-dose rows do not bridge into the regular ExciTE F canonical.
+  if (/\bexcite\b/.test(lowered) && /\bf\b/.test(lowered) && /\badhesive\b/.test(lowered)) {
+    add("excite_f_variant", /\bdsc\b/.test(lowered) ? "dsc" : "regular")
+  }
+
   // CAD/CEREC milling blocks are product variants by physical block size
   // (e.g. Size 12 vs 14L) and translucency (HT/High vs LT/Low). Those values
   // can be the only differing tokens across otherwise-identical branded rows,
