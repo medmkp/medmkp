@@ -288,6 +288,13 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(extractNumericAttrs("3M Filtek Supreme Ultra XW Body Caps 20/Pack 6029XWB").get("shade") ?? [])]).toEqual(["xw"])
   })
 
+  it("captures Tetric roman-style composite shades", () => {
+    expect([...(extractNumericAttrs("Tetric PowerFill, Syringe Refill IVA, 3 g").get("shade") ?? [])]).toEqual(["iva"])
+    expect([...(extractNumericAttrs("Tetric PowerFill, Syringe Refill IVB, 3 g").get("shade") ?? [])]).toEqual(["ivb"])
+    expect([...(extractNumericAttrs("Tetric PowerFill, Syringe Refill IVW, 3 g").get("shade") ?? [])]).toEqual(["ivw"])
+    expect(extractNumericAttrs("Surgical Blade IV A Handle").get("shade")).toBeUndefined()
+  })
+
   it("rejects a white-family shade against a numeric shade (no transitive bridge)", () => {
     // The shade-less white/extra-white rows were the bridge that merged A1B…D3B.
     const whiteVsNumeric = score(
@@ -624,6 +631,53 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(result.clusters).toHaveLength(2)
     expect(sizeSets.some((values) => values.size === 1 && values.has("sm2"))).toBe(true)
     expect(sizeSets.some((values) => values.size === 1 && values.has("sm3"))).toBe(true)
+  })
+
+  it("does not merge Tetric PowerFill IVA, IVB, and IVW shade variants", () => {
+    // Prod regression: Darby Tetric PowerFill syringe refills differed only by
+    // Ivoclar's roman-style shade codes (IVA/IVB/IVW). Without that shade axis,
+    // same-brand high name similarity collapsed all three into one canonical.
+    const rows = [
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Ivoclar Vivadent",
+        manufacturer_sku: "668083WW",
+        name: "Tetric PowerFill, Syringe Refill IVA, 3 g",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Ivoclar Vivadent",
+        manufacturer_sku: "668084WW",
+        name: "Tetric PowerFill, Syringe Refill IVB, 3 g",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Ivoclar Vivadent",
+        manufacturer_sku: "668115WW",
+        name: "Tetric PowerFill, Syringe Refill IVW, 3 g",
+      }),
+      product({
+        supplier_id: "msup_dentalcity_com",
+        brand: "Dental City",
+        manufacturer_sku: "668083WW",
+        name: "Tetric PowerFill Syringe Refill 1x3g IVA 668083WW",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const shadeSets = result.clusters.map((cluster) =>
+      new Set(cluster.members.flatMap((member) => [...(member.numericAttrs.get("shade") ?? [])]))
+    )
+
+    expect(result.clusters).toHaveLength(1)
+    expect(shadeSets.every((values) => values.size === 1)).toBe(true)
+    expect(shadeSets[0]).toEqual(new Set(["iva"]))
+    expect(
+      result.clusters.some(
+        (cluster) =>
+          cluster.members.some((member) => member.row.supplier_id === "msup_darbydental_com" && member.row.manufacturer_sku === "668083WW") &&
+          cluster.members.some((member) => member.row.supplier_id === "msup_dentalcity_com")
+      )
+    ).toBe(true)
   })
 
   it("does not merge Unitek permanent molar crown sizes through a Size 5 row whose pack is also 5", () => {

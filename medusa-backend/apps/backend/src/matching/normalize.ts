@@ -377,6 +377,16 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     add("shade", "w")
   }
 
+  // Ivoclar Tetric composites use roman-style shade codes (IVA/IVB/IVW)
+  // instead of the A1-D7 family. Treat them as shades only inside the scoped
+  // Tetric composite line so generic roman numerals elsewhere are untouched.
+  if (/\btetric\b/.test(lowered) && /\b(?:composite|powerfill|powerflow)\b/.test(lowered)) {
+    const tetricShadeRe = /\biv([abw])\b/g
+    while ((match = tetricShadeRe.exec(lowered))) {
+      add("shade", `iv${match[1]}`)
+    }
+  }
+
   // Ivoclar ExciTE F and ExciTE F DSC are distinct adhesive variants, but the
   // names differ by one short token and share package/SKU-family vocabulary.
   // Model DSC vs regular ExciTE F as a scoped hard-conflict axis so the DSC
