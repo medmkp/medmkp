@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
 import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc } from "./lib";
-import { BuyingPreferencesCard, CandidateName, CandidateStock, DetailDrawer, ListStatusPill, MatchSupplier, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
+import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchSupplier, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
   const [captured, setCaptured] = useState(false);
@@ -895,9 +895,10 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
 
 // The reorder-list table header. Shared by the flat Current Reorder List and the
 // supplier-grouped Review view so both render identical columns.
-export function ReorderTableHead() {
+export function ReorderTableHead({ select }) {
   return (
     <div className="crl-row crl-row-head">
+      {select}
       <span className="crl-h-center">Source</span>
       <span>Item</span>
       <span className="crl-h-center">Qty</span>
@@ -911,12 +912,22 @@ export function ReorderTableHead() {
 
 // One reorder-list table row. `onOpen(row, mode)` opens the product-match drawer.
 // Extracted so the Review view can render the same rows grouped by supplier.
-export function ReorderRow({ row, active, onOpen, onConfirmMatch, onRemoveItem, onToast }) {
+export function ReorderRow({ row, active, selected, onToggleSelect, onOpen, onConfirmMatch, onRemoveItem, onToast }) {
   const status = CRL_STATUS[row.status];
   const notFound = row.status === "Not found";
   const mode = notFound ? "resolve" : row.status === "Review" ? "review" : "view";
   return (
-    <div className={`crl-row crl-row-click ${active ? "active" : ""}`} onClick={() => onOpen(row, mode)}>
+    <div className={`crl-row crl-row-click ${active ? "active" : ""} ${selected ? "crl-row-selected" : ""}`} onClick={() => onOpen(row, mode)}>
+      {onToggleSelect && (
+        <span className="crl-select-cell" onClick={(event) => event.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(row.itemId)}
+            aria-label={`Select ${row.canonicalName || row.matchName || row.importedName}`}
+          />
+        </span>
+      )}
       <span className="crl-source" title={`Imported from ${row.source.toUpperCase()}`}><Icon name={CRL_SOURCE_ICON[row.source] || "icon-file-text"} className="button-icon" /></span>
       <span className="crl-item">
         <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
@@ -1054,9 +1065,11 @@ export function CurrentReorderList({
   const [tab, setTab] = useState("all");
   const [detail, setDetail] = useState(null);
   const [detailWide, setDetailWide] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [reviewConfirm, setReviewConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
+  const selectAllRef = useRef(null);
   const listNameRef = useRef(null);
 
   // Advance to Review & optimize. If anything is unresolved, confirm first so the
@@ -1074,14 +1087,21 @@ export function CurrentReorderList({
     onNavigate?.("/app/review");
   }
 
-  async function handleRefresh() {
-    if (!onRefresh || refreshing) return;
-    setRefreshing(true);
-    try {
-      await onRefresh();
-    } finally {
-      setRefreshing(false);
-    }
+  function toggleItemSelection(itemId) {
+    if (!itemId) return;
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
+  function confirmBulkDelete() {
+    selectedItemIds.forEach((itemId) => onRemoveItem?.(itemId));
+    const n = selectedItemIds.size;
+    setSelectedItemIds(new Set());
+    setConfirmingBulkDelete(false);
+    onToast?.(`Removed ${n} item${n === 1 ? "" : "s"} from list`);
   }
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -1165,6 +1185,36 @@ export function CurrentReorderList({
   };
   const filtered = rows.filter(tabFilter[tab] || tabFilter.all);
   const openRow = (row) => setDetail({ row, mode: rowMode(row) });
+
+  // Row selection + bulk delete (desktop). Only real, removable items (with an
+  // itemId and a remove handler) are selectable — the demo sample isn't.
+  const selectable = usingReal && Boolean(onRemoveItem);
+  const visibleSelectableIds = selectable ? filtered.filter((row) => row.itemId).map((row) => row.itemId) : [];
+  const selectedVisibleCount = visibleSelectableIds.filter((id) => selectedItemIds.has(id)).length;
+  const allVisibleSelected = visibleSelectableIds.length > 0 && selectedVisibleCount === visibleSelectableIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleSelectableIds.length;
+  function toggleVisibleSelection() {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleSelectableIds.forEach((id) => next.delete(id));
+      else visibleSelectableIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+  // Drop any selected ids that have left the list (deleted, filtered to another
+  // status, etc.) so the count and select-all stay honest.
+  useEffect(() => {
+    const live = new Set(rows.map((row) => row.itemId).filter(Boolean));
+    setSelectedItemIds((prev) => {
+      let changed = false;
+      const next = new Set();
+      prev.forEach((id) => { if (live.has(id)) next.add(id); else changed = true; });
+      return changed ? next : prev;
+    });
+  }, [rows]);
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
 
 
   if (isMobile) {
@@ -1353,22 +1403,32 @@ export function CurrentReorderList({
                   <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>
                 ))}
               </nav>
-              {onRefresh && (
-                <button
-                  type="button"
-                  className={`crl-refresh ${refreshing ? "spinning" : ""}`}
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  title="Refresh"
-                  aria-label="Refresh"
-                >
-                  <Icon name="icon-refresh" className="button-icon" />
-                </button>
+              {selectable && selectedItemIds.size > 0 && (
+                <div className="crl-bulk" aria-live="polite">
+                  <span>{selectedItemIds.size} selected</span>
+                  <button type="button" className="crl-bulk-clear" onClick={() => setSelectedItemIds(new Set())}>Clear</button>
+                  <button type="button" className="crl-bulk-delete" onClick={() => setConfirmingBulkDelete(true)}>
+                    <Icon name="icon-trash" className="button-icon" />Delete
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="crl-table">
-              <ReorderTableHead />
+            <div className={`crl-table ${selectable ? "crl-table--selectable" : ""}`}>
+              <ReorderTableHead
+                select={selectable ? (
+                  <span className="crl-select-cell">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      disabled={visibleSelectableIds.length === 0}
+                      onChange={toggleVisibleSelection}
+                      aria-label={allVisibleSelected ? "Deselect all items" : "Select all items"}
+                    />
+                  </span>
+                ) : null}
+              />
               {isEmpty && (
                 <div className="crl-empty">
                   <Icon name="icon-cloud-upload" className="button-icon" />
@@ -1381,6 +1441,8 @@ export function CurrentReorderList({
                   key={row.id}
                   row={row}
                   active={detail?.row.id === row.id}
+                  selected={selectable && Boolean(row.itemId) && selectedItemIds.has(row.itemId)}
+                  onToggleSelect={selectable && row.itemId ? toggleItemSelection : undefined}
                   onOpen={(r, mode) => setDetail({ row: r, mode })}
                   onConfirmMatch={onConfirmMatch}
                   onRemoveItem={onRemoveItem}
@@ -1533,6 +1595,17 @@ export function CurrentReorderList({
           includedCount={totalItems - unresolvedRows.length}
           onContinue={confirmReview}
           onClose={() => setReviewConfirm(false)}
+        />
+      )}
+
+      {confirmingBulkDelete && (
+        <ConfirmModal
+          title="Remove selected items?"
+          body={`This removes ${selectedItemIds.size} selected item${selectedItemIds.size === 1 ? "" : "s"} from your reorder list.`}
+          confirmLabel="Remove selected"
+          destructive
+          onConfirm={confirmBulkDelete}
+          onClose={() => setConfirmingBulkDelete(false)}
         />
       )}
 

@@ -8797,26 +8797,39 @@ th {
   flex-wrap: wrap;
 }
 
-.crl-refresh {
+/* Bulk-selection action bar (shown in the tabs row once rows are selected),
+   mirroring the Locations list's bulk actions. */
+.crl-bulk {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 7px;
+  gap: 8px;
   margin-bottom: 6px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--muted);
+  padding: 0 8px 0 12px;
+  min-height: 34px;
+  border: 1px solid #cfe0ff;
+  border-radius: 10px;
+  background: #f3f7ff;
+  color: #2454b5;
+  font-size: 13px;
   font-weight: 500;
-  font-size: 12px;
+}
+.crl-bulk-clear,
+.crl-bulk-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
   cursor: pointer;
 }
-.crl-refresh:hover:not(:disabled) { color: var(--ink); border-color: var(--ink); }
-.crl-refresh:disabled { cursor: default; opacity: .7; }
-.crl-refresh .button-icon { width: 15px; height: 15px; }
-.crl-refresh.spinning .button-icon { animation: crl-spin .8s linear infinite; }
-@keyframes crl-spin { to { transform: rotate(360deg); } }
+.crl-bulk-clear { padding: 5px 6px; color: #536274; }
+.crl-bulk-clear:hover { background: #e7eefc; color: var(--ink); }
+.crl-bulk-delete { padding: 6px 8px; color: #c5392e; }
+.crl-bulk-delete .button-icon { width: 14px; height: 14px; }
+.crl-bulk-delete:hover { background: #fdeceb; }
 
 .crl-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .crl-tabs button {
@@ -8885,6 +8898,20 @@ th {
   box-shadow: none;
 }
 .crl-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--blue); }
+/* Selectable list: prepend a checkbox column to every row + the footer. */
+.crl-table--selectable .crl-row,
+.crl-table--selectable .crl-foot { grid-template-columns: 34px 44px minmax(0, 2.4fr) 64px 124px minmax(0, 2.65fr) 76px 40px; }
+.crl-table--selectable .crl-foot-label { grid-column: 1 / 7; }
+.crl-table--selectable .crl-foot-total { grid-column: 7; }
+.crl-layout.has-detail.detail-wide .crl-table--selectable .crl-row { grid-template-columns: 34px 44px minmax(0, 3fr) 68px 34px minmax(0, 1.6fr) 96px 44px; }
+.crl-select-cell { display: flex; align-items: center; justify-content: center; }
+/* The header pill is inset 4px more than body rows on each side (its 8px margin
+   + 8px padding vs the rows' 12px padding), which shifts the header grid — and
+   the checkbox — right of the rows. Drop its horizontal padding to 4px so the
+   total inset matches the rows (8 + 4 = 12) and every column lines up. */
+.crl-table--selectable .crl-row-head { padding-left: 4px; padding-right: 4px; }
+.crl-row-selected { background: #eef5ff; }
+.crl-row-selected.crl-row-click:hover { background: #e6f0ff; }
 .crl-h-center { text-align: center; }
 .crl-price-h { display: inline-flex; align-items: center; gap: 5px; }
 .crl-price-h .button-icon { width: 14px; height: 14px; }
