@@ -394,6 +394,13 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(mediumC14.get("cad_block_translucency") ?? [])]).toEqual(["mt"])
   })
 
+  it("captures topical fluoride gel flavors as hard-conflict attributes", () => {
+    expect([...(extractNumericAttrs("Gelato APF Gel, 16 oz, Mint").get("topical_fluoride_flavor") ?? [])]).toEqual(["mint"])
+    expect([...(extractNumericAttrs("Gelato APF Gel - Dye-Free Mint").get("topical_fluoride_flavor") ?? [])]).toEqual(["dye_free_mint"])
+    expect([...(extractNumericAttrs("Gelato 60 Second Fluoride Gel 1.23% APF Grape 16oz/Bt").get("topical_fluoride_flavor") ?? [])]).toEqual(["grape"])
+    expect(extractNumericAttrs("Gelato Prophy Paste Mint").get("topical_fluoride_flavor")).toBeUndefined()
+  })
+
   it("rejects same-SKU color variants instead of merging them", () => {
     const decision = score(
       {
@@ -785,6 +792,67 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(result.clusters).toHaveLength(2)
     expect(clusterTranslucencies.every((values) => values.size === 1)).toBe(true)
     expect([...clusterTranslucencies[0], ...clusterTranslucencies[1]].sort()).toEqual(["ht", "mt"])
+  })
+
+  it("does not merge Gelato APF fluoride gel flavor variants", () => {
+    // Prod regression: Gelato APF gel variants share brand, APF/fluoride gel
+    // vocabulary, pack size, and near-identical names. Mint, Grape, and
+    // Dye-Free Mint were transitively collapsed into one canonical.
+    const rows = [
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Keystone Industries",
+        manufacturer_sku: "24-00577",
+        name: "Gelato APF Gel, 16 oz, Mint",
+      }),
+      product({
+        supplier_id: "msup_pearsondental_com",
+        brand: "Keystone",
+        manufacturer_sku: "24-00577",
+        name: "Gelato Fluoride Gel Mint 16 oz",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Keystone Industries",
+        manufacturer_sku: "24-01877",
+        name: "Gelato APF Gel, 16 oz, Grape",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Keystone Industries",
+        manufacturer_sku: "24-01877",
+        name: "Gelato APF Gel - Grape",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Keystone Industries",
+        manufacturer_sku: "24-04477",
+        name: "Gelato APF Gel, 16 oz, DyeFree, Mint",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Keystone Industries",
+        manufacturer_sku: "24-04477",
+        name: "Gelato APF Gel - Dye-Free Mint",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const flavorSets = result.clusters.map((cluster) =>
+      new Set(
+        cluster.members
+          .map((member) => member.numericAttrs.get("topical_fluoride_flavor"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+    )
+
+    expect(result.clusters).toHaveLength(3)
+    expect(flavorSets.every((flavors) => flavors.size === 1)).toBe(true)
+    expect([...flavorSets[0], ...flavorSets[1], ...flavorSets[2]].sort()).toEqual([
+      "dye_free_mint",
+      "grape",
+      "mint",
+    ])
   })
 
   it("does not merge distinct WallShoulders X-ray apron hanger models", () => {

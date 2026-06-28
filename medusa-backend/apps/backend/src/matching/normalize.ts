@@ -85,6 +85,17 @@ export const COLOR_WORDS = [
   "yellow",
 ]
 
+const TOPICAL_FLUORIDE_FLAVORS = [
+  "berry",
+  "bubblegum",
+  "cherry",
+  "grape",
+  "melon",
+  "mint",
+  "raspberry",
+  "strawberry",
+]
+
 function stripDiacritics(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 }
@@ -372,6 +383,18 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
   // single-dose rows do not bridge into the regular ExciTE F canonical.
   if (/\bexcite\b/.test(lowered) && /\bf\b/.test(lowered) && /\badhesive\b/.test(lowered)) {
     add("excite_f_variant", /\bdsc\b/.test(lowered) ? "dsc" : "regular")
+  }
+
+  // Topical fluoride gels are sold as otherwise-identical flavor variants
+  // (Gelato APF Mint, Grape, Dye-Free Mint, etc.). Flavor is the product
+  // discriminator, not a descriptive color, so keep it as a hard-conflict axis.
+  if (/\b(?:fluoride|apf)\b/.test(lowered) && /\bgels?\b/.test(lowered)) {
+    const flavorRe = new RegExp(`\\b(${TOPICAL_FLUORIDE_FLAVORS.join("|")})\\b`, "g")
+    while ((match = flavorRe.exec(lowered))) {
+      const flavor = match[1]
+      const dyeFree = /\bdye[\s-]?free\b/.test(lowered) && flavor === "mint"
+      add("topical_fluoride_flavor", dyeFree ? "dye_free_mint" : flavor)
+    }
   }
 
   // CAD/CEREC milling blocks are product variants by physical block size
