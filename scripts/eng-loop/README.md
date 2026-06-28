@@ -19,7 +19,7 @@ A cron job runs `run-loop.sh` every few hours. Each tick:
    tmux in `usage-codex.sh`); if >25% → run on **Codex**. Else skip. Fails **closed**.
 3. Branches off the latest `origin/main` in an isolated git worktree.
 4. **Picks work**: a labeled issue (`eng-loop`/`qa`) if any, else the next
-   **playbook category** in rotation (see `CATEGORIES`) — `qa-design`, `clustering`,
+   **playbook category** in rotation (see `AUTONOMOUS_CATEGORIES`) — `qa-design`, `clustering`,
    and `ocr`, with `pricing` opt-in. Categories whose prerequisites aren't met
    (e.g. no DB URL, harvester down) are skipped that tick.
 5. Hands a **headless Claude run** the common rules (`loop-prompt.md`) plus the
@@ -138,7 +138,7 @@ Prereqs on the NUC host: `git`, `node`/`npx`, `flock` (util-linux), `jq`, and
    skipped and the loop runs `qa-design` only.
 6. **(Optional) enable the Net32 pricing playbook** once the harvester sidecar is
    up: set `PRICING_ENABLED=true` (and `NET32_HARVESTER_URL` if not the default
-   `http://127.0.0.1:8791`) and add `pricing` to `CATEGORIES`. The loop pre-checks
+   `http://127.0.0.1:8791`) and add `pricing` to `AUTONOMOUS_CATEGORIES`. The loop pre-checks
    the harvester each tick and skips pricing if it's unreachable.
 7. Make the scripts executable: `chmod +x ~/eng-loop/checkout/scripts/eng-loop/*.sh`
 
@@ -226,7 +226,9 @@ gives a one-line readout (say "web"/"open" to get the HTML page instead).
 - **Stop entirely:** remove the crontab line.
 - **Logs:** `~/eng-loop/logs/YYYY-MM-DD.log` (human) and `run-<stamp>.jsonl` (full
   transcript per run).
-- **Feed it work:** open issues and label them `eng-loop`; they're drained before
+- **Feed it work:** open issues and label them `eng-loop` (or a lane label —
+  `eng-loop:qa`, `eng-loop:qa-design`, `eng-loop:backend`, `eng-loop:architecture`;
+  the exact set is `ISSUE_LABELS` in `config.env`); they're drained before
   the category rotation, oldest first. The loop removes the label from issues it
   can't complete (with a comment) so it won't retry them forever. Data-quality
   problems it finds but can't safely auto-fix are filed as `data-quality` issues
@@ -249,17 +251,17 @@ gives a one-line readout (say "web"/"open" to get the HTML page instead).
   still review the result; it never auto-merges. Loop PRs are identified by their
   `eng-loop-…` branch prefix (their label is `eng-loop:<category>`).
 - **Tune:** `config.env` — `GATE_THRESHOLD` (Claude %), `CODEX_ENABLED`/`CODEX_THRESHOLD`
-  (fallback), `GATE_WINDOW` (`week`/`session`/`both`), `LOOP_LABELS`, `CATEGORIES`
+  (fallback), `GATE_WINDOW` (`week`/`session`/`both`), `ISSUE_LABELS`, `AUTONOMOUS_CATEGORIES`
   (rotation), `MAX_OPEN_PER_CATEGORY` (backpressure cap), `BACKEND_TARGET`,
   `LOOP_DATABASE_URL`, `PRICING_ENABLED`, `RUN_TIMEOUT`, `CLAUDE_MODEL`/`CODEX_MODEL`.
 
 ## Adding a category
 
-A category = a `playbooks/<name>.md` (in the repo) + its name in `CATEGORIES`.
+A category = a `playbooks/<name>.md` (in the repo) + its name in `AUTONOMOUS_CATEGORIES`.
 1. Author `scripts/eng-loop/playbooks/<name>.md` (what to find, how to fix, what
    evidence to capture) — model it on `clustering.md` (metrics-diff evidence) or
    `qa-design.md` (screenshot evidence), and commit it.
-2. Add `<name>` to `CATEGORIES` (in `~/.eng-loop.secrets` for a host, or the
+2. Add `<name>` to `AUTONOMOUS_CATEGORIES` (in `~/.eng-loop.secrets` for a host, or the
    `config.env` default). A name with no playbook is skipped safely.
 3. UI/browser categories (`qa`, `design`, `scanner`, …) need gstack/`browse` on the
    host; data categories (`clustering`, `ocr` parser, …) don't.

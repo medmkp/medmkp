@@ -1082,7 +1082,12 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   // Breadcrumb middle crumb: the curated department this product's live category
   // rolls up into (null when the category doesn't map to one).
   const department = departmentForCategory(product.category);
-  const variantGroupLabel = family ? variantAxisLabel(variants) : null;
+  // Prefer the axis label the matcher persisted from the variant registry
+  // (precise: "Shade", "Gauge", …); fall back to the value-shape heuristic for
+  // products matched before the attribute store shipped.
+  const variantGroupLabel = family
+    ? family.variant_axis_label || variantAxisLabel(variants)
+    : null;
   // The API returns one offer per supplier variant; collapse to the lowest-priced
   // offer per supplier so the comparison reads as a supplier comparison (one row
   // each) and the "N suppliers" counts stay consistent with the hero badge.
@@ -1140,18 +1145,30 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   // chosen above — don't repeat that attribute as a description chip.
   const variantChipLabel = variants.length > 1 ? variantGroupLabel : null;
   const chips = [
-    attrs.size && ["Size", titleCase(attrs.size)],
+    // Label the varying attribute by its real axis (Shade/Gauge/…), not always
+    // "Size"; so the variant-axis chip is also correctly filtered out below.
+    attrs.size && [variantGroupLabel || "Size", titleCase(attrs.size)],
     attrs.family && ["Type", titleCase(attrs.family)],
     brand && ["Brand", brand],
     packSize !== "—" && ["Pack", packSize],
     product.category && ["Category", product.category],
   ].filter(Boolean).filter(([label]) => label !== variantChipLabel).slice(0, 5);
 
+  // Data-driven spec rows from the matcher's structured attributes (each labeled
+  // by its registry axis: "Shade A2", "Gauge 25 ga"). Falls back to the single
+  // variant-label row for products matched before the attribute store shipped.
+  const modeledSpecs =
+    Array.isArray(attrs.modeled_attributes) && attrs.modeled_attributes.length
+      ? attrs.modeled_attributes.map((attr) => [attr.axis_label || "Variant", attr.label])
+      : attrs.size
+        ? [[variantGroupLabel || "Size", titleCase(attrs.size)]]
+        : [];
+
   const specs = [
     ["Category", product.category],
     ["Unit of measure", cap(product.unit_of_measure)],
     ["Pack size", packSize !== "—" ? packSize : null],
-    ["Size", titleCase(attrs.size)],
+    ...modeledSpecs,
     ["Type", titleCase(attrs.family)],
     ["Brand", brand],
     ["Suppliers", String(supplierCount)],

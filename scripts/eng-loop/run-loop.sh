@@ -7,7 +7,7 @@
 #   2. RECONCILE an open loop PR that conflicts with main (merge main in, resolve,
 #      re-verify, push — never a new PR, never merge).
 #   3. Else work a labeled GitHub issue (eng-loop/qa).
-#   4. Else the next autonomous playbook category in rotation (CATEGORIES).
+#   4. Else the next autonomous playbook category in rotation (AUTONOMOUS_CATEGORIES).
 # Spins up an isolated worktree, hands a headless Claude/Codex run the job, and
 # opens/updates exactly one PR (or a data-quality issue). It NEVER merges.
 #
@@ -125,7 +125,7 @@ pr_branch="${revise_branch:-$reconcile_branch}"
 # --- 6. Else pick new work: labeled issue, else autonomous category ---------
 if [ -z "$pr_active" ]; then
   issue_num=""; issue_title=""; issue_body=""
-  IFS=',' read -ra _labels <<< "$LOOP_LABELS"
+  IFS=',' read -ra _labels <<< "$ISSUE_LABELS"
   for l in "${_labels[@]}"; do
     l="$(printf '%s' "$l" | xargs)"   # trim
     [ -n "$l" ] || continue
@@ -147,11 +147,11 @@ if [ -z "$pr_active" ]; then
   fi
 
   # Choose a playbook category. A labeled issue overrides rotation. Otherwise
-  # round-robin CATEGORIES, honoring prerequisites + per-category PR backpressure.
+  # round-robin AUTONOMOUS_CATEGORIES, honoring prerequisites + per-category PR backpressure.
   if [ -n "$issue_num" ]; then
     category="issue"
   else
-    IFS=',' read -ra _cats <<< "$CATEGORIES"
+    IFS=',' read -ra _cats <<< "$AUTONOMOUS_CATEGORIES"
     cats=()
     for c in "${_cats[@]}"; do
       c="$(printf '%s' "$c" | xargs)"; [ -n "$c" ] || continue

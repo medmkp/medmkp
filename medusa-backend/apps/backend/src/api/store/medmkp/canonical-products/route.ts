@@ -757,12 +757,25 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     })
 
     const familyMember = variants.find((product) => (product as any).family_id)
+    // The variant axis (Size / Shade / Gauge …) is persisted in each canonical's
+    // attributes JSON by the matcher; surface it on the family summary so the
+    // product page labels the selector from the registry, not a value-shape guess.
+    let familyVariantAxisLabel: string | null = null
+    if (familyMember) {
+      try {
+        familyVariantAxisLabel =
+          JSON.parse((familyMember as any).attributes_text || "{}").variant_axis_label ?? null
+      } catch {
+        familyVariantAxisLabel = null
+      }
+    }
     const family =
       familyMember && variants.length > 1
         ? {
             family_id: (familyMember as any).family_id,
             family_handle: (familyMember as any).family_handle,
             family_name: (familyMember as any).family_name,
+            variant_axis_label: familyVariantAxisLabel,
           }
         : null
 

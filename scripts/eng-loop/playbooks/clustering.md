@@ -1,3 +1,13 @@
+> **RETIRED from the autonomous rotation (see config.env `CATEGORIES`).** This
+> playbook produced a steady trickle of one-off per-category regex tweaks to
+> `normalize.ts`/`family.ts`. Variant axes are now defined **once** in the
+> registry `src/matching/attribute-specs.ts` (extraction + conflict + selector
+> display in a single `VariantSpec`), and the durable fix for new variants is the
+> structured-attribute path (persist attributes at ingest + LLM-assisted long-tail
+> extraction), not hand-coded rules. If you must make a one-off clustering fix,
+> add/extend a `VariantSpec` in the registry — do **not** add inline regex to
+> `normalize.ts`. Prefer filing a `data-quality` issue over reviving this lane.
+
 ### Playbook: catalog clustering quality (over- / under-clustering)
 
 Goal: fix **one** matching defect — an over-clustered canonical (distinct products

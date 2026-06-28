@@ -1,4 +1,9 @@
+import { VARIANT_SPECS, type ExtractContext } from "./attribute-specs"
 import type { NormalizedProduct, SupplierProductRow } from "./types"
+
+// COLOR_WORDS now lives with the variant registry; re-exported here because
+// search.ts (and existing imports) read it from this module.
+export { COLOR_WORDS } from "./attribute-specs"
 
 const BRAND_JUNK_PATTERNS = [
   /^\d/,
@@ -65,36 +70,6 @@ export const PACK_UNIT_WORDS =
   "pk|pack|pkg|bx|box|cs|case|bag|ct|count|tub|jar|roll|sleeve|carton|kit|cn|can|bottle|btl|tube|syringe|spool"
 
 export const MEASURE_UNIT_SUFFIX = /^(\d+(\.\d+)?)(MM|CM|ML|CC|OZ|GA|GAUGE|GR|G|L|IN|KG|LB|PCT)$/
-
-export const COLOR_WORDS = [
-  "black",
-  "blue",
-  "brown",
-  "clear",
-  "gold",
-  "gray",
-  "green",
-  "grey",
-  "orange",
-  "pink",
-  "purple",
-  "red",
-  "silver",
-  "teal",
-  "white",
-  "yellow",
-]
-
-const TOPICAL_FLUORIDE_FLAVORS = [
-  "berry",
-  "bubblegum",
-  "cherry",
-  "grape",
-  "melon",
-  "mint",
-  "raspberry",
-  "strawberry",
-]
 
 function stripDiacritics(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -304,7 +279,10 @@ function parsePackQtyFromText(text: string): number | null {
  * differentiated by size/gauge/shade/taper, so disagreement on these is
  * strong evidence two products differ even when SKUs collide.
  */
-export function extractNumericAttrs(name: string): Map<string, Set<string>> {
+export function extractNumericAttrs(
+  name: string,
+  ctx?: { mfrSku?: string; rawMfrSku?: string; brand?: string }
+): Map<string, Set<string>> {
   const attrs = new Map<string, Set<string>>()
   const add = (unit: string, value: string) => {
     const normalizedValue = value.replace(/^0+(\d)/, "$1")
@@ -314,289 +292,22 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     attrs.get(unit)!.add(normalizedValue)
   }
 
-  const lowered = stripDiacritics(name).toLowerCase()
-
-  const measureRe = /(\d+(?:\.\d+)?)\s*(?:x\s*(\d+(?:\.\d+)?)\s*)?(mm|cm|ml|cc|oz|gauge|ga|gr|kg|lb|in|l|%|g)\b/g
-  let match: RegExpExecArray | null
-  while ((match = measureRe.exec(lowered))) {
-    let unit = match[3]
-    if (unit === "gauge" || unit === "g") {
-      unit = "ga"
-    }
-    add(unit, match[1])
-    if (match[2]) {
-      add(unit, match[2])
-      if (unit === "mm" || unit === "cm" || unit === "in") {
-        add(`${unit}_dim`, `${match[1]}x${match[2]}`)
-      }
-    }
-  }
-  const physicalDimRe = /(\d+(?:\.\d+)?)\s*(mm|cm|in)\s*x\s*(\d+(?:\.\d+)?)\s*\2\b/g
-  while ((match = physicalDimRe.exec(lowered))) {
-    add(`${match[2]}_dim`, `${match[1]}x${match[3]}`)
+  const extractContext: ExtractContext = {
+    name,
+    lowered: stripDiacritics(name).toLowerCase(),
+    mfrSku: ctx?.mfrSku ?? "",
+    rawMfrSku: ctx?.rawMfrSku ?? "",
+    brand: ctx?.brand ?? "",
   }
 
-  // Dental burs often specify both a head diameter and a working length in the
-  // same name. The generic "mm" axis collapses both values into one set, so
-  // "1.2 mm Diameter, 1.5 mm Length" appeared compatible with "1.4 mm
-  // Diameter, 1.5 mm Length" because the length overlapped. Split those labels
-  // into separate axes for bur/diamond listings so diameter variants conflict.
-  if (/\b(?:burs?|diamonds?)\b/.test(lowered)) {
-    const burMeasurementRe = /(\d+(?:\.\d+)?)\s*mm\s+(diameter|length)\b/g
-    while ((match = burMeasurementRe.exec(lowered))) {
-      add(`bur_${match[2]}`, match[1])
+  // Each variant axis is defined once in the registry (extraction + conflict +
+  // selector display). Adding a new axis means appending a VariantSpec there,
+  // not editing this driver. Order is irrelevant: every spec writes independent
+  // axes into the Map, so they never read each other's output.
+  for (const spec of VARIANT_SPECS) {
+    for (const [axis, value] of spec.extract(extractContext)) {
+      add(axis, value)
     }
-  }
-
-  // Composite/restorative shade: a color code (A1..D7, optional .5) with an
-  // optional layer letter (B=Body, E=Enamel, T=Translucent). The layer letter
-  // must be consumed here, otherwise "A1B"/"B5B" fail the trailing word
-  // boundary and the shade goes uncaptured — which lets a shade-less product
-  // (e.g. scanned "B5B") bridge otherwise-conflicting shades into one cluster.
-  // The stored value is the color only, so "A1 Body" and "A1B" still agree.
-  const shadeRe = /\b([a-d][1-7](?:\.5)?)(?:[bet])?\b/g
-  while ((match = shadeRe.exec(lowered))) {
-    add("shade", match[1])
-  }
-
-  // White-family composite shades (White / Extra White) carry no numeric A1–D7
-  // code, so the rule above leaves them shade-less — and a shade-less "WB"/"XW"
-  // product matches every numeric shade on name alone, transitively bridging the
-  // whole shade family into one cluster (e.g. 3M Filtek Supreme Ultra: A1B…D3B +
-  // WB + XWB all collapsed into one canonical). Capture white and extra-white as
-  // their own shade values so they conflict with the numeric shades. Extra-white
-  // is matched first so "XW"/"XWB" isn't read as plain white. Only standalone
-  // tokens match — the model code "6029XWB" has no word boundary before the
-  // letters, so it's left to the catalog-code logic.
-  const xWhiteRe = /\b(?:x[\s-]?w[be]?|(?:extra|xtra)[\s-]?white)\b/g
-  while ((match = xWhiteRe.exec(lowered))) {
-    add("shade", "xw")
-  }
-  const whiteRe = /\b(?:wb|whb|white)\b/g
-  while ((match = whiteRe.exec(lowered))) {
-    add("shade", "w")
-  }
-
-  // Ivoclar Tetric composites use roman-style shade codes (IVA/IVB/IVW)
-  // instead of the A1-D7 family. Treat them as shades only inside the scoped
-  // Tetric composite line so generic roman numerals elsewhere are untouched.
-  if (/\btetric\b/.test(lowered) && /\b(?:composite|powerfill|powerflow)\b/.test(lowered)) {
-    const tetricShadeRe = /\biv([abw])\b/g
-    while ((match = tetricShadeRe.exec(lowered))) {
-      add("shade", `iv${match[1]}`)
-    }
-  }
-
-  // Ivoclar ExciTE F and ExciTE F DSC are distinct adhesive variants, but the
-  // names differ by one short token and share package/SKU-family vocabulary.
-  // Model DSC vs regular ExciTE F as a scoped hard-conflict axis so the DSC
-  // single-dose rows do not bridge into the regular ExciTE F canonical.
-  if (/\bexcite\b/.test(lowered) && /\bf\b/.test(lowered) && /\badhesive\b/.test(lowered)) {
-    add("excite_f_variant", /\bdsc\b/.test(lowered) ? "dsc" : "regular")
-  }
-
-  // Topical fluoride gels are sold as otherwise-identical flavor variants
-  // (Gelato APF Mint, Grape, Dye-Free Mint, etc.). Flavor is the product
-  // discriminator, not a descriptive color, so keep it as a hard-conflict axis.
-  if (/\b(?:fluoride|apf)\b/.test(lowered) && /\bgels?\b/.test(lowered)) {
-    const flavorRe = new RegExp(`\\b(${TOPICAL_FLUORIDE_FLAVORS.join("|")})\\b`, "g")
-    while ((match = flavorRe.exec(lowered))) {
-      const flavor = match[1]
-      const dyeFree = /\bdye[\s-]?free\b/.test(lowered) && flavor === "mint"
-      add("topical_fluoride_flavor", dyeFree ? "dye_free_mint" : flavor)
-    }
-  }
-
-  // CAD/CEREC milling blocks are product variants by physical block size
-  // (e.g. Size 12 vs 14L) and translucency (HT/High vs LT/Low). Those values
-  // can be the only differing tokens across otherwise-identical branded rows,
-  // so model them as hard-conflict axes to prevent transitive variant bridges.
-  if (/\b(?:blocs?|milling\s+blocks?|cerec|cad\s*cam|planmill)\b/.test(lowered)) {
-    if (/\b(?:ht|high\s+translucency)\b/.test(lowered)) {
-      add("cad_block_translucency", "ht")
-    }
-    if (/\b(?:lt|low\s+translucency)\b/.test(lowered)) {
-      add("cad_block_translucency", "lt")
-    }
-    if (/\b(?:mt|medium\s+translucency)\b/.test(lowered)) {
-      add("cad_block_translucency", "mt")
-    }
-
-    const sizeWordRe = /\bsize\s*(\d{1,2}l?)\b/g
-    while ((match = sizeWordRe.exec(lowered))) {
-      add("cad_block_size", match[1])
-    }
-    const sizeBeforeShadeRe = /\b(\d{1,2}l?)\s+(?:[a-d][1-7](?:\.5)?|bl)\b/g
-    while ((match = sizeBeforeShadeRe.exec(lowered))) {
-      add("cad_block_size", match[1])
-    }
-  }
-
-  const colorRe = new RegExp(`\\b(${COLOR_WORDS.join("|")})\\b`, "g")
-  while ((match = colorRe.exec(lowered))) {
-    add("color", match[1] === "grey" ? "gray" : match[1])
-  }
-
-  // Cotton roll listings share size, pack, and generic "cotton roll" tokens,
-  // but product lines such as Econo/Economy, Braided, and Wrapped are distinct
-  // catalog items. Capture that style axis so near-identical line variants do
-  // not become transitive bridges.
-  if (/\b(?:cotton\s+)?rolls?\b/.test(lowered)) {
-    if (/\b(?:(?:econo|economy)\s+(?:cotton\s+)?rolls?|(?:cotton\s+)?rolls?\s+(?:econo|economy))\b/.test(lowered)) {
-      add("cotton_roll_style", "econo")
-    }
-    if (/\bbraided\b/.test(lowered)) {
-      add("cotton_roll_style", "braided")
-    }
-    if (/\bwrapped\b/.test(lowered)) {
-      add("cotton_roll_style", "wrapped")
-    }
-  }
-
-  // Bare dimension "4x4" / "2x2" (sponges, gauze, matrix bands): two small
-  // integers joined by x with no measure unit. Disjoint dimensions are a hard
-  // conflict, like 25mm vs 31mm. Excludes decimals and unit-suffixed forms so
-  // "24x1.2mL" (a count x volume) and "5 x 30ml" are not mistaken for a size.
-  const dimRe = /\b(\d{1,2})\s*x\s*(\d{1,2})\b(?!\s*(?:mm|cm|ml|cc|oz|in|g|x|\.|\/))/g
-  while ((match = dimRe.exec(lowered))) {
-    add("dim", `${match[1]}x${match[2]}`)
-  }
-
-  const taperRe = /(?:^|[^0-9.])\.(\d{2})\b/g
-  while ((match = taperRe.exec(lowered))) {
-    add("taper", `0.${match[1]}`)
-  }
-
-  const hashRe = /#\s?(\d+(?:\/\d+)?)/g
-  while ((match = hashRe.exec(lowered))) {
-    add("#", match[1])
-  }
-
-  // Sutures are differentiated by USP size ("4-0", "5/0", sometimes copied
-  // with an en dash). That pattern is otherwise too generic to trust, so only
-  // promote it to a hard-conflict axis when the name is explicitly a suture.
-  if (/\bsutures?\b/.test(lowered)) {
-    const sutureSizeRe = /\b(\d{1,2})\s*[-–/]\s*0\b/g
-    while ((match = sutureSizeRe.exec(lowered))) {
-      add("suture_size", `${match[1]}-0`)
-    }
-    const sutureLengthRe = /\b(\d{1,2})\s*(?:"|\bin(?:ch(?:es)?)?\b)/g
-    while ((match = sutureLengthRe.exec(lowered))) {
-      add("suture_length", match[1])
-    }
-    const sutureNeedleRe = /\b([a-z]{1,3})\s*-?\s*(\d{1,2}[a-z]?)\b/g
-    while ((match = sutureNeedleRe.exec(lowered))) {
-      add("suture_needle", `${match[1]}${match[2]}`)
-    }
-  }
-
-  // Injection/hypodermic needles share gauge, pack, and brand, but short and
-  // long variants are distinct products. Keep this axis scoped to needle
-  // listings so generic "short"/"long" adjectives elsewhere do not veto.
-  if (/\bneedles?\b/.test(lowered)) {
-    const needleLengthRe = /\b(short|long)\b/g
-    while ((match = needleLengthRe.exec(lowered))) {
-      add("needle_length", match[1])
-    }
-  }
-
-  // Stainless steel crown refills are size-specific products. The size can
-  // appear as "Size 5" next to a 5/Bx pack count, so bare-number conflict loses
-  // it during pack parsing; compact supplier codes also write it as UR1/1UR1.
-  if (/\bcrowns?\b/.test(lowered) || /\b(?:primary|permanent|perm)\s+molar\b/.test(lowered)) {
-    const crownSizeRe = /\bsize\s*(00|0|[1-9])\b/g
-    while ((match = crownSizeRe.exec(lowered))) {
-      add("crown_size", match[1])
-    }
-    const quadrantTrailingSizeRe = /\b(?:[1-6])?(?:ur|ul|lr|ll)(00|0|[1-9])\b/g
-    while ((match = quadrantTrailingSizeRe.exec(lowered))) {
-      add("crown_size", match[1])
-    }
-    const sizeBeforeQuadrantRe = /\b(00|0|[1-9])(?:ur|ul|lr|ll)\b/g
-    while ((match = sizeBeforeQuadrantRe.exec(lowered))) {
-      add("crown_size", match[1])
-    }
-  }
-
-  // NSK Ti-Max high-speed handpieces differ by backend/model code (Z890L,
-  // Z890KL, Z890WL, Z990WL, etc.). Supplier family pages can mention a generic
-  // leading model plus the actual variant later in the name, so keep the last
-  // model token as the variant discriminator.
-  if (
-    /\bhandpieces?\b/.test(lowered) &&
-    /\b(?:nsk|ti[\s-]?max)\b/.test(lowered) &&
-    !/\breplacement\s+parts?\b/.test(lowered)
-  ) {
-    const handpieceModels = [...lowered.matchAll(/\bz\s*[- ]?(\d{3,4})\s*([a-z]{1,3})\b/g)]
-    const handpieceModel = handpieceModels.at(-1)
-    if (handpieceModel) {
-      add("handpiece_model", `z${handpieceModel[1]}${handpieceModel[2]}`)
-    }
-  }
-
-  // 3M Unitek crown refill listings use near-identical names across crown
-  // sizes/positions, and some supplier titles omit the compact "UR1" style
-  // size token. Keep the six-digit Unitek model as a hard-conflict axis so
-  // different crown refills cannot bridge through same-brand name similarity.
-  if (/\bunitek\b/.test(lowered) && /\bcrowns?\b/.test(lowered)) {
-    const unitekCrownModel = stripDiacritics(name).match(/\b9\d{5}\b/)
-    if (unitekCrownModel) {
-      add("unitek_crown_model", unitekCrownModel[0])
-    }
-  }
-
-  // Endodontic paper points and gutta-percha points often share the same
-  // brand, shape range (F1/F2/F3), and "points" vocabulary, but they are
-  // different materials and must not bridge transitively through assorted
-  // range codes.
-  if (/\bpaper\s+points?\b|\babsorbent\s+points?\b/.test(lowered)) {
-    add("endo_point_material", "paper")
-  }
-  if (/\bgutta[\s-]?percha\b/.test(lowered)) {
-    add("endo_point_material", "gutta_percha")
-  }
-  if (/\b(?:paper\s+points?|absorbent\s+points?|gutta[\s-]?percha(?:\s+points?)?)\b/.test(lowered)) {
-    const endoPointSizeRe = /\b(?:f[1-5]|sm[1-5]|ml[1-5])\b/g
-    while ((match = endoPointSizeRe.exec(lowered))) {
-      add("endo_point_size", match[0])
-    }
-  }
-
-  // Apparel/glove sizing (gloves, gowns, masks, lab coats are size-differentiated
-  // but carry no measured unit). Disjoint sizes are a hard conflict, like 25mm
-  // vs 31mm. Only worded forms and the X-prefixed family are matched; bare
-  // single letters (S/M/L) are too ambiguous to trust.
-  const sizeRe = /\b(?:(xxx|xx|3x|2x|x|extra)[\s-]?)?(small|medium|large)\b/g
-  while ((match = sizeRe.exec(lowered))) {
-    const prefix = match[1]
-    const base = match[2]
-    let value: string
-    if (base === "medium") {
-      value = "M"
-    } else if (base === "small") {
-      value = prefix ? "XS" : "S"
-    } else if (!prefix) {
-      value = "L"
-    } else if (prefix === "x" || prefix === "extra") {
-      value = "XL"
-    } else if (prefix === "xx" || prefix === "2x") {
-      value = "2XL"
-    } else {
-      value = "3XL"
-    }
-    add("size", value)
-  }
-  const letterSizeRe = /\b(xs|xl|xxl|2xl|3xl|xxxl)\b/g
-  const letterSizeMap: Record<string, string> = {
-    xs: "XS",
-    xl: "XL",
-    xxl: "2XL",
-    "2xl": "2XL",
-    "3xl": "3XL",
-    xxxl: "3XL",
-  }
-  while ((match = letterSizeRe.exec(lowered))) {
-    add("size", letterSizeMap[match[1]])
   }
 
   return attrs
@@ -665,26 +376,13 @@ export function normalizeProduct(row: SupplierProductRow): NormalizedProduct {
   const nameTokens = tokenizeName(row.name)
   const skuLikeTokens = extractSkuLikeTokens(row.name)
   const skuLikeSet = new Set(skuLikeTokens)
-  const numericAttrs = extractNumericAttrs(row.name)
-  const wallShouldersModel = mfrSku.match(/^(?:GS|WS)\d{4}[A-Z]$/)?.[0]
-  if (
-    wallShouldersModel &&
-    /\bwall\s*shoulders\b/i.test(row.name) &&
-    /\bx[\s-]?ray\s+apron\s+hanger\b/i.test(row.name)
-  ) {
-    numericAttrs.set("wallshoulders_model", new Set([wallShouldersModel]))
-  }
-  const pdtInstrumentModel = mfrSku.match(/R\d{3}R?$/)?.[0]
-  if (
-    pdtInstrumentModel &&
-    (/\b(?:pdt|paradise\s+dental|amazing\s+gracey)\b/i.test(`${row.brand} ${row.name}`))
-  ) {
-    numericAttrs.set("pdt_instrument_model", new Set([pdtInstrumentModel]))
-  }
-  const unitekCrownModel = `${row.manufacturer_sku} ${row.name}`.match(/\b9\d{5}\b/)?.[0]
-  if (unitekCrownModel && /\bunitek\b/i.test(row.name) && /\bcrowns?\b/i.test(row.name)) {
-    numericAttrs.set("unitek_crown_model", new Set([unitekCrownModel]))
-  }
+  // SKU/brand-keyed model axes (wallshoulders/pdt/unitek) are registry specs, so
+  // they need the SKU and brand alongside the name.
+  const numericAttrs = extractNumericAttrs(row.name, {
+    mfrSku,
+    rawMfrSku: row.manufacturer_sku,
+    brand: row.brand,
+  })
   // The prefix-stripped model is a hard-conflict axis: two products with
   // different models are different products. Only prefix-coded suppliers carry
   // it, so it can only ever veto a pair of THAT supplier's own listings —

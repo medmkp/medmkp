@@ -1,6 +1,8 @@
 import { createHash } from "crypto"
 import type { Client } from "pg"
 import { classifyTaxonomy, type TaxonomyClassification } from "../catalog/taxonomy"
+import { axisLabelFor } from "./attribute-specs"
+import { clusterAttributes } from "./family"
 import type { Cluster, MatchRunResult, SupplierProductRow } from "./types"
 
 export async function loadSupplierProducts(client: Client): Promise<SupplierProductRow[]> {
@@ -333,6 +335,20 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
         ...(family
           ? { family: family.familyName, size: family.variantLabel }
           : {}),
+        // Structured variant attributes (Tier 2): every agreed selector axis for
+        // this canonical, each labeled from the registry. `variant_axis` is the
+        // family's varying axis; the rest render as data-driven spec rows on the
+        // product page. Persisted in this JSON (no new table) — a SQL-queryable
+        // attribute table is the follow-up if/when faceted filtering is needed.
+        variant_axis: family?.variantAxis ?? null,
+        variant_axis_label: axisLabelFor(family?.variantAxis) ?? null,
+        modeled_attributes: clusterAttributes(cluster).map((attr) => ({
+          axis: attr.axis,
+          value: attr.value,
+          label: attr.label,
+          axis_label: attr.axisLabel,
+          is_variant_axis: attr.isVariantAxis,
+        })),
       }
       const assigned = idByClusterKey.get(cluster.key)!
       return [

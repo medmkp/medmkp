@@ -39,6 +39,7 @@
     "catalog:refresh-read-models": "ts-node ./src/scripts/refresh-catalog-read-models.ts",
     "catalog:refresh-match-index": "ts-node ./src/scripts/refresh-match-index.ts",
     "products:match": "ts-node ./src/scripts/match-canonical-products.ts",
+    "products:propose-axes": "ts-node ./src/scripts/propose-variant-axes.ts",
     "gtin:ingest-gudid": "ts-node ./src/scripts/ingest-gudid-gtin-reference.ts",
     "gtin:enrich-barcodes": "ts-node ./src/scripts/enrich-barcodes-from-gudid.ts",
     "admin:create": "medusa user -e admin@medmkp.local -p medmkp-admin",

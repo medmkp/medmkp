@@ -1,5 +1,5 @@
 import { runMatching } from "../engine"
-import { assignFamilies } from "../family"
+import { assignFamilies, clusterAttributes } from "../family"
 import { normalizeProduct } from "../normalize"
 import type { Cluster, FamilyInfo, SupplierProductRow } from "../types"
 
@@ -257,5 +257,60 @@ describe("variant families", () => {
     // Family title drops the style word.
     expect(families[0].familyName).not.toMatch(/econo|braided|wrapped/i)
     expect(families[0].familyName.toLowerCase()).toContain("cotton rolls")
+  })
+})
+
+describe("Tier-3-discovered selector axes", () => {
+  it("groups Rim Lock tray arch positions into one family", () => {
+    const rows = [
+      ...variantPair("Coltene", "Rim Lock Impression Trays U15", "RIMLOCK-U15"),
+      ...variantPair("Coltene", "Rim Lock Impression Trays U16", "RIMLOCK-U16"),
+      ...variantPair("Coltene", "Rim Lock Impression Trays L15", "RIMLOCK-L15"),
+    ]
+    const families = [...familiesByName(rows).byRepName.values()].filter((f): f is FamilyInfo => Boolean(f))
+    expect(new Set(families.map((f) => f.familyId)).size).toBe(1)
+    expect(new Set(families.map((f) => f.variantLabel))).toEqual(new Set(["U15", "U16", "L15"]))
+    expect(families.every((f) => f.variantAxis === "tooth_arch_position")).toBe(true)
+  })
+
+  it("groups rigid electrode models into one family (strip pattern works)", () => {
+    const rows = [
+      ...variantPair("Macan", "Rigid Electrode #R-F15 Pkg of 2", "MACAN-RF15"),
+      ...variantPair("Macan", "Rigid Electrode #R-L32 Pkg of 2", "MACAN-RL32"),
+    ]
+    const families = [...familiesByName(rows).byRepName.values()].filter((f): f is FamilyInfo => Boolean(f))
+    expect(new Set(families.map((f) => f.familyId)).size).toBe(1)
+    expect(new Set(families.map((f) => f.variantLabel))).toEqual(new Set(["F15", "L32"]))
+    expect(families.every((f) => f.variantAxis === "electrode_model")).toBe(true)
+  })
+})
+
+describe("clusterAttributes (Tier 2 structured attributes)", () => {
+  it("returns the agreed selector axis labeled from the registry", () => {
+    const attrs = clusterAttributes(
+      familyCluster(1, "Alasta Aloe Nitrile Glove Large 100/Box", "100/Box")
+    )
+    expect(attrs).toEqual([
+      { axis: "size", value: "L", label: "Large", axisLabel: "Size", isVariantAxis: true },
+    ])
+  })
+
+  it("flags the highest-priority axis as the variant and keeps the rest as specs", () => {
+    // Needle listing carries both a length (priority 2) and a gauge (priority 10):
+    // length is the variant axis, gauge becomes a non-variant spec row.
+    const attrs = clusterAttributes(
+      familyCluster(2, "Transcodent Injection Needles 25 Gauge Long", "100/Box")
+    )
+    const byAxis = Object.fromEntries(attrs.map((a) => [a.axis, a]))
+    expect(byAxis.needle_length).toEqual({
+      axis: "needle_length", value: "long", label: "Long", axisLabel: "Length", isVariantAxis: true,
+    })
+    expect(byAxis.ga).toEqual({
+      axis: "ga", value: "25", label: "25 ga", axisLabel: "Gauge", isVariantAxis: false,
+    })
+  })
+
+  it("returns nothing for a product with no modeled selector axis", () => {
+    expect(clusterAttributes(familyCluster(3, "Generic Bib Clip Cord", "1/Each"))).toEqual([])
   })
 })

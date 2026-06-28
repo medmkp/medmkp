@@ -1,4 +1,5 @@
 import { createHash } from "crypto"
+import { AXIS_PRIORITY, axisLabelFor, formatVariant, isFamilyStripToken } from "./attribute-specs"
 import type { Cluster, FamilyInfo, NormalizedProduct } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -16,48 +17,16 @@ import type { Cluster, FamilyInfo, NormalizedProduct } from "./types"
 // (brand + core name tokens with the varying attribute removed).
 // ---------------------------------------------------------------------------
 
-// Worded apparel-size tokens that survive into coreTokens (measured tokens like
-// "25mm"/"18ga" are already excluded by normalizeProduct, and taper/"#"/bare
-// numbers never reach coreTokens because they carry no letter). Stripping these
-// is what lets two glove sizes share a family key.
-const SIZE_TOKENS = new Set([
-  "small", "medium", "large", "xs", "xl", "xxl", "xxxl", "2xl", "3xl", "extra",
-])
-const SHADE_TOKEN_RE = /^[a-d][1-7](\.5)?$/
-// Cotton roll style words that distinguish product lines (econo/economy/braided/
-// wrapped) must be stripped from the family key so all three styles can share
-// one family, just like size tokens are stripped from glove families.
-const COTTON_ROLL_STYLE_TOKENS = new Set(["econo", "economy", "braided", "wrapped"])
-// Needle length words (short/long) split distinct needle SKUs in the matcher but
-// must be stripped from the family key so the two lengths share one family and
-// surface as a Short/Long selector. extractNumericAttrs only emits needle_length
-// for needle listings, so this strip is harmless elsewhere.
-const NEEDLE_LENGTH_TOKENS = new Set(["short", "long"])
-
-// Axes we will collapse into a selector, in the order we prefer to label by.
-// Keys match extractNumericAttrs() unit keys. Product-line/length axes sit ahead
-// of generic size/measure axes because those SKUs can share a size or gauge
-// across the variants, so the specific axis is what actually varies.
-const AXIS_PRIORITY = [
-  "cotton_roll_style", "needle_length", "size", "shade", "taper", "#", "mm", "cm", "in", "ga", "ml", "cc", "oz", "gr", "kg", "lb", "l", "%",
-] as const
-
-const SIZE_RANK: Record<string, number> = {
-  XS: 0, S: 1, M: 2, L: 3, XL: 4, "2XL": 5, "3XL": 6,
-}
-const SIZE_LABEL: Record<string, string> = {
-  XS: "X-Small", S: "Small", M: "Medium", L: "Large",
-  XL: "X-Large", "2XL": "2X-Large", "3XL": "3X-Large",
-}
+// The selector axes, their order, labels, ranks, and which name tokens to strip
+// from the family key all come from the variant registry (attribute-specs.ts) so
+// the catalog's variant selectors can never drift from the matcher's conflict
+// axes. AXIS_PRIORITY / formatVariant / isFamilyStripToken are derived there.
 
 function familyTokens(coreTokens: string[]): string[] {
-  return coreTokens.filter(
-    (token) =>
-      !SIZE_TOKENS.has(token) &&
-      !SHADE_TOKEN_RE.test(token) &&
-      !COTTON_ROLL_STYLE_TOKENS.has(token) &&
-      !NEEDLE_LENGTH_TOKENS.has(token)
-  )
+  // Drop the varying-attribute tokens (glove "large", shade "A1", cotton-roll
+  // "braided") so two variants share one family key. Measured/taper/"#"/bare
+  // numbers never reach coreTokens, so only word-token axes need stripping.
+  return coreTokens.filter((token) => !isFamilyStripToken(token))
 }
 
 function familyKey(rep: NormalizedProduct, axis: string): string {
@@ -101,82 +70,84 @@ function mostCommon(values: string[]): string {
 }
 
 /**
- * The varying-attribute value for a whole cluster. All members of a cluster
- * share the same modeled attributes (a conflict would have split them), but
- * some members may not state the value, so scan members and take the most
- * common stated value on the highest-priority axis any member carries.
+ * The cluster's single agreed value on one axis, or null. All members of a
+ * cluster share the same modeled attributes (a conflict would have split them),
+ * but some members may not state the value, so take the most common stated value
+ * — and reject a cluster that carries two disjoint values unless exactly one is
+ * unanimous (supplier copy that names a shade range plus the actual shade, e.g.
+ * "A1-D4 ... Tab A2", leaves a one-off range value to ignore).
+ */
+function agreedAxisValue(cluster: Cluster, axis: string): string | null {
+  const counts = new Map<string, number>()
+  for (const member of cluster.members) {
+    const values = member.numericAttrs.get(axis)
+    if (!values) {
+      continue
+    }
+    for (const value of values) {
+      counts.set(value, (counts.get(value) ?? 0) + 1)
+    }
+  }
+  if (!counts.size) {
+    return null
+  }
+  if (counts.size > 1) {
+    const unanimous = [...counts.entries()]
+      .filter(([, count]) => count === cluster.members.length)
+      .map(([value]) => value)
+    return unanimous.length === 1 ? unanimous[0] : null
+  }
+  return [...counts.keys()][0]
+}
+
+/**
+ * The varying-attribute value for a whole cluster: the agreed value on the
+ * highest-priority selector axis the cluster carries.
  */
 function clusterVariant(cluster: Cluster): ClusterVariant | null {
   for (const axis of AXIS_PRIORITY) {
-    const counts = new Map<string, number>()
-    for (const member of cluster.members) {
-      const values = member.numericAttrs.get(axis)
-      if (!values) {
-        continue
-      }
-      for (const value of values) {
-        counts.set(value, (counts.get(value) ?? 0) + 1)
-      }
-    }
-    if (!counts.size) {
-      continue
-    }
-    // A cluster that carries two disjoint values on this axis is usually not a
-    // clean single variant. One common exception is supplier copy that names a
-    // shade range plus the actual item shade ("A1-D4 ... Tab A2"). When exactly
-    // one value appears on every member, use that unanimous value and ignore the
-    // one-off range noise.
-    if (counts.size > 1) {
-      const unanimous = [...counts.entries()]
-        .filter(([, count]) => count === cluster.members.length)
-        .map(([value]) => value)
-      if (unanimous.length !== 1) {
-        continue
-      }
-      const value = unanimous[0]
+    const value = agreedAxisValue(cluster, axis)
+    if (value !== null) {
       return { axis, value, ...formatVariant(axis, value) }
     }
-    const value = [...counts.keys()][0]
-    return { axis, value, ...formatVariant(axis, value) }
   }
   return null
 }
 
-function formatVariant(axis: string, value: string): { label: string; rank: number } {
-  // variantRank is persisted in an INTEGER column and is only ever used to sort
-  // variants within a (single-axis) family, so every branch must yield a whole
-  // number. Magnitudes that can be fractional (taper 0.04, 2.5mm, shade A1.5)
-  // are scaled ×100 so sub-integer ordering survives the rounding.
-  const scaledMagnitude = Math.round((parseFloat(value) || 0) * 100)
-  if (axis === "size") {
-    return { label: SIZE_LABEL[value] ?? value, rank: SIZE_RANK[value] ?? 99 }
+/** One modeled attribute persisted for a canonical product (Tier 2). */
+export type ClusterAttribute = {
+  axis: string
+  value: string
+  /** Display value, e.g. "Large", "25 mm", "A2". */
+  label: string
+  /** Human axis name, e.g. "Size", "Shade", "Gauge". */
+  axisLabel: string
+  /** True for the axis that varies across this product's family (the selector). */
+  isVariantAxis: boolean
+}
+
+/**
+ * Every agreed selector-axis value for a cluster, for the structured attribute
+ * store. The highest-priority agreed axis is flagged `isVariantAxis` — it is the
+ * same axis `clusterVariant()` turns into the family selector, so the catalog's
+ * spec table and its variant selector stay consistent.
+ */
+export function clusterAttributes(cluster: Cluster): ClusterAttribute[] {
+  const out: ClusterAttribute[] = []
+  for (const axis of AXIS_PRIORITY) {
+    const value = agreedAxisValue(cluster, axis)
+    if (value === null) {
+      continue
+    }
+    out.push({
+      axis,
+      value,
+      label: formatVariant(axis, value).label,
+      axisLabel: axisLabelFor(axis) ?? axis,
+      isVariantAxis: out.length === 0,
+    })
   }
-  if (axis === "cotton_roll_style") {
-    const STYLE_RANK: Record<string, number> = { braided: 0, econo: 1, wrapped: 2 }
-    const label = value.charAt(0).toUpperCase() + value.slice(1)
-    return { label, rank: STYLE_RANK[value] ?? 99 }
-  }
-  if (axis === "needle_length") {
-    const LENGTH_RANK: Record<string, number> = { short: 0, long: 1 }
-    const label = value.charAt(0).toUpperCase() + value.slice(1)
-    return { label, rank: LENGTH_RANK[value] ?? 99 }
-  }
-  if (axis === "shade") {
-    const upper = value.toUpperCase()
-    const rank = upper.charCodeAt(0) * 1000 + Math.round((parseFloat(upper.slice(1)) || 0) * 100)
-    return { label: upper, rank }
-  }
-  if (axis === "taper") {
-    return { label: `${value} Taper`, rank: scaledMagnitude }
-  }
-  if (axis === "#") {
-    return { label: `#${value}`, rank: scaledMagnitude }
-  }
-  if (axis === "%") {
-    return { label: `${value}%`, rank: scaledMagnitude }
-  }
-  const unit = axis === "ga" ? "ga" : axis
-  return { label: `${value} ${unit}`, rank: scaledMagnitude }
+  return out
 }
 
 /**

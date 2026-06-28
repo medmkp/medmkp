@@ -420,6 +420,44 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(extractNumericAttrs("Gelato Prophy Paste Mint").get("topical_fluoride_flavor")).toBeUndefined()
   })
 
+  // ---- Tier-3-discovered axes (npm run products:propose-axes) ----
+
+  it("captures Rim Lock impression tray arch position", () => {
+    expect([...(extractNumericAttrs("Rim Lock Impression Trays - U15").get("tooth_arch_position") ?? [])]).toEqual(["u15"])
+    expect([...(extractNumericAttrs("Rim Lock Impression Trays - L18").get("tooth_arch_position") ?? [])]).toEqual(["l18"])
+    // Gate: a stray "U15" outside a rim-lock tray listing is not an arch position.
+    expect(extractNumericAttrs("Disposable Mesh Tray U15").get("tooth_arch_position")).toBeUndefined()
+  })
+
+  it("captures rigid electrode model code", () => {
+    expect([...(extractNumericAttrs("Rigid Electrode #R-F15 (Pkg. of 2)").get("electrode_model") ?? [])]).toEqual(["f15"])
+    expect([...(extractNumericAttrs("Rigid Electrode #R-L32 (Pkg. of 2)").get("electrode_model") ?? [])]).toEqual(["l32"])
+    expect(extractNumericAttrs("Composite Shade L32 Body").get("electrode_model")).toBeUndefined()
+  })
+
+  it("captures piezo scaler tip model", () => {
+    expect([...(extractNumericAttrs("PWR Piezo Tip – S1").get("piezo_tip_model") ?? [])]).toEqual(["s1"])
+    expect([...(extractNumericAttrs("PWR Piezo Tip – ER2").get("piezo_tip_model") ?? [])]).toEqual(["er2"])
+    expect([...(extractNumericAttrs("PWR Piezo Tip – P16R").get("piezo_tip_model") ?? [])]).toEqual(["p16r"])
+    expect(extractNumericAttrs("Cotton Roll S1 Holder").get("piezo_tip_model")).toBeUndefined()
+  })
+
+  it("captures carbide bur goldie ISO number", () => {
+    expect([...(extractNumericAttrs("Carbide Bur Goldies - Regular Cut, 41-P").get("bur_iso_number") ?? [])]).toEqual(["41-p"])
+    expect([...(extractNumericAttrs("Carbide Bur Goldies - Regular Cut, 61-A/81-A").get("bur_iso_number") ?? [])]).toEqual(["61-a/81-a"])
+    expect(extractNumericAttrs("Diamond Bur 41-P shape").get("bur_iso_number")).toBeUndefined()
+  })
+
+  it("captures diamond bur grit from a word or a size-grit code", () => {
+    expect([...(extractNumericAttrs("Round End Taper, Two Striper Diamond, 767.5C, 5/Pkg, Coarse").get("diamond_bur_grit") ?? [])]).toEqual(["coarse"])
+    expect([...(extractNumericAttrs("HSB - Diamonds Flame 862-012Sf 10/Pk").get("diamond_bur_grit") ?? [])]).toEqual(["superfine"])
+    expect([...(extractNumericAttrs("HSB - Round Diamonds 801-014C 10/Pk").get("diamond_bur_grit") ?? [])]).toEqual(["coarse"])
+    // A stated grit word is taken alone (no conflicting second value from the code).
+    expect([...(extractNumericAttrs("HSB - Round Diamonds 801-014C 10/Pk Fine").get("diamond_bur_grit") ?? [])]).toEqual(["fine"])
+    // Gate: "medium"/"fine" outside a diamond-bur listing is not grit.
+    expect(extractNumericAttrs("Medium Cotton Roll 2/Pk").get("diamond_bur_grit")).toBeUndefined()
+  })
+
   it("rejects same-SKU color variants instead of merging them", () => {
     const decision = score(
       {
