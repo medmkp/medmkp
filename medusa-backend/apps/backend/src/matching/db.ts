@@ -1,5 +1,6 @@
 import { createHash } from "crypto"
 import type { Client } from "pg"
+import { classifyTaxonomy, type TaxonomyClassification } from "../catalog/taxonomy"
 import type { Cluster, MatchRunResult, SupplierProductRow } from "./types"
 
 export async function loadSupplierProducts(client: Client): Promise<SupplierProductRow[]> {
@@ -146,6 +147,59 @@ export function pickCategory(categories: string[]): string {
   return specific.length ? mostCommon(specific) : mostCommon(categories)
 }
 
+type TaxonomySource = Pick<SupplierProductRow, "name" | "category">
+
+/**
+ * Pick a buyer-facing taxonomy bucket for a canonical product while preserving
+ * raw supplier categories separately in attributes_text. Category evidence gets
+ * first say, but generic supplier buckets can be rescued by product-name cues.
+ */
+export function pickTaxonomy(products: TaxonomySource[]): TaxonomyClassification {
+  const byDepartment = new Map<
+    string,
+    { classification: TaxonomyClassification; score: number; count: number }
+  >()
+  const rawConsensus = pickCategory(products.map((product) => product.category))
+
+  for (const product of products) {
+    const classification = classifyTaxonomy(product)
+    const consensusBoost =
+      product.category &&
+      rawConsensus &&
+      product.category.trim().toLowerCase() === rawConsensus.trim().toLowerCase()
+        ? 15
+        : 0
+    const score = classification.confidence + consensusBoost
+    const existing = byDepartment.get(classification.department)
+    if (existing) {
+      existing.score += score
+      existing.count += 1
+      if (classification.confidence > existing.classification.confidence) {
+        existing.classification = classification
+      }
+    } else {
+      byDepartment.set(classification.department, {
+        classification,
+        score,
+        count: 1,
+      })
+    }
+  }
+
+  let best: { classification: TaxonomyClassification; score: number; count: number } | null = null
+  for (const candidate of byDepartment.values()) {
+    if (
+      !best ||
+      candidate.score > best.score ||
+      (candidate.score === best.score && candidate.count > best.count)
+    ) {
+      best = candidate
+    }
+  }
+
+  return best?.classification || classifyTaxonomy({ category: rawConsensus })
+}
+
 export async function batchInsert(
   client: Client,
   table: string,
@@ -226,32 +280,53 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
     // glove size) must share a category, so aggregate every member's category
     // across the family's clusters and pick once.
     const familyCategoryMembers = new Map<string, string[]>()
+    const familyTaxonomyMembers = new Map<string, TaxonomySource[]>()
     for (const cluster of result.clusters) {
       const family = result.families.get(cluster.key)
       if (!family) {
         continue
       }
       const list = familyCategoryMembers.get(family.familyId) ?? []
+      const taxonomyList = familyTaxonomyMembers.get(family.familyId) ?? []
       for (const member of cluster.members) {
         list.push(member.row.category)
+        taxonomyList.push(member.row)
       }
       familyCategoryMembers.set(family.familyId, list)
+      familyTaxonomyMembers.set(family.familyId, taxonomyList)
     }
     const familyCategory = new Map<string, string>()
     for (const [familyId, categories] of familyCategoryMembers) {
       familyCategory.set(familyId, pickCategory(categories))
     }
+    const familyTaxonomy = new Map<string, TaxonomyClassification>()
+    for (const [familyId, products] of familyTaxonomyMembers) {
+      familyTaxonomy.set(familyId, pickTaxonomy(products))
+    }
 
     const canonicalRows = result.clusters.map((cluster) => {
       const rep = cluster.representative
       const family = result.families.get(cluster.key) ?? null
-      const category = family
+      const rawCategory = family
         ? familyCategory.get(family.familyId)!
         : pickCategory(cluster.members.map((m) => m.row.category))
+      const taxonomy = family
+        ? familyTaxonomy.get(family.familyId)!
+        : pickTaxonomy(cluster.members.map((m) => m.row))
       const attributes = {
         brands: [...new Set(cluster.members.map((m) => m.row.brand).filter(Boolean))],
         manufacturer_skus: [...new Set(cluster.members.map((m) => m.row.manufacturer_sku).filter(Boolean))],
         pack_sizes: [...new Set(cluster.members.map((m) => m.row.pack_size).filter(Boolean))],
+        source_categories: [...new Set(cluster.members.map((m) => m.row.category).filter(Boolean))],
+        source_category: rawCategory,
+        taxonomy: {
+          slug: taxonomy.slug,
+          department: taxonomy.department,
+          subcategory: taxonomy.subcategory,
+          path: taxonomy.path,
+          confidence: taxonomy.confidence,
+          reason: taxonomy.reason,
+        },
         supplier_count: cluster.supplierCount,
         member_count: cluster.members.length,
         // Surfaced on the product page (Size/Type chips read these).
@@ -264,7 +339,7 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
         assigned.id,
         assigned.handle,
         rep.row.name,
-        category,
+        taxonomy.department,
         "",
         mostCommon(cluster.members.map((m) => m.row.unit_of_measure)),
         JSON.stringify(attributes),

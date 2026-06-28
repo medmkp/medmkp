@@ -1,4 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { displayTaxonomyCategory } from "../../../../catalog/taxonomy"
 import { getPostgresPool } from "../../../../utils/postgres"
 
 const CATEGORY_LIMIT = 12
@@ -8,6 +9,11 @@ const CATEGORY_LIMIT_MAX = 500
 const CATEGORY_CACHE_TTL_MS = 60 * 1000
 
 type CategoryRow = {
+  category: string
+  product_count: number
+}
+
+type SupplierCoverageRow = {
   category: string
   supplier_count: string
 }
@@ -42,13 +48,6 @@ const categoriesPromise = new Map<number, Promise<CategoriesResponse>>()
 async function loadCategories(limit: number): Promise<CategoriesResponse> {
   const pool = getPostgresPool()
 
-  // Supplier-named categories (the matview already drops supplier-name and
-  // "dental supplies" buckets) with their distinct supplier coverage.
-  const categories = await pool.query<CategoryRow>(
-    `SELECT category, supplier_count
-     FROM medmkp_supplier_category_summary`
-  )
-
   // The matview's product_count counts raw supplier SKUs (priced or not), which
   // massively overstates what a buyer can actually open: the drill-down
   // (/medmkp/canonical-products?category=) lists deduped, family-grouped
@@ -60,31 +59,50 @@ async function loadCategories(limit: number): Promise<CategoriesResponse> {
   // (refreshed by refresh-catalog-read-models). Computing it live here meant a
   // join over the full match + current-price tables on every request, which at
   // prod's tiny work_mem spilled to disk and timed out the catalog landing.
-  const pricedCounts = await pool.query<{ category: string; product_count: number }>(
-    `SELECT category, product_count FROM medmkp_category_priced_count`
+  const categories = await pool.query<CategoryRow>(
+    `SELECT category, product_count
+     FROM medmkp_category_priced_count
+     WHERE product_count > 0`
   )
-  const pricedByCategory = new Map(
-    pricedCounts.rows.map((row) => [row.category, Number(row.product_count)])
+
+  // Supplier coverage is now derived from the normalized canonical category
+  // carried by medmkp_supplier_catalog_listing.any_category. The older
+  // supplier_category_summary read model is intentionally raw supplier taxonomy,
+  // so using it here would re-split "Gloves", "Nitrile", "PPE", etc.
+  const supplierCoverage = await pool.query<SupplierCoverageRow>(
+    `SELECT lower(btrim(any_category)) AS category,
+            count(distinct supplier_id)::text AS supplier_count
+     FROM medmkp_supplier_catalog_listing
+     WHERE any_category <> ''
+     GROUP BY lower(btrim(any_category))`
+  )
+  const supplierCountByCategory = new Map(
+    supplierCoverage.rows.map((row) => [row.category, Number(row.supplier_count)])
   )
 
   // Rank by browsable (priced) product count and keep the requested page.
   const ranked = categories.rows
     .map((row) => ({
       category: row.category,
-      supplier_count: Number(row.supplier_count),
-      product_count: pricedByCategory.get(row.category.trim().toLowerCase()) ?? 0,
+      supplier_count: supplierCountByCategory.get(row.category.trim().toLowerCase()) ?? 0,
+      product_count: Number(row.product_count),
     }))
     .sort((a, b) => b.product_count - a.product_count)
     .slice(0, limit)
 
   const bestValue = await pool.query<BestValueRow>(
-    `SELECT DISTINCT ON (p.category)
-            p.category, p.name, p.sku, p.supplier_id, sup.name AS supplier_name,
-            p.price_cents
-     FROM medmkp_supplier_product_current_offer p
-     LEFT JOIN medmkp_supplier sup ON sup.id = p.supplier_id AND sup.deleted_at IS NULL
-     WHERE p.category = ANY($1)
-     ORDER BY p.category, p.price_cents ASC`,
+    `SELECT DISTINCT ON (lower(btrim(l.any_category)))
+            lower(btrim(l.any_category)) AS category,
+            sp.name, sp.sku, sp.supplier_id, sup.name AS supplier_name,
+            l.price_cents
+     FROM medmkp_supplier_catalog_listing l
+     JOIN medmkp_supplier_product sp ON sp.id = l.best_sp_id AND sp.deleted_at IS NULL
+     LEFT JOIN medmkp_supplier sup ON sup.id = sp.supplier_id AND sup.deleted_at IS NULL
+     WHERE lower(btrim(l.any_category)) = ANY($1)
+     ORDER BY lower(btrim(l.any_category)),
+              (l.unit_price_cents IS NULL) ASC,
+              l.unit_price_cents ASC,
+              l.price_cents ASC`,
     [ranked.map((row) => row.category)]
   )
   const bestByCategory = new Map(bestValue.rows.map((row) => [row.category, row]))
@@ -92,9 +110,10 @@ async function loadCategories(limit: number): Promise<CategoriesResponse> {
   return {
     categories: ranked.map((row) => {
       const best = bestByCategory.get(row.category)
+      const name = displayTaxonomyCategory(row.category)
       return {
-        id: row.category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
-        name: row.category,
+        id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+        name,
         product_count: row.product_count,
         supplier_count: row.supplier_count,
         best_value_item: best
