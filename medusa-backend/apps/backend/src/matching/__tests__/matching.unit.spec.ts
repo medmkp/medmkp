@@ -394,6 +394,18 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(mediumC14.get("cad_block_translucency") ?? [])]).toEqual(["mt"])
   })
 
+  it("captures stainless crown refill sizes even when the size equals the pack count", () => {
+    expect([
+      ...(extractNumericAttrs("3M Unitek Crowns Size 5 1st Perm URM Replacement Crowns 5/Bx").get("crown_size") ?? []),
+    ]).toEqual(["5"])
+    expect([
+      ...(extractNumericAttrs("3M Unitek 1UR1 Permanent Molar 900321").get("crown_size") ?? []),
+    ]).toEqual(["1"])
+    expect([
+      ...(extractNumericAttrs("3M Unitek Crowns SS 1st Perm Mol UR1 900321 5/Bx").get("crown_size") ?? []),
+    ]).toEqual(["1"])
+  })
+
   it("captures topical fluoride gel flavors as hard-conflict attributes", () => {
     expect([...(extractNumericAttrs("Gelato APF Gel, 16 oz, Mint").get("topical_fluoride_flavor") ?? [])]).toEqual(["mint"])
     expect([...(extractNumericAttrs("Gelato APF Gel - Dye-Free Mint").get("topical_fluoride_flavor") ?? [])]).toEqual(["dye_free_mint"])
@@ -612,6 +624,77 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(result.clusters).toHaveLength(2)
     expect(sizeSets.some((values) => values.size === 1 && values.has("sm2"))).toBe(true)
     expect(sizeSets.some((values) => values.size === 1 && values.has("sm3"))).toBe(true)
+  })
+
+  it("does not merge Unitek permanent molar crown sizes through a Size 5 row whose pack is also 5", () => {
+    // Prod regression: "Size 5 ... 5/Bx" lost its size as a pack count, then
+    // high same-brand name similarity let sizes 1/3/5/6 collapse together.
+    const rows = [
+      product({
+        supplier_id: "msup_dentalcity_com",
+        brand: "Dental City",
+        manufacturer_sku: "900321",
+        name: "3M Unitek 1UR1 Permanent Molar 900321",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "Solventum former 3M HealthCare",
+        manufacturer_sku: "900323",
+        name: "3M Unitek Crowns Size 3 1st Perm URM Replacement Crowns 5/Bx",
+        pack_size: "5/Bx",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "Solventum former 3M HealthCare",
+        manufacturer_sku: "900321",
+        name: "3M Unitek Crowns Size 1 1st Perm URM Replacement Crowns 5/Bx",
+        pack_size: "5/Bx",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "Solventum former 3M HealthCare",
+        manufacturer_sku: "900326",
+        name: "3M Unitek Crowns Size 6 1st Perm URM Replacement Crowns 5/Bx",
+        pack_size: "5/Bx",
+      }),
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "Solventum former 3M HealthCare",
+        manufacturer_sku: "900325",
+        name: "3M Unitek Crowns Size 5 1st Perm URM Replacement Crowns 5/Bx",
+        pack_size: "5/Bx",
+      }),
+      product({
+        supplier_id: "msup_carolinadental_com",
+        brand: "3M ESPE",
+        manufacturer_sku: "3M-900321",
+        name: "3M Unitek Crowns SS 1st Perm Mol UR1 900321 5/Bx - First Permanent Molar / Upper Right / 1",
+        pack_size: "5/Bx",
+      }),
+      product({
+        supplier_id: "msup_dcdental_com",
+        brand: "3M (now Solventum)",
+        manufacturer_sku: "516-900321",
+        name: "3M Unitek SS Permanent Molar Crowns, 900321, Upper Right First Permanent Molar, Size 1, 5 Crowns",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+
+    expect(
+      result.clusters.every((cluster) => {
+        const sizes = new Set(
+          cluster.members.flatMap((member) => [...(member.numericAttrs.get("crown_size") ?? [])])
+        )
+        return sizes.size <= 1
+      })
+    ).toBe(true)
+    expect(
+      result.clusters.some(
+        (cluster) =>
+          cluster.members.some((member) => member.row.manufacturer_sku === "900323") &&
+          cluster.members.some((member) => member.row.manufacturer_sku === "900325")
+      )
+    ).toBe(false)
   })
 
   it("does not merge NTI HP diamond bur diameter variants through sparse supplier rows", () => {
@@ -1167,6 +1250,8 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(sizeOneCluster?.members.map((member) => member.row.manufacturer_sku).sort()).toEqual([
       "3M-900321",
       "516-900321",
+      "900321",
+      "900321",
       "900321",
       "900321",
     ])

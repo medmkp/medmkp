@@ -490,6 +490,24 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
     }
   }
 
+  // Stainless steel crown refills are size-specific products. The size can
+  // appear as "Size 5" next to a 5/Bx pack count, so bare-number conflict loses
+  // it during pack parsing; compact supplier codes also write it as UR1/1UR1.
+  if (/\bcrowns?\b/.test(lowered) || /\b(?:primary|permanent|perm)\s+molar\b/.test(lowered)) {
+    const crownSizeRe = /\bsize\s*(00|0|[1-9])\b/g
+    while ((match = crownSizeRe.exec(lowered))) {
+      add("crown_size", match[1])
+    }
+    const quadrantTrailingSizeRe = /\b(?:[1-6])?(?:ur|ul|lr|ll)(00|0|[1-9])\b/g
+    while ((match = quadrantTrailingSizeRe.exec(lowered))) {
+      add("crown_size", match[1])
+    }
+    const sizeBeforeQuadrantRe = /\b(00|0|[1-9])(?:ur|ul|lr|ll)\b/g
+    while ((match = sizeBeforeQuadrantRe.exec(lowered))) {
+      add("crown_size", match[1])
+    }
+  }
+
   // NSK Ti-Max high-speed handpieces differ by backend/model code (Z890L,
   // Z890KL, Z890WL, Z990WL, etc.). Supplier family pages can mention a generic
   // leading model plus the actual variant later in the name, so keep the last
