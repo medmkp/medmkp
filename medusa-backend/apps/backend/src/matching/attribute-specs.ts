@@ -236,6 +236,15 @@ export const VARIANT_SPECS: VariantSpec[] = [
       while ((match = whiteRe.exec(lowered))) {
         out.push(["shade", "w"])
       }
+      // Ivoclar Tetric composites use roman-style shade codes (IVA/IVB/IVW)
+      // instead of the A1-D7 family. Treat them as shades only inside the scoped
+      // Tetric composite line so generic roman numerals elsewhere are untouched.
+      if (/\btetric\b/.test(lowered) && /\b(?:composite|powerfill|powerflow)\b/.test(lowered)) {
+        const tetricShadeRe = /\biv([abw])\b/g
+        while ((match = tetricShadeRe.exec(lowered))) {
+          out.push(["shade", `iv${match[1]}`])
+        }
+      }
       return out
     },
     family: {
