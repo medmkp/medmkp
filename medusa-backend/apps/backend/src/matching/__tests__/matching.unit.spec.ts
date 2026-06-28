@@ -355,6 +355,14 @@ describe("identity matching (golden pairs from production data)", () => {
     expect([...(guttaPercha.get("endo_point_material") ?? [])]).toEqual(["gutta_percha"])
   })
 
+  it("captures endodontic point size codes as hard-conflict attributes", () => {
+    const sm2 = extractNumericAttrs("TF Adaptive Gutta Percha Red SM2 50/Pk")
+    const sm3 = extractNumericAttrs("TF Adaptive Gutta Percha Points - SM3, Small, Red")
+    expect([...(sm2.get("endo_point_size") ?? [])]).toEqual(["sm2"])
+    expect([...(sm3.get("endo_point_size") ?? [])]).toEqual(["sm3"])
+    expect(extractNumericAttrs("Matrix Band SM2 Retainer").get("endo_point_size")).toBeUndefined()
+  })
+
   it("captures CAD block size and translucency as hard-conflict attributes", () => {
     const low12 = extractNumericAttrs("Grandio Blocs - A2, Low Translucency, Size 12")
     const high14 = extractNumericAttrs("Grandio blocs HT Milling Blocks High Translucency 14L A2 For CEREC 5/Pk")
@@ -523,6 +531,61 @@ describe("identity matching (golden pairs from production data)", () => {
     expect(result.clusters).toHaveLength(2)
     expect(materialSets.some((values) => values.size === 1 && values.has("paper"))).toBe(true)
     expect(materialSets.some((values) => values.size === 1 && values.has("gutta_percha"))).toBe(true)
+  })
+
+  it("does not merge TF Adaptive gutta-percha SM2 and SM3 sizes through a sparse supplier row", () => {
+    // Prod regression: SKU 815-1541 is shared by both TF Adaptive SM2 and SM3
+    // gutta-percha points. A Henry Schein row with no size code matched both
+    // variants, transitively collapsing the two sizes into one canonical.
+    const rows = [
+      product({
+        supplier_id: "msup_henryschein_com",
+        brand: "Kerr MFG Co",
+        manufacturer_sku: "815-1541",
+        name: "TF Adaptive Gutta Percha Points Red 50/Pk",
+        pack_size: "50/Pk",
+      }),
+      product({
+        supplier_id: "msup_dcdental_com",
+        brand: "Kerr Endodontics",
+        manufacturer_sku: "813-815-1541",
+        name: "TF Adaptive Gutta Percha Red SM2 50/Pk",
+      }),
+      product({
+        supplier_id: "msup_pattersondental_com",
+        brand: "Kerr Endodontics",
+        manufacturer_sku: "815-1541",
+        name: "TF Adaptive Gutta Percha Points - SM3, Small, Red",
+        pack_size: "50/Pkg",
+      }),
+      product({
+        supplier_id: "msup_darbydental_com",
+        brand: "Kerr Endodontics",
+        manufacturer_sku: "815-1541",
+        name: "TF Adaptive Gutta Percha, SM3, 50/Box, Red",
+        pack_size: "50/Box",
+      }),
+      product({
+        supplier_id: "msup_dentalcity_com",
+        brand: "Dental City",
+        manufacturer_sku: "815-1541",
+        name: "TF Adaptive Gutta Percha SM3 50/Pack 815-1541",
+        pack_size: "50/Pack",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    const sizeSets = result.clusters.map((cluster) =>
+      new Set(
+        cluster.members
+          .map((member) => member.numericAttrs.get("endo_point_size"))
+          .filter((values): values is Set<string> => !!values)
+          .flatMap((values) => [...values])
+      )
+    )
+
+    expect(result.clusters).toHaveLength(2)
+    expect(sizeSets.some((values) => values.size === 1 && values.has("sm2"))).toBe(true)
+    expect(sizeSets.some((values) => values.size === 1 && values.has("sm3"))).toBe(true)
   })
 
   it("does not merge NTI HP diamond bur diameter variants through sparse supplier rows", () => {

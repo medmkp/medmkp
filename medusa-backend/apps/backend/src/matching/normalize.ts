@@ -485,6 +485,12 @@ export function extractNumericAttrs(name: string): Map<string, Set<string>> {
   if (/\bgutta[\s-]?percha\b/.test(lowered)) {
     add("endo_point_material", "gutta_percha")
   }
+  if (/\b(?:paper\s+points?|absorbent\s+points?|gutta[\s-]?percha(?:\s+points?)?)\b/.test(lowered)) {
+    const endoPointSizeRe = /\b(?:f[1-5]|sm[1-5]|ml[1-5])\b/g
+    while ((match = endoPointSizeRe.exec(lowered))) {
+      add("endo_point_size", match[0])
+    }
+  }
 
   // Apparel/glove sizing (gloves, gowns, masks, lab coats are size-differentiated
   // but carry no measured unit). Disjoint sizes are a hard conflict, like 25mm
