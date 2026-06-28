@@ -8905,6 +8905,10 @@ th {
 .crl-table--selectable .crl-foot-total { grid-column: 7; }
 .crl-layout.has-detail.detail-wide .crl-table--selectable .crl-row { grid-template-columns: 34px 44px minmax(0, 3fr) 68px 34px minmax(0, 1.6fr) 96px 44px; }
 .crl-select-cell { display: flex; align-items: center; justify-content: center; }
+/* The header row is inset 4px more than body rows (its margin + padding vs the
+   rows' padding), which pushes the centered header checkbox right of the row
+   checkboxes — pull its select cell back by that delta so they line up. */
+.crl-table--selectable .crl-row-head .crl-select-cell { margin-left: -4px; }
 .crl-row-selected { background: #eef5ff; }
 .crl-row-selected.crl-row-click:hover { background: #e6f0ff; }
 .crl-h-center { text-align: center; }
