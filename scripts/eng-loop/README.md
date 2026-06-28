@@ -226,7 +226,9 @@ gives a one-line readout (say "web"/"open" to get the HTML page instead).
 - **Stop entirely:** remove the crontab line.
 - **Logs:** `~/eng-loop/logs/YYYY-MM-DD.log` (human) and `run-<stamp>.jsonl` (full
   transcript per run).
-- **Feed it work:** open issues and label them `eng-loop`; they're drained before
+- **Feed it work:** open issues and label them `eng-loop` (or a lane label —
+  `eng-loop:qa`, `eng-loop:qa-design`, `eng-loop:backend`, `eng-loop:architecture`;
+  the exact set is `LOOP_LABELS` in `config.env`); they're drained before
   the category rotation, oldest first. The loop removes the label from issues it
   can't complete (with a comment) so it won't retry them forever. Data-quality
   problems it finds but can't safely auto-fix are filed as `data-quality` issues
