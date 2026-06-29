@@ -1187,7 +1187,9 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
     attrs.size && [variantGroupLabel || "Size", titleCase(attrs.size)],
     attrs.family && ["Type", titleCase(attrs.family)],
     brand && ["Brand", brand],
-    packSize !== "—" && ["Pack", packSize],
+    // The pack selector owns pack when offers span packs; don't repeat a stale
+    // single value as a chip.
+    !hasPackChoice && packSize !== "—" && ["Pack", packSize],
     product.category && ["Category", product.category],
   ].filter(Boolean).filter(([label]) => label !== variantChipLabel).slice(0, 5);
 
@@ -1327,7 +1329,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
               </div>
               <div className="pdp-desc">
                 <h4>Product description</h4>
-                <p>{product.description || `${titleCase(attrs.family) || product.name}. Matched across ${supplierCount} supplier${supplierCount === 1 ? "" : "s"} in our catalog.`}</p>
+                <p>{product.description || `${titleCase(attrs.family) || displayName}. Matched across ${supplierCount} supplier${supplierCount === 1 ? "" : "s"} in our catalog.`}</p>
               </div>
               {chips.length > 0 && (
                 <div className="pdp-chips">
