@@ -40,11 +40,86 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ── Account menu ──────────────────────────────────────────────────────
+// The mobile sign-out path. Phones have no nav rail / topbar user menu, so
+// the scan-first home carries identity in a trailing avatar that opens a
+// menu (Settings + Sign out). Sign out is destructive and confirms in-place
+// before clearing the session — it's a shared practice device.
+function AccountMenu({ account, onSignOut, onNavigate }) {
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const wrapRef = useRef(null);
+
+  const close = () => { setOpen(false); setConfirming(false); };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) close(); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    document.addEventListener("pointerdown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const initials = account?.initials || "··";
+  const name = account?.name || "Your account";
+  const detail = account?.email || account?.practice || "";
+
+  return (
+    <div className={s.acct} ref={wrapRef}>
+      <button
+        type="button"
+        className={s.acctBtn}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        {initials}
+      </button>
+      {open && (
+        <div className={s.acctMenu} role="menu">
+          <div className={s.acctHead}>
+            <span className={s.acctAvatarLg}>{initials}</span>
+            <span className={s.acctId}>
+              <strong>{name}</strong>
+              {detail && <small>{detail}</small>}
+            </span>
+          </div>
+          {confirming ? (
+            <div className={s.acctConfirm}>
+              <p>Sign out of TraceDDS?</p>
+              <div className={s.acctConfirmRow}>
+                <button type="button" className={s.acctCancel} onClick={() => setConfirming(false)}>Cancel</button>
+                <button type="button" className={s.acctSignout} onClick={() => { close(); onSignOut?.(); }}>Sign out</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button role="menuitem" type="button" className={s.acctItem} onClick={() => { close(); onNavigate?.("/app/settings"); }}>
+                <Icon name="icon-settings" />
+                Settings
+              </button>
+              <button role="menuitem" type="button" className={`${s.acctItem} ${s.acctItemDanger}`} onClick={() => setConfirming(true)}>
+                <Icon name="icon-logout" />
+                Sign out
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Screens 1 + 2: Start scan / Choose location ──────────────────────
 
 export function MobileScanStart({
   loading, locations, starting, startLocationId, needsAttention,
-  onStart, onNavigate,
+  onStart, onNavigate, account, onSignOut,
 }) {
   // "home" | "choose-location"
   const [step, setStep] = useState("home");
@@ -100,11 +175,22 @@ export function MobileScanStart({
   }
 
   // ── Screen: home ────────────────────────────────────────────────────
-  // No top bar: this is a primary tab destination, so the H1 is the title and
-  // the persistent bottom nav carries identity + navigation.
+  // A slim app bar carries the brand and the account menu — phones have no nav
+  // rail, so this is where identity and sign-out live. The H1 below is still the
+  // screen title.
   return (
     <div className={s.screen}>
-      <div className={`${s.body} ${s.bodyTop}`}>
+      <header className={s.appbar}>
+        <span className={s.appbarSpacer} aria-hidden="true" />
+        <span className={s.appbarBrand}>
+          <BrandLogoMark className={s.appbarMark} />
+          <span className={s.appbarWordmark}>
+            <span className={s.appbarTrace}>Trace</span><span className={s.appbarDds}>DDS</span>
+          </span>
+        </span>
+        <AccountMenu account={account} onSignOut={onSignOut} onNavigate={onNavigate} />
+      </header>
+      <div className={s.body}>
         <div className={s.intro}>
           <h1 className={s.h1}>Start scanning</h1>
           <p className={s.sub}>Pick a location and scan its shelves — every scan is saved as you go.</p>

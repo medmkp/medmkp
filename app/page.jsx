@@ -1535,6 +1535,8 @@ export default function Home() {
       startLocationId={scanLocationId}
       onNavigate={navigate}
       onToast={showToast}
+      account={{ name: buyerName, email: me?.customer?.email || "", practice: practiceName, initials: buyerInitials }}
+      onSignOut={handleLogout}
     />
   );
 

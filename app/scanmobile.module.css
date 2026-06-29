@@ -95,6 +95,121 @@
 .h1 { font-size: 26px; font-weight: 600; color: #14202E; margin: 0; line-height: 1.12; letter-spacing: -0.01em; }
 .sub { margin: 0; color: #5b6b7c; font-size: 14.5px; line-height: 1.45; }
 
+/* ── Home app bar: brand + account menu (mobile sign-out lives here) ── */
+.appbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background: #fff;
+  border-bottom: 1px solid #eef1f6;
+  flex-shrink: 0;
+}
+.appbarSpacer { width: 38px; flex-shrink: 0; }
+.appbarBrand {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.appbarMark { width: 20px; height: 20px; flex-shrink: 0; }
+.appbarWordmark { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.appbarTrace { color: #14202E; }
+.appbarDds { color: #4F79E4; }
+
+.acct { position: relative; flex-shrink: 0; }
+.acctBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid #e0e7f3;
+  background: #eef3ff;
+  color: #2F5BD6;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.acctBtn:active { background: #e1ebff; }
+
+.acctMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 232px;
+  background: #fff;
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(20, 32, 46, 0.16);
+  padding: 6px;
+  z-index: 70;
+}
+.acctHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid #f0f3f8;
+  margin-bottom: 6px;
+}
+.acctAvatarLg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #eef3ff;
+  color: #2F5BD6;
+  font-size: 12.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.acctId { display: flex; flex-direction: column; min-width: 0; }
+.acctId strong { font-size: 14px; font-weight: 600; color: #14202E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acctId small { font-size: 12px; color: #76869a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.acctItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #2c3a4b;
+  font-size: 14.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.acctItem:active { background: #f2f6ff; }
+.acctItem svg { width: 18px; height: 18px; color: #76869a; }
+.acctItemDanger { color: #d1352b; }
+.acctItemDanger svg { color: #d1352b; }
+.acctItemDanger:active { background: #fdeeed; }
+
+.acctConfirm { padding: 6px 10px 10px; }
+.acctConfirm p { margin: 0 0 10px; font-size: 14px; font-weight: 500; color: #14202E; }
+.acctConfirmRow { display: flex; gap: 8px; }
+.acctCancel,
+.acctSignout {
+  flex: 1;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.acctCancel { border: 1.5px solid #d6deea; background: #fff; color: #2c3a4b; }
+.acctCancel:active { background: #f1f4f9; }
+.acctSignout { border: 0; background: #d1352b; color: #fff; }
+.acctSignout:active { background: #b62c23; }
+
 /* ── Footer action bar ─────────────────────────────────────────────── */
 .footer {
   display: flex;

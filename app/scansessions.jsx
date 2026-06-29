@@ -50,7 +50,7 @@ function decorateItem(item, product) {
   };
 }
 
-export function ScannerView({ startLocationId, onNavigate, onToast }) {
+export function ScannerView({ startLocationId, onNavigate, onToast, account, onSignOut }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -332,6 +332,8 @@ export function ScannerView({ startLocationId, onNavigate, onToast }) {
         needsAttention={needsAttention}
         onStart={start}
         onNavigate={onNavigate}
+        account={account}
+        onSignOut={onSignOut}
       />
     );
   }
