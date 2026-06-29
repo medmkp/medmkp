@@ -4,12 +4,12 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchSuggestions } from "./catalog";
 import { suggestSearchTerms } from "./searchSuggestions";
 import { BrandMark, Icon, IconSprite } from "./icons";
-import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
+import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { OfficeLayoutRoute } from "./officelayout";
 import { QrLabelView } from "./qrlabels";
 import { ScannerView } from "./scansessions";
-import { MobileReorderScan } from "./scanmobile";
+import { MobilePublicScan, MobileReorderScan } from "./scanmobile";
 import { getScanAudioCtx, loadMatchChime, playMatchChime, vibrateNoMatch } from "./scanSound";
 import { EvidenceView, EvidenceBinderView, EvidenceMatchReview, RedlineView } from "./evidence";
 import { EvidenceMobileViewer } from "./evidenceviewer";
@@ -160,9 +160,9 @@ export default function Home() {
     } catch {
       // ignore corrupt state
     }
-    // ?demo on any URL zeroes the free-scan budget so the no-login funnel can be
-    // re-run on the same device for a demo, without hand-clearing localStorage.
-    // The param is stripped afterward so a refresh doesn't keep resetting.
+    // ?demo on any URL zeroes the "items checked" tally so the no-login funnel
+    // starts fresh on the same device for a demo. The param is stripped
+    // afterward so a refresh doesn't keep resetting.
     let demoReset = false;
     try {
       const params = new URLSearchParams(window.location.search);
@@ -845,12 +845,12 @@ export default function Home() {
     addScannedItem(code);
   }
 
-  // Logged-out scanning: each real lookup spends one of the free scans, tracked
-  // in localStorage. Once the budget is gone, scans are ignored and the view's
-  // signup wall takes over. Items still land in the local list, so they carry
-  // into the account the moment the visitor signs up.
+  // Logged-out scanning: unlimited. Each real lookup shows a single-item price
+  // benchmark; the item also lands in the local list (localStorage), so it
+  // carries into the account the moment the visitor signs up. We keep a running
+  // "items checked" tally (the same localStorage key) purely to drive the
+  // conversion teaser — it no longer gates anything.
   async function handlePublicScan(code) {
-    if (freeScansUsed >= FREE_SCAN_LIMIT) return;
     const added = await addScannedItem(code);
     if (!added) return;
     setFreeScansUsed((n) => {
@@ -1607,18 +1607,29 @@ export default function Home() {
           : view === "styleguide" ? <StyleGuide />
           : view === "sample" ? <SampleReorderList onNavigate={navigate} authed={authed === true} />
           : view === "publicScan" ? (
-            <PublicScanView
-              onScan={handlePublicScan}
-              scanResult={scanResult}
-              onClearScanResult={() => setScanResult(null)}
-              freeScansUsed={freeScansUsed}
-              limit={FREE_SCAN_LIMIT}
-              onSignup={() => navigate("/signup")}
-              onLogin={() => navigate("/login")}
-              onHome={() => navigate("/")}
-              onApp={() => navigate("/app")}
-              authed={authed === true}
-            />
+            isMobile ? (
+              <MobilePublicScan
+                scanResult={scanResult}
+                itemsChecked={freeScansUsed}
+                onScan={handlePublicScan}
+                onClearScanResult={() => setScanResult(null)}
+                onSignup={() => navigate("/signup")}
+                onLogin={() => navigate("/login")}
+                onHome={() => navigate("/")}
+              />
+            ) : (
+              <PublicScanView
+                onScan={handlePublicScan}
+                scanResult={scanResult}
+                onClearScanResult={() => setScanResult(null)}
+                itemsChecked={freeScansUsed}
+                onSignup={() => navigate("/signup")}
+                onLogin={() => navigate("/login")}
+                onHome={() => navigate("/")}
+                onApp={() => navigate("/app")}
+                authed={authed === true}
+              />
+            )
           )
           : <LoggedOutLanding onNavigate={navigate} authed={authed === true} />}
         <IconSprite />

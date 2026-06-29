@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogoMark, Icon, QrScanGlyph } from "./icons";
 import { formatExpiryDate, isQrUrl, parseLocationQr } from "./lib";
-import { ProductSearchResults, useBarcodeScanner, useProductSearch } from "./ui";
+import { ProductSearchResults, ScanResultCard, useBarcodeScanner, useProductSearch } from "./ui";
 import s from "./scanmobile.module.css";
 
 // Mobile scan flow. One scanner, no modes: pick a location, then scan. Each scan
@@ -625,6 +625,102 @@ export function MobileReorderScan({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ── /scan (logged out) — unlimited single-item price spot-check ────────────
+// The public, no-login scanner. Same immersive camera shell as the in-app
+// scanner the user lands on after signup, so the free experience looks like the
+// real thing — but its only output is a single-item price benchmark per scan:
+// no list, no location, no cap. A running "items checked" tally and a Sign up
+// bar pull the visitor toward an account, where the items they scanned (held in
+// localStorage, migrated on signup) become a saved, synced reorder list. We
+// don't know what they pay today, so there's no fabricated savings figure here —
+// the card shows the real best price across suppliers; the aggregate value lands
+// once they sign up and add what they're paying.
+export function MobilePublicScan({
+  active = true, scanResult, itemsChecked = 0,
+  onScan, onClearScanResult, onSignup, onLogin, onHome,
+}) {
+  const [sheet, setSheet] = useState(null); // manual (Enter code)
+  const [captured, setCaptured] = useState(false);
+  const pulseTimer = useRef();
+  const cameraActive = active && !sheet;
+
+  const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
+    active: cameraActive,
+    onScan: (code) => {
+      onScan?.(code);
+      if (isQrUrl(code)) return;
+      setCaptured(true);
+      window.clearTimeout(pulseTimer.current);
+      pulseTimer.current = window.setTimeout(() => setCaptured(false), 700);
+    },
+  });
+
+  return (
+    <div className={`${s.camera} ${captured ? s.scanCaptured : ""}`} aria-label="Scan a product to see its price">
+      <video ref={videoRef} className={s.cameraVideo} playsInline muted autoPlay aria-label="Live camera preview" />
+      <div className={s.cameraScrim} aria-hidden="true" />
+
+      {cameraStatus !== "ready" && (
+        <div className={s.camPermission}>
+          <Icon name="icon-scan" />
+          <strong>{cameraStatus === "requesting" ? "Camera access needed" : "Camera unavailable"}</strong>
+          <p>{cameraStatus === "requesting" ? "Allow camera access to scan item barcodes." : "Tap Try again, or use Enter code to key it in."}</p>
+          {cameraStatus !== "requesting" && (
+            <button type="button" className={s.camRetry} onClick={retry}><Icon name="icon-refresh" /> Try again</button>
+          )}
+        </div>
+      )}
+
+      <div className={s.camTop}>
+        <button type="button" className={s.camCircle} onClick={onHome} aria-label="Back to home">
+          <Icon name="icon-chevron-left" />
+        </button>
+        <span className={s.camBrand}>
+          <BrandLogoMark className={s.camBrandMark} />
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+        </span>
+        <span className={s.camRight}>
+          <button type="button" className={s.camTextBtn} onClick={onLogin}>Log in</button>
+        </span>
+      </div>
+
+      <div className={s.camFrame} aria-hidden="true"><span /><span /><span /><span /></div>
+      {cameraStatus === "ready" && !scanResult && (
+        <div className={s.camHint}>{autoDetect ? "Point at a barcode to see its price" : "Tap Enter code to type it in"}</div>
+      )}
+
+      <div className={s.publicBottom}>
+        {/* Single-item price benchmark for the latest scan (no list). */}
+        {scanResult && (
+          <ScanResultCard
+            result={scanResult}
+            className={s.publicResultCard}
+            onClear={onClearScanResult}
+            onEnterManually={() => setSheet("manual")}
+          />
+        )}
+        {!scanResult && (
+          <button type="button" className={s.publicManual} onClick={() => setSheet("manual")}>
+            <Icon name="icon-plus-circle" /> Enter a barcode or SKU
+          </button>
+        )}
+
+        {/* Aggregate teaser → signup. Count-based and honest — no fabricated $. */}
+        <div className={s.publicTeaser}>
+          <span className={s.publicTeaserText}>
+            {itemsChecked > 0
+              ? <><strong>{itemsChecked} item{itemsChecked === 1 ? "" : "s"} checked.</strong> Sign up to keep them as a list and see where you&rsquo;re overpaying.</>
+              : <>Scanning is free, no login. Sign up to save your list and reorder across suppliers.</>}
+          </span>
+          <button type="button" className={s.publicTeaserSignup} onClick={onSignup}>Sign up free</button>
+        </div>
+      </div>
+
+      {sheet === "manual" && <ManualSheet onClose={() => setSheet(null)} onSubmit={(code) => { onScan?.(code); setSheet(null); }} />}
     </div>
   );
 }
