@@ -342,13 +342,9 @@ export function CatalogView({ onNavigate }) {
 // dropdown uses (higher limit) and lists matches in the category view's table.
 
 export function CatalogSearchView({ query, onNavigate }) {
-  const [input, setInput] = useState(query || "");
   const [products, setProducts] = useState([]);
   const [status, setStatus] = useState(query ? "loading" : "idle");
   const [layout, setLayout] = useState("grid");
-
-  // Keep the refine box in sync when the query changes via the topbar / history.
-  useEffect(() => { setInput(query || ""); }, [query]);
 
   useEffect(() => {
     const q = (query || "").trim();
@@ -370,12 +366,6 @@ export function CatalogSearchView({ query, onNavigate }) {
     return () => controller.abort();
   }, [query]);
 
-  function submit(event) {
-    event.preventDefault();
-    const q = input.trim();
-    onNavigate(q ? `/app/catalog/search?q=${encodeURIComponent(q)}` : "/app/catalog");
-  }
-
   return (
     <div className="cat">
       <nav className="cat-crumb" aria-label="Breadcrumb">
@@ -384,25 +374,13 @@ export function CatalogSearchView({ query, onNavigate }) {
         <strong>Search</strong>
       </nav>
       <h1 className="cat-title">{query ? `Results for “${query}”` : "Search the catalog"}</h1>
-      <p className="cat-lede">
-        {status === "ready"
-          ? `${products.length} matching product${products.length === 1 ? "" : "s"}.`
-          : "Search canonical dental products across every supplier."}
-      </p>
-
-      <form className="cat-search-form" onSubmit={submit}>
-        <label className="topbar-search">
-          <Icon name="icon-search" className="button-icon" />
-          <input
-            type="search"
-            value={input}
-            placeholder="Search products"
-            aria-label="Search products"
-            onChange={(event) => setInput(event.target.value)}
-          />
-        </label>
-        <button type="submit" className="primary-action compact">Search</button>
-      </form>
+      {status !== "ready" && (
+        <p className="cat-lede">
+          {status === "loading"
+            ? "Searching…"
+            : "Search canonical dental products across every supplier."}
+        </p>
+      )}
 
       {products.length > 0 && (
         <div className="cat-section-head cat-products-head">
@@ -434,32 +412,26 @@ export function CatalogSearchView({ query, onNavigate }) {
             {products.map((product) => {
               const best = product.best_offer;
               const open = product.handle ? () => onNavigate(`/app/product/${product.handle}`) : undefined;
+              const summary = [best?.brand?.trim(), product.category?.trim()].filter(Boolean).join(" · ") || "Uncategorized";
               return (
-                <article className="cat-pcard" key={product.id}>
-                  <button type="button" className="cat-pcard-media" onClick={open} aria-label={open ? `View ${product.name}` : undefined} disabled={!open}>
+                <article className={`cat-pcard${open ? " is-clickable" : ""}`} key={product.id}>
+                  {open && (
+                    <button type="button" className="cat-pcard-link" onClick={open} aria-label={`View ${product.name}`} />
+                  )}
+                  <div className="cat-pcard-media">
                     {product.image_url ? (
                       <img src={product.image_url} alt="" loading="lazy" />
                     ) : (
                       <Icon name="icon-image" className="nav-icon" />
                     )}
-                  </button>
+                  </div>
                   <div className="cat-pcard-body">
-                    {open ? (
-                      <button type="button" className="cat-pcard-name" onClick={open}>{product.name}</button>
-                    ) : (
-                      <span className="cat-pcard-name">{product.name}</span>
-                    )}
-                    <span className="cat-pcard-path">{product.category || "Uncategorized"}</span>
+                    <span className="cat-pcard-name">{product.name}</span>
+                    <span className="cat-pcard-path">{summary}</span>
                     <div className="cat-pcard-foot">
                       <CatBestPrice best={best} showBadge={false} />
                       <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
                     </div>
-                    {open && (
-                      <button type="button" className="cat-pt-view" onClick={open}>
-                        View product
-                        <Icon name="icon-link" className="button-icon" />
-                      </button>
-                    )}
                   </div>
                 </article>
               );
