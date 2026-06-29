@@ -540,7 +540,10 @@ describe("identity matching (golden pairs from production data)", () => {
       }),
     ]
     const result = runMatching(rows.map(normalizeProduct))
-    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([2, 3])
+    // VR496 (3 suppliers) and VR426 (2 suppliers) cluster; VR845 is sole-sourced
+    // (Henry Schein only) and now emitted as its own singleton (issue #423). Each
+    // cluster still carries one length/needle combination — no false merge.
+    expect(result.clusters.map((c) => c.members.length).sort()).toEqual([1, 2, 3])
     const attrSets = result.clusters.map((cluster) =>
       new Set(
         cluster.members
@@ -706,15 +709,22 @@ describe("identity matching (golden pairs from production data)", () => {
       new Set(cluster.members.flatMap((member) => [...(member.numericAttrs.get("shade") ?? [])]))
     )
 
-    expect(result.clusters).toHaveLength(1)
+    // Three distinct shades → three canonicals, never welded into one. IVB and
+    // IVW are sole-sourced (Darby only) singletons, now emitted (issue #423)
+    // rather than dropped; only IVA has a second supplier.
+    expect(result.clusters).toHaveLength(3)
     expect(shadeSets.every((values) => values.size === 1)).toBe(true)
-    expect(shadeSets[0]).toEqual(new Set(["iva"]))
+    expect(shadeSets.map((values) => [...values][0]).sort()).toEqual(["iva", "ivb", "ivw"])
+    const ivaCluster = result.clusters.find((cluster) => cluster.members.length === 2)
     expect(
-      result.clusters.some(
-        (cluster) =>
-          cluster.members.some((member) => member.row.supplier_id === "msup_darbydental_com" && member.row.manufacturer_sku === "668083WW") &&
-          cluster.members.some((member) => member.row.supplier_id === "msup_dentalcity_com")
-      )
+      new Set(ivaCluster!.members.flatMap((member) => [...(member.numericAttrs.get("shade") ?? [])]))
+    ).toEqual(new Set(["iva"]))
+    expect(
+      ivaCluster!.members.some(
+        (member) =>
+          member.row.supplier_id === "msup_darbydental_com" &&
+          member.row.manufacturer_sku === "668083WW"
+      ) && ivaCluster!.members.some((member) => member.row.supplier_id === "msup_dentalcity_com")
     ).toBe(true)
   })
 
@@ -1085,8 +1095,12 @@ describe("identity matching (golden pairs from production data)", () => {
       .map((models) => [...new Set(models)].sort())
       .sort((a, b) => a[0].localeCompare(b[0]))
 
-    expect(result.clusters).toHaveLength(2)
-    expect(clusterModels).toEqual([["WS3130B"], ["WS3130W"]])
+    // WS3130B/W are two-supplier clusters; GS1126B/W are sole-sourced (Henry
+    // Schein only) singletons — now emitted as their own canonicals (issue #423)
+    // rather than dropped. The invariant under test still holds: no cluster welds
+    // two distinct models.
+    expect(result.clusters).toHaveLength(4)
+    expect(clusterModels).toEqual([["GS1126B"], ["GS1126W"], ["WS3130B"], ["WS3130W"]])
     expect(result.reviewPairs).toHaveLength(0)
   })
 
@@ -1154,13 +1168,14 @@ describe("identity matching (golden pairs from production data)", () => {
       )
     )
 
-    expect(result.clusters).toHaveLength(3)
+    // R006/R026/R026R are multi-supplier clusters; R042 (Patterson only) is a
+    // sole-sourced singleton — now its own canonical (issue #423) rather than
+    // dropped. The invariant still holds: each cluster carries exactly one model.
+    expect(result.clusters).toHaveLength(4)
     expect(clusterModels.every((models) => models.size === 1)).toBe(true)
-    expect([...clusterModels[0], ...clusterModels[1], ...clusterModels[2]].sort()).toEqual([
-      "R006",
-      "R026",
-      "R026R",
-    ])
+    expect(
+      [...clusterModels[0], ...clusterModels[1], ...clusterModels[2], ...clusterModels[3]].sort()
+    ).toEqual(["R006", "R026", "R026R", "R042"])
   })
 
   it("does not let NSK Ti-Max handpiece variants weld into one canonical", () => {
@@ -1338,7 +1353,10 @@ describe("identity matching (golden pairs from production data)", () => {
     )
 
     expect([...(normalizeProduct(rows[0]).numericAttrs.get("unitek_crown_model") ?? [])]).toEqual(["900321"])
-    expect(clusterModels.every((models) => models.size === 1)).toBe(true)
+    // No cluster welds two distinct crown models. Sole-sourced singletons (size
+    // 5/6, and the size-3 rows that never paired) are now emitted (issue #423);
+    // some carry no modeled attr, so the invariant is "<= 1 model", not "== 1".
+    expect(clusterModels.every((models) => models.size <= 1)).toBe(true)
     expect(sizeOneCluster?.members.map((member) => member.row.manufacturer_sku).sort()).toEqual([
       "3M-900321",
       "516-900321",
@@ -1787,13 +1805,86 @@ describe("end-to-end clustering", () => {
       }),
     ]
     const result = runMatching(rows.map(normalizeProduct))
-    expect(result.clusters).toHaveLength(2)
+    // Two genuine 2-member clusters plus the impostor, now emitted as its own
+    // singleton (issue #423) rather than dropped — still isolated, never welded
+    // into the Dura-Green cluster it shares weak SKU 0044 with.
+    expect(result.clusters).toHaveLength(3)
     const sizes = result.clusters.map((cluster) => cluster.members.length).sort()
-    expect(sizes).toEqual([2, 2])
-    const allMemberNames = result.clusters.flatMap((cluster) =>
-      cluster.members.map((member) => member.row.name)
+    expect(sizes).toEqual([1, 2, 2])
+    const duraGreen = result.clusters.find((cluster) =>
+      cluster.members.some((member) => member.row.name.startsWith("Dura"))
     )
-    expect(allMemberNames).not.toContain("Oregano Oil Enteric 90 Sgels")
+    expect(duraGreen?.members.map((member) => member.row.name)).not.toContain(
+      "Oregano Oil Enteric 90 Sgels"
+    )
+    const impostor = result.clusters.find((cluster) =>
+      cluster.members.some((member) => member.row.name === "Oregano Oil Enteric 90 Sgels")
+    )
+    expect(impostor?.members).toHaveLength(1)
+  })
+
+  it("regroups a sole-supplier glove size ladder into one family (issue #423)", () => {
+    // Carolina Dental is the only supplier of this House Brand blue nitrile line,
+    // so each size is a single listing. Before singletons were emitted, XS/S/M/L
+    // were dropped and only the catalog never showed a size selector. Now each
+    // size is its own canonical and they regroup into one family.
+    const rows = [
+      product({
+        supplier_id: "msup_carolinadental_com",
+        brand: "House Brand",
+        manufacturer_sku: "HSB-119130",
+        name: "HSB - Nitrile Gloves, Blue, X-Small 100/Bx",
+        pack_size: "100/Bx",
+      }),
+      product({
+        supplier_id: "msup_carolinadental_com",
+        brand: "House Brand",
+        manufacturer_sku: "HSB-119131",
+        name: "HSB - Nitrile Gloves, Blue, Small 100/Bx",
+        pack_size: "100/Bx",
+      }),
+      product({
+        supplier_id: "msup_carolinadental_com",
+        brand: "House Brand",
+        manufacturer_sku: "HSB-119132",
+        name: "HSB - Nitrile Gloves, Blue, Medium 100/Bx",
+        pack_size: "100/Bx",
+      }),
+      product({
+        supplier_id: "msup_carolinadental_com",
+        brand: "House Brand",
+        manufacturer_sku: "HSB-119133",
+        name: "HSB - Nitrile Gloves, Blue, Large 100/Bx",
+        pack_size: "100/Bx",
+      }),
+      product({
+        supplier_id: "msup_carolinadental_com",
+        brand: "House Brand",
+        manufacturer_sku: "HSB-119134",
+        name: "HSB - Nitrile Gloves, Blue, X-Large 100/Bx",
+        pack_size: "100/Bx",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+
+    // Every size now surfaces as its own one-member canonical.
+    expect(result.clusters).toHaveLength(5)
+    expect(result.clusters.every((cluster) => cluster.members.length === 1)).toBe(true)
+
+    // The five canonicals regroup into a single size family with five distinct
+    // selectable size labels.
+    const familyIds = new Set(
+      result.clusters.map((cluster) => result.families.get(cluster.key)?.familyId).filter(Boolean)
+    )
+    expect(familyIds.size).toBe(1)
+    const labels = result.clusters
+      .map((cluster) => result.families.get(cluster.key)?.variantLabel)
+      .filter(Boolean)
+      .sort()
+    expect(labels).toEqual(["Large", "Medium", "Small", "X-Large", "X-Small"])
+    expect(
+      result.clusters.every((cluster) => result.families.get(cluster.key)?.variantAxis === "size")
+    ).toBe(true)
   })
 
   it("does not let a vendor-prefixed supplier's own variants weld a family together", () => {
