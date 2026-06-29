@@ -395,6 +395,38 @@ export function normalizePackText(raw) {
   if (!raw) return raw;
   return String(raw).replace(/(\d+)\s*\/\s*([A-Za-z.]+)/g, (_, n, unit) => `${n}/${canonPackUnit(unit)}`);
 }
+
+// Collapse cosmetic duplicates in a product's variant selector. The matcher
+// emits one canonical per supplier SKU, so the same differentiator (gauge,
+// shade, size…) often recurs with only pack-string noise ("808 ga - 5/Pk" vs
+// "808 ga - 5/Pkg"). When the pack size doesn't actually distinguish the
+// variants, drop that redundant suffix so each pill shows just its
+// differentiator ("808 ga"), then dedupe on the cleaned label. Returns
+// [{ label, indices }] in input order; `indices` are the positions in
+// `variants` that collapsed into each option (first = best-ranked).
+const PACK_TOKEN_RE = /(\d+)\s*\/\s*([A-Za-z.]+)/;
+const PACK_SUFFIX_RE = /\s*[-–—]\s*\d+\s*\/\s*[A-Za-z.]+\s*$/;
+
+export function variantOptionList(variants) {
+  const packToken = (label) => {
+    const match = String(label || "").match(PACK_TOKEN_RE);
+    return match ? normalizePackText(match[0]).toLowerCase() : "";
+  };
+  // Pack is pure noise when at most one distinct pack appears across all
+  // variants — i.e. the axis is gauge/shade/etc., not pack itself.
+  const stripPack =
+    new Set(variants.map((v) => packToken(v.variant_label)).filter(Boolean)).size <= 1;
+  const seen = new Map();
+  variants.forEach((variant, index) => {
+    const raw = variant.variant_label || `Option ${index + 1}`;
+    const label = (stripPack ? raw.replace(PACK_SUFFIX_RE, "").trim() : raw) || raw;
+    const key = normalizePackText(label).toLowerCase();
+    const existing = seen.get(key);
+    if (existing) existing.indices.push(index);
+    else seen.set(key, { label, indices: [index] });
+  });
+  return [...seen.values()];
+}
 // Unit-of-measure display: collapse the many ways a single unit gets written
 // ("each"/"Each"/"ea."/"EA" → "ea") so the Qty column reads consistently.
 

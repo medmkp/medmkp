@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
-import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel } from "./lib";
+import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel, variantOptionList } from "./lib";
 import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchManufacturer, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
@@ -315,6 +315,13 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
     ? { ...row, offers: variantOffers, recommendedOfferKey: variantOffers[0]?.key ?? null, selectedOfferKey: null, matchName: activeVariant.name }
     : row;
   const variantGroupLabel = variants ? (family?.variant_axis_label || variantAxisLabel(variants)) : null;
+  // Collapse cosmetic duplicate variants and drop redundant pack suffixes so
+  // each differentiator (gauge/shade/size) shows once. See variantOptionList.
+  const variantOptions = variants ? variantOptionList(variants) : [];
+  const activeVariantLabel =
+    variantOptions.find((option) => option.indices.includes(activeIdx))?.label ||
+    activeVariant?.variant_label ||
+    `Option ${activeIdx + 1}`;
 
   // Pack options come from the active product's full offer set; scoping to a pack
   // and then collapsing per supplier means the supplier list reflects who sells
@@ -507,15 +514,18 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
           <section className="crl-drawer-section">
             <strong className="crl-drawer-subhead">Choose the match</strong>
             <p className="crl-drawer-hint">We recommend one offer from your buying preferences — pick a different one any time.</p>
-            {variants && variants.length > 1 && (
+            {variantOptions.length > 1 && (
               <div className="pdp-variants crl-drawer-variants" role="group" aria-label={`Choose ${variantGroupLabel}`}>
-                <span className="pdp-variants-label">{variantGroupLabel}: <strong>{activeVariant?.variant_label || `Option ${activeIdx + 1}`}</strong></span>
+                <span className="pdp-variants-label">{variantGroupLabel}: <strong>{activeVariantLabel}</strong></span>
                 <div className="pdp-variant-options">
-                  {variants.map((variant, index) => (
-                    <button key={variant.id ?? index} type="button" className={`pdp-variant ${index === activeIdx ? "active" : ""}`} aria-pressed={index === activeIdx} onClick={() => selectVariant(index)}>
-                      {variant.variant_label || `Option ${index + 1}`}
-                    </button>
-                  ))}
+                  {variantOptions.map((option) => {
+                    const active = option.indices.includes(activeIdx);
+                    return (
+                      <button key={option.label} type="button" className={`pdp-variant ${active ? "active" : ""}`} aria-pressed={active} onClick={() => selectVariant(option.indices[0])}>
+                        {option.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
