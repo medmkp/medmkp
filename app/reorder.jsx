@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
-import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc, variantAxisLabel } from "./lib";
+import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel } from "./lib";
 import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchManufacturer, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
@@ -473,11 +473,11 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
             <div className="crl-imported-info">
               {row.canonicalHandle ? (
                 <button type="button" className="crl-imported-link" onClick={() => onNavigate?.(`/app/product/${row.canonicalHandle}`)} title="View this product in the catalog">
-                  {row.canonicalName || row.matchName || row.importedName}
+                  {stripPackFromName(row.canonicalName || row.matchName || row.importedName)}
                   <Icon name="icon-arrow-right" className="button-icon" />
                 </button>
               ) : (
-                <strong>{row.canonicalName || row.matchName || row.importedName}</strong>
+                <strong>{stripPackFromName(row.canonicalName || row.matchName || row.importedName)}</strong>
               )}
               {(row.canonicalName || row.matchName) && <small>Imported as: {row.importedName}</small>}
               <div className="crl-imported-status">Status: <span className={`crl-status ${status.cls}`}><Icon name={status.icon} className="button-icon" />{status.label}</span></div>
@@ -914,7 +914,7 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
 
         <section className="m-detail-sec">
           <span className="m-detail-label">Imported item</span>
-          <strong className="m-detail-name">{row.canonicalName || row.matchName || row.importedName}</strong>
+          <strong className="m-detail-name">{stripPackFromName(row.canonicalName || row.matchName || row.importedName)}</strong>
           {(row.canonicalName || row.matchName) && <small>Imported as: {row.importedName}</small>}
           <small>{row.importedSub}</small>
           {row.supplier && row.supplier !== "—" && <small>Imported by {row.supplier}</small>}
@@ -1048,7 +1048,7 @@ export function ReorderRow({ row, active, selected, onToggleSelect, onOpen, onCo
       <span className="crl-item">
         <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
         <span className="crl-item-id">
-          <strong>{row.canonicalName || row.importedName}</strong>
+          <strong>{stripPackFromName(row.canonicalName || row.importedName)}</strong>
           <small>{row.canonicalName ? `From source: ${row.importedName}` : `SKU on source: ${(row.importedSub || "").replace(/^SKU:\s*/, "") || "—"}`}</small>
         </span>
       </span>
@@ -1079,7 +1079,7 @@ export function ReorderRow({ row, active, selected, onToggleSelect, onOpen, onCo
           </>
         ) : (
           <>
-            <strong>{row.matchName}</strong>
+            <strong>{stripPackFromName(row.matchName)}</strong>
             {row.matchSub && <small>{row.matchSub}</small>}
             <MatchManufacturer name={row.matchManufacturer} />
           </>
@@ -1858,7 +1858,7 @@ export function ReviewUnresolvedModal({ unresolved, includedCount, onContinue, o
               <li className="crl-unresolved-item" key={row.id}>
                 <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
                 <span className="crl-unresolved-info">
-                  <strong>{row.canonicalName || row.importedName}</strong>
+                  <strong>{stripPackFromName(row.canonicalName || row.importedName)}</strong>
                   <small>{row.status === "Not found" ? "No match found" : "Out of stock at every supplier"}</small>
                 </span>
               </li>
@@ -2032,12 +2032,12 @@ export function UploadModal({
                 return (
                   <div className="crl-modal-result" key={row.id}>
                     <div className="crl-modal-result-from">
-                      <strong>{row.importedName}</strong>
+                      <strong>{stripPackFromName(row.importedName)}</strong>
                       <small>Qty {row.qty} · {row.uom}</small>
                     </div>
                     <Icon name="icon-arrow-right" className="button-icon crl-modal-arrow" />
                     <div className="crl-modal-result-to">
-                      {notFound ? <span className="crl-dash">No catalog match</span> : (<><strong>{row.matchName}</strong><small>{row.supplier}</small></>)}
+                      {notFound ? <span className="crl-dash">No catalog match</span> : (<><strong>{stripPackFromName(row.matchName)}</strong><small>{row.supplier}</small></>)}
                     </div>
                     <span className={`crl-status ${status.cls}`}><Icon name={status.icon} className="button-icon" />{status.label}</span>
                   </div>

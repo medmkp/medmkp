@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useRef, useCallback } from "react";
 import { Icon } from "./icons";
-import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, supplierInitials, supplierLogoSrc } from "./lib";
+import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
 
 export function useBarcodeScanner({ active, onScan }) {
   const videoRef = useRef(null);
@@ -531,12 +531,12 @@ export function CandidateSub({ supplier, sub }) {
 
 export function CandidateName({ supplier, name, canonicalName, productUrl }) {
   const logo = supplierLogoSrc(supplier);
-  const listedAs = listingNameDiffers(canonicalName, name) ? name : null;
+  const listedAs = listingNameDiffers(canonicalName, name) ? stripPackFromName(name) : null;
   return (
     <>
       <span className="crl-cand-name">
         {logo && <img className="crl-cand-supplier-logo" src={logo} alt="" />}
-        <strong>{supplier || name}</strong>
+        <strong>{supplier || stripPackFromName(name)}</strong>
         {productUrl && (
           <a
             className="crl-cand-name-link"

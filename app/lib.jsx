@@ -430,6 +430,24 @@ export function formatPackLabel(quantity, basis, baseUnit, raw) {
   return normalizePackText(raw) || (quantity != null ? `${quantity}/Pack` : "");
 }
 
+// Pack size routinely shows up inside a product name ("… 24/Pack", "…, 20/Box,
+// A2 Body") AND again as the structured pack sublabel below it. Strip the
+// redundant pack token from the displayed name so it reads once. Only a token
+// set off by a comma or sitting at the end is removed — leading descriptive text
+// and non-pack slashes ("Rayon/Poly", glove "Size 7/8") are left intact.
+const PACK_NAME_UNITS = Object.keys(PACK_UNIT_CANON).join("|");
+const PACK_NAME_MID_RE = new RegExp(`,\\s*\\d+\\s*/\\s*(?:${PACK_NAME_UNITS})\\b\\.?(?=\\s*,)`, "ig");
+const PACK_NAME_END_RE = new RegExp(`[\\s,]+\\d+\\s*/\\s*(?:${PACK_NAME_UNITS})\\b\\.?\\s*$`, "i");
+
+export function stripPackFromName(name) {
+  if (!name) return name;
+  return String(name)
+    .replace(PACK_NAME_MID_RE, "")
+    .replace(PACK_NAME_END_RE, "")
+    .replace(/[\s,]+$/, "")
+    .trim();
+}
+
 // "Can the buyer order this offer right now?" — conservative: only an explicit
 // negative blocks. Unknown stays orderable so we don't flag the whole catalog
 // (most ingested products have no published stock signal). A live Shopify check
