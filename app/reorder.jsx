@@ -1059,7 +1059,9 @@ export function ReorderRow({ row, active, selected, onToggleSelect, onOpen, onCo
         <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
         <span className="crl-item-id">
           <strong>{stripPackFromName(row.canonicalName || row.importedName)}</strong>
-          <small>{row.canonicalName ? `From source: ${row.importedName}` : `SKU on source: ${(row.importedSub || "").replace(/^SKU:\s*/, "") || "—"}`}</small>
+          {row.canonicalName
+            ? row.source !== "scan" && <small>From source: {row.importedName}</small>
+            : <small>SKU on source: {(row.importedSub || "").replace(/^SKU:\s*/, "") || "—"}</small>}
         </span>
       </span>
       <span className="crl-qty">
