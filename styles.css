@@ -9747,7 +9747,7 @@ th {
 .pdp-mkt-flag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--gold); background: rgba(216, 135, 24, 0.12); border: 1px solid rgba(216, 135, 24, 0.45); border-radius: 999px; padding: 2px 8px; }
 .pdp-mkt-flag-icon { width: 12px; height: 12px; }
 .pdp-mkt-note { font-size: 12px; color: var(--muted); margin-top: 6px; max-width: 660px; line-height: 1.45; }
-.pdp-mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.pdp-mkt-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .pdp-mkt-card { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
 .pdp-mkt-thumb { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
 .pdp-mkt-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
