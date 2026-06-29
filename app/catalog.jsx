@@ -345,6 +345,7 @@ export function CatalogSearchView({ query, onNavigate }) {
   const [input, setInput] = useState(query || "");
   const [products, setProducts] = useState([]);
   const [status, setStatus] = useState(query ? "loading" : "idle");
+  const [layout, setLayout] = useState("grid");
 
   // Keep the refine box in sync when the query changes via the topbar / history.
   useEffect(() => { setInput(query || ""); }, [query]);
@@ -403,11 +404,69 @@ export function CatalogSearchView({ query, onNavigate }) {
         <button type="submit" className="primary-action compact">Search</button>
       </form>
 
+      {products.length > 0 && (
+        <div className="cat-section-head cat-products-head">
+          <h2>{`${products.length} result${products.length === 1 ? "" : "s"}`}</h2>
+          <div className="cat-viewtoggle" role="group" aria-label="View as">
+            <span>View as:</span>
+            <button type="button" className={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")} aria-label="Grid view">
+              <Icon name="icon-grid" className="button-icon" />
+            </button>
+            <button type="button" className={layout === "list" ? "active" : ""} onClick={() => setLayout("list")} aria-label="List view">
+              <Icon name="icon-list" className="button-icon" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {status === "loading" ? (
         <div className="cat-ptable-wrap">
           {Array.from({ length: 6 }).map((_, i) => <div className="cat-pt-skeleton" key={i} />)}
         </div>
-      ) : products.length ? (
+      ) : !products.length ? (
+        <div className="empty-state">
+          <strong>{query ? `No products for “${query}”` : "Start typing to search"}</strong>
+          <span>Try gloves, burs, bibs, impression material, or anesthetics.</span>
+        </div>
+      ) : layout === "grid" ? (
+        <div className="cat-pgrid-wrap">
+          <div className="cat-pgrid">
+            {products.map((product) => {
+              const best = product.best_offer;
+              const open = product.handle ? () => onNavigate(`/app/product/${product.handle}`) : undefined;
+              return (
+                <article className="cat-pcard" key={product.id}>
+                  <button type="button" className="cat-pcard-media" onClick={open} aria-label={open ? `View ${product.name}` : undefined} disabled={!open}>
+                    {product.image_url ? (
+                      <img src={product.image_url} alt="" loading="lazy" />
+                    ) : (
+                      <Icon name="icon-image" className="nav-icon" />
+                    )}
+                  </button>
+                  <div className="cat-pcard-body">
+                    {open ? (
+                      <button type="button" className="cat-pcard-name" onClick={open}>{product.name}</button>
+                    ) : (
+                      <span className="cat-pcard-name">{product.name}</span>
+                    )}
+                    <span className="cat-pcard-path">{product.category || "Uncategorized"}</span>
+                    <div className="cat-pcard-foot">
+                      <CatBestPrice best={best} showBadge={false} />
+                      <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
+                    </div>
+                    {open && (
+                      <button type="button" className="cat-pt-view" onClick={open}>
+                        View product
+                        <Icon name="icon-link" className="button-icon" />
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
         <div className="cat-ptable-wrap">
           <table className="cat-ptable">
             <thead>
@@ -471,11 +530,6 @@ export function CatalogSearchView({ query, onNavigate }) {
               })}
             </tbody>
           </table>
-        </div>
-      ) : (
-        <div className="empty-state">
-          <strong>{query ? `No products for “${query}”` : "Start typing to search"}</strong>
-          <span>Try gloves, burs, bibs, impression material, or anesthetics.</span>
         </div>
       )}
     </div>
@@ -649,7 +703,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
   const [topSuppliers, setTopSuppliers] = useState([]);
   const [status, setStatus] = useState("loading");
   const [sub, setSub] = useState("");
-  const [productLayout, setProductLayout] = useState("list");
+  const [productLayout, setProductLayout] = useState("grid");
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [recent, setRecent] = useState([]);
   const productsRef = useRef(null);
