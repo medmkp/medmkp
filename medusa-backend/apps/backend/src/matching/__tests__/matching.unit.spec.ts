@@ -1,5 +1,6 @@
-import { pickCategory, pickTaxonomy } from "../db"
+import { clampInt32, pickCategory, pickTaxonomy } from "../db"
 import { runMatching } from "../engine"
+import { formatVariant } from "../attribute-specs"
 import { buildOffers } from "../line-items"
 import {
   extractNumericAttrs,
@@ -1885,6 +1886,19 @@ describe("end-to-end clustering", () => {
     expect(
       result.clusters.every((cluster) => result.families.get(cluster.key)?.variantAxis === "size")
     ).toBe(true)
+  })
+
+  it("clamps an out-of-range variant_rank to int4 so the commit can't abort", () => {
+    // A catalog number mis-read as a "#" variant value scales (x100) into the
+    // billions — past PostgreSQL int4. Emitting singletons pushed such a product
+    // into family ranking for the first time and aborted the whole commit
+    // (`value "19973465900" is out of range for type integer`). The rank is still
+    // huge in memory (it just sorts last); the DB boundary clamps it.
+    expect(formatVariant("#", "199734659").rank).toBe(19973465900)
+    expect(clampInt32(19973465900)).toBe(2147483647)
+    expect(clampInt32(-19973465900)).toBe(-2147483648)
+    expect(clampInt32(5)).toBe(5)
+    expect(clampInt32(0)).toBe(0)
   })
 
   it("does not let a vendor-prefixed supplier's own variants weld a family together", () => {

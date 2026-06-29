@@ -36,6 +36,11 @@ export async function loadSupplierProducts(client: Client): Promise<SupplierProd
   }))
 }
 
+/** Clamp to PostgreSQL int4 range so an out-of-range value can't abort a write. */
+export function clampInt32(value: number): number {
+  return Math.max(-2147483648, Math.min(2147483647, value))
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -363,9 +368,11 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
         family?.familyHandle ?? null,
         family?.familyName ?? null,
         family?.variantLabel ?? null,
-        // variant_rank is an INTEGER column; guard the boundary so a fractional
-        // rank can never abort the whole commit.
-        family ? Math.round(family.variantRank) : null,
+        // variant_rank is an INTEGER (int4) column; clamp to its range so that
+        // neither a fractional rank nor an out-of-range one aborts the whole
+        // commit. A catalog number mis-read as a "#"/measured variant value
+        // scales (×100) into the billions, well past int4 — it just sorts last.
+        family ? clampInt32(Math.round(family.variantRank)) : null,
       ]
     })
     await batchInsert(
