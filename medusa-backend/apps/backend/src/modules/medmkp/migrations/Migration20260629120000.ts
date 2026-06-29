@@ -18,13 +18,17 @@ import { Migration } from "@medusajs/framework/mikro-orm/migrations";
 // The q/pattern (subcategory) variants still fall through to the live query;
 // they run over the already category-scoped set and stay cheap.
 //
-// Single-threaded + bounded work_mem so the create/refresh is fast and can't OOM
-// on the memory-constrained instance.
+// Created WITH NO DATA so the deploy migration never runs the heavy populate on
+// the memory-constrained Render instance. The supplier twin populates in-migration
+// fine, but this view's grpinfo CTE array_aggs over *every* categorized canonical
+// product (~170k+ after singleton emit), which OOM-killed the backend mid-build and
+// blocked the whole deploy ("Connection terminated unexpectedly"). The view is
+// populated off-deploy by refresh-catalog-read-models.ts (run on the NUC against
+// prod), the same path that already refreshes it; until the first refresh the read
+// route falls back to the live query, so the listing still renders.
 export class Migration20260629120000 extends Migration {
 
   override async up(): Promise<void> {
-    this.addSql(`SET LOCAL max_parallel_workers_per_gather = 0;`);
-    this.addSql(`SET LOCAL work_mem = '64MB';`);
     this.addSql(`create materialized view if not exists "medmkp_category_catalog_listing" as
       with "cat" as (
         select lower(btrim(c."category")) as "category_key",
@@ -69,7 +73,8 @@ export class Migration20260629120000 extends Migration {
              b."best_sp_id", b."price_cents", b."unit_price_cents"
       from "grpinfo" g
       join "agg" a on a."category_key" = g."category_key" and a."grp" = g."grp"
-      join "best" b on b."category_key" = g."category_key" and b."grp" = g."grp";`);
+      join "best" b on b."category_key" = g."category_key" and b."grp" = g."grp"
+      with no data;`);
     // Unique key (also required by REFRESH ... CONCURRENTLY).
     this.addSql(`create unique index if not exists "IDX_medmkp_category_catalog_listing_category_grp" on "medmkp_category_catalog_listing" ("category_key", "grp");`);
     // Serves the per-category ORDER BY price + LIMIT/OFFSET page query.

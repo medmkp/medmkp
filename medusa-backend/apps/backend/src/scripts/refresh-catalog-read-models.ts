@@ -32,7 +32,16 @@ async function main() {
     // Browse-by-supplier listing; depends on the current-offer + current-price models above.
     await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY medmkp_supplier_catalog_listing`)
     // Category drill-down listing; depends on medmkp_supplier_current_price above.
-    await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY medmkp_category_catalog_listing`)
+    // Created WITH NO DATA, so the first ever refresh can't use CONCURRENTLY
+    // (Postgres rejects it on a never-populated matview). Try CONCURRENTLY and fall
+    // back to a plain populate once to bootstrap; thereafter CONCURRENTLY works.
+    try {
+      await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY medmkp_category_catalog_listing`)
+    } catch (error: any) {
+      // 55000 = object_not_in_prerequisite_state ("not populated").
+      if (error?.code !== "55000") throw error
+      await client.query(`REFRESH MATERIALIZED VIEW medmkp_category_catalog_listing`)
+    }
     const indexed = await refreshMatchIndex(client)
     console.log(`Refreshed match index: ${indexed} products`)
   } finally {
