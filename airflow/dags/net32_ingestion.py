@@ -25,8 +25,15 @@ Net32-specific Variables:
 - medmkp_net32_schedule: cron, default None (manual). e.g. "0 8 * * 1" weekly.
 - medmkp_net32_commit: "true"/"false", default true (writes the Net32 supplier
   catalog to the prod DB; keep the DAG paused until you've reviewed a dry run).
-- medmkp_net32_seeds_file: seed query file (relative to backend dir), default
-  ./data/marketplace-seeds/top-dental-reorder.txt
+- medmkp_net32_seeds_file: optional curated seed-query file (relative to backend
+  dir). Default "" (blank) = CANONICAL MODE: search Net32 by each canonical
+  product's own name and overlay its best price, paging the full catalog via
+  limit/offset. Set a path (e.g. ./data/marketplace-seeds/top-dental-reorder.txt)
+  to fall back to the legacy curated-phrase mode.
+- medmkp_net32_limit: canonical-mode page size — max canonical products searched
+  per run, default 100000 (effectively the whole catalog in one sweep). Lower it
+  and rotate medmkp_net32_offset to sweep in nightly batches.
+- medmkp_net32_offset: canonical-mode starting offset into the catalog, default 0.
 - medmkp_net32_results: results per query, default 5
 - medmkp_net32_concurrency: fetch concurrency, default 1 (serialized — polite,
   and the single-page sidecar serializes anyway)
@@ -53,10 +60,11 @@ HARVESTER_URL = Variable.get(
 )
 HARVESTER_TOKEN = Variable.get("medmkp_net32_harvester_token", default_var="")
 COMMIT_ENABLED = Variable.get("medmkp_net32_commit", default_var="true").lower() == "true"
-SEEDS_FILE = Variable.get(
-    "medmkp_net32_seeds_file",
-    default_var="./data/marketplace-seeds/top-dental-reorder.txt",
-)
+# Blank by default = canonical mode (search Net32 by each canonical product's
+# name). Set a path to fall back to the legacy curated-seed-phrase list.
+SEEDS_FILE = Variable.get("medmkp_net32_seeds_file", default_var="")
+LIMIT = Variable.get("medmkp_net32_limit", default_var="100000")
+OFFSET = Variable.get("medmkp_net32_offset", default_var="0")
 RESULTS = Variable.get("medmkp_net32_results", default_var="5")
 CONCURRENCY = Variable.get("medmkp_net32_concurrency", default_var="1")
 TIMEOUT_MS = Variable.get("medmkp_net32_timeout_ms", default_var="90000")
@@ -99,11 +107,19 @@ export NET32_HARVESTER_TOKEN="{HARVESTER_TOKEN}"
 def ingest_command() -> str:
     args = [
         "--provider=net32",
-        f"--seeds-file={SEEDS_FILE}",
         f"--results={RESULTS}",
         f"--concurrency={CONCURRENCY}",
         f"--timeout-ms={TIMEOUT_MS}",
     ]
+    seeds = SEEDS_FILE.strip()
+    if seeds and seeds.lower() not in ("none", "canonical"):
+        # Legacy curated-phrase mode: search a fixed list of seed queries.
+        args.append(f"--seeds-file={seeds}")
+    else:
+        # Canonical mode (default): search Net32 by each canonical product's own
+        # name, paging the full catalog via limit/offset for the price overlay.
+        args.append(f"--limit={LIMIT}")
+        args.append(f"--offset={OFFSET}")
     if COMMIT_ENABLED:
         args.append("--commit")
     return backend_command(
