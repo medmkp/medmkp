@@ -1537,7 +1537,7 @@
 .table th:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
 .table th:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
 .table td {
-  padding: 8px 7px;
+  padding: 10px 8px;
   border-bottom: 1px solid #f0f3f8;
   vertical-align: middle;
   white-space: nowrap;
@@ -1556,12 +1556,12 @@
 
 /* Fixed column widths so the 9 columns always fit the panel — no horizontal scroll. */
 .table th:nth-child(1), .table td:nth-child(1) { width: 4%; }    /* Select */
-.table th:nth-child(2), .table td:nth-child(2) { width: 24%; }   /* Item */
-.table th:nth-child(3), .table td:nth-child(3) { width: 6%; }    /* SDS */
+.table th:nth-child(2), .table td:nth-child(2) { width: 26%; }   /* Item */
+.table th:nth-child(3), .table td:nth-child(3) { width: 5%; }    /* SDS */
 .table th:nth-child(4), .table td:nth-child(4) { width: 11%; }   /* Expiration */
 .table th:nth-child(5), .table td:nth-child(5) { width: 13%; }   /* Lot */
 .table th:nth-child(6), .table td:nth-child(6) { width: 12%; }   /* Price */
-.table th:nth-child(7), .table td:nth-child(7) { width: 13%; }   /* Status */
+.table th:nth-child(7), .table td:nth-child(7) { width: 12%; }   /* Status */
 .table th:nth-child(8), .table td:nth-child(8) { width: 12%; }   /* Last counted */
 .table th:nth-child(9), .table td:nth-child(9) { width: 5%; }    /* Actions */
 
@@ -1580,18 +1580,30 @@
 .selectCell input:disabled { cursor: default; opacity: 0.45; }
 
 .tItem { font-weight: 500; color: var(--ink); }
-.tItemCell { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.tItemCell .tItemLink, .tItemCell .tItem { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tItemCell :global(.crl-thumb) { border: none; background: transparent; flex: none; width: 32px; height: 32px; }
+/* Item cell mirrors the reorder list's product cell (.crl-item): a 56px
+   thumbnail beside a 13px name that wraps to two lines, so both surfaces read at
+   the same density and the rows feel the same across the app. */
+.tItemCell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tItemCell .tItem { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tItemCell :global(.crl-thumb) { border: none; background: transparent; flex: none; width: 56px; height: 56px; }
+.tItemCell :global(.crl-thumb img) { padding: 0; }
 .tItemLink {
+  min-width: 0;
   background: none;
   border: 0;
   padding: 0;
   font: inherit;
   text-align: left;
   font-weight: 500;
+  font-size: 13px;
+  line-height: 1.3;
   color: var(--ink);
   cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
 }
 .tItemLink:hover { color: var(--blue); text-decoration: underline; }
 .tMuted { color: var(--muted); }
