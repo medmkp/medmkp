@@ -354,8 +354,23 @@ else
     # that already has an in-flight PR (the PR carries a "Closes #N" link; merging
     # closes the issue). Re-label the issue to retry if the PR is closed unmerged.
     if [ -n "${issue_num:-}" ]; then
-      gh issue edit "$issue_num" --repo "$LOOP_REPO" --remove-label eng-loop --remove-label qa 2>/dev/null || true
-      log "issue #$issue_num: removed loop labels (PR #$pr_num now carries it)"
+      # Strip EVERY loop label the picker matches on (ISSUE_LABELS) — these are
+      # colon-namespaced (e.g. `eng-loop:qa`), so removing bare `eng-loop`/`qa`
+      # is a no-op and the issue gets re-picked every tick. Remove only labels
+      # actually present, so old gh (2.45) doesn't abort on an unknown label.
+      cur_labels="$(gh issue view "$issue_num" --repo "$LOOP_REPO" --json labels --jq '.labels[].name' 2>/dev/null || true)"
+      rm_args=()
+      IFS=',' read -ra _ils <<< "$ISSUE_LABELS"
+      for _il in "${_ils[@]}"; do
+        _il="$(printf '%s' "$_il" | xargs)"; [ -n "$_il" ] || continue
+        printf '%s\n' "$cur_labels" | grep -qxF "$_il" && rm_args+=(--remove-label "$_il")
+      done
+      if [ "${#rm_args[@]}" -gt 0 ]; then
+        gh issue edit "$issue_num" --repo "$LOOP_REPO" "${rm_args[@]}" 2>/dev/null || true
+        log "issue #$issue_num: removed loop labels (${rm_args[*]//--remove-label /}) — PR #$pr_num now carries it"
+      else
+        log "issue #$issue_num: no loop labels to remove (PR #$pr_num carries it)"
+      fi
     fi
     log "PR opened: https://github.com/$LOOP_REPO/pull/$pr_num (eng-loop:$category)"
   else
