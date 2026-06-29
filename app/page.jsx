@@ -45,6 +45,7 @@ export default function Home() {
   const [locationId, setLocationId] = useState(null);
   const [scanLocationId, setScanLocationId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [evidenceContext, setEvidenceContext] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -436,6 +437,7 @@ export default function Home() {
       setLocationId(nextRoute.locationId || null);
       setScanLocationId(nextRoute.scanLocationId || "");
       setSearchQuery(nextRoute.searchQuery || "");
+      setEvidenceContext(nextRoute.evidenceContext || null);
       setMobileAddItemRoute(Boolean(nextRoute.mobileAddItemRoute));
       setMenuOpen(false);
     }
@@ -790,6 +792,7 @@ export default function Home() {
     setLocationId(next.locationId || null);
     setScanLocationId(next.scanLocationId || "");
     setSearchQuery(next.searchQuery || "");
+    setEvidenceContext(next.evidenceContext || null);
     setMobileAddItemRoute(Boolean(next.mobileAddItemRoute));
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1838,7 +1841,7 @@ export default function Home() {
           )}
 
           {view === "evidenceViewer" && (
-            <EvidenceMobileViewer onBack={() => navigate("/app/evidence")} />
+            <EvidenceMobileViewer context={evidenceContext} onBack={() => navigate("/app/evidence")} />
           )}
 
           {view === "reports" && (

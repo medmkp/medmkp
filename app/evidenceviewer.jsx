@@ -5,27 +5,25 @@ import { BrandLogoMark, Icon } from "./icons";
 import { DOC_TYPES, EVIDENCE_MOCK } from "./evidence";
 import s from "./evidenceviewer.module.css";
 
-const LOCATION_NAME = "Hygiene Cabinet";
-
-const STATUS_ROWS = [
-  { key: "sds", label: "SDS linked", status: "verified", icon: "icon-file-text" },
-  { key: "ifu", label: "IFU linked", status: "verified", icon: "icon-book" },
-  { key: "expiration", label: "Expiration proof", status: "partial", icon: "icon-calendar" },
-  { key: "lot", label: "Lot capture", status: "missing", icon: "icon-package" },
-  { key: "audit", label: "Last shelf audit", value: "May 16, 2026", icon: "icon-calendar" },
-];
-
 const STATUS_META = {
   verified: { label: "Verified", icon: "icon-check-circle", tone: s.tOk },
   partial: { label: "Partial", icon: "icon-clock", tone: s.tWarn },
   missing: { label: "Missing", icon: "icon-x-circle", tone: s.tBad },
 };
 
-const ACTIVITY = [
-  { title: "Shelf scan completed, evidence created", at: "May 16, 2026 at 9:15 AM" },
-  { title: "Document uploaded, auto-detected as SDS", at: "May 16, 2026 at 9:16 AM" },
-  { title: "Match reviewed, evidence linked", at: "May 16, 2026 at 9:18 AM" },
-];
+// Worst-status-wins so a type with any gap reads honestly. captured (present but
+// not review-required) folds into verified — it's on file.
+const STATUS_RANK = { verified: 0, captured: 0, partial: 1, missing: 2 };
+const STATUS_KEY = { verified: "verified", captured: "verified", partial: "partial", missing: "missing" };
+
+const slug = (str) =>
+  String(str || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+// A document has a file to open unless it's a known gap (fileType "none").
+const isOpenable = (doc) => doc.fileType && doc.fileType !== "none";
 
 function fileIcon(doc) {
   if (doc.fileType === "image") return "icon-file-img";
@@ -42,11 +40,134 @@ function fileFormat(doc) {
   return "File";
 }
 
-export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, onBack }) {
-  const docs = data.documents
-    .filter((doc) => doc.location === LOCATION_NAME || ["doc_1", "doc_2", "doc_4", "doc_6"].includes(doc.id))
-    .slice(0, 4);
+function activityTime(at) {
+  const t = Date.parse(String(at).replace(" · ", " "));
+  return Number.isNaN(t) ? 0 : t;
+}
 
+// Status section, derived per context: one row per document type present, each
+// showing the worst status across that type's documents in this context.
+function deriveStatusRows(docs) {
+  const order = ["sds", "ifu", "expiration", "lot", "service", "price", "waterline"];
+  const byType = {};
+  for (const doc of docs) (byType[doc.type] ||= []).push(doc);
+  return order
+    .filter((type) => byType[type])
+    .map((type) => {
+      const worst = byType[type].reduce(
+        (acc, doc) => (STATUS_RANK[doc.status] > STATUS_RANK[acc.status] ? doc : acc),
+        byType[type][0],
+      );
+      return { key: type, label: DOC_TYPES[type].label, status: STATUS_KEY[worst.status] || "partial", icon: DOC_TYPES[type].icon };
+    });
+}
+
+// Recent activity flattened across this context's documents, newest first.
+function deriveActivity(docs) {
+  return docs
+    .flatMap((doc) => (doc.activity || []).map((entry) => ({ ...entry, docId: doc.id })))
+    .sort((a, b) => activityTime(b.at) - activityTime(a.at))
+    .slice(0, 5);
+}
+
+// Resolve a context descriptor ({ location, item, doc } from the URL) against the
+// evidence data into a view-model the read-only shell renders. A document/location/
+// item id that matches nothing returns notFound so the shell shows a non-crashing
+// not-found state instead of an empty page with a misleading title.
+export function resolveEvidenceContext(data, context) {
+  const documents = data.documents || [];
+
+  // Single document.
+  if (context?.doc) {
+    const doc = documents.find((d) => d.id === context.doc);
+    if (!doc) return { notFound: true, kind: "document", id: context.doc };
+    const name = doc.detailItem || doc.linkedItem || "Document";
+    return {
+      kind: "document",
+      title: `${name} document`,
+      subtitle: "Single document · Read-only presentation mode",
+      card: {
+        icon: fileIcon(doc),
+        heading: doc.fileName,
+        kicker: "Document type",
+        value: DOC_TYPES[doc.type]?.label || "Document",
+        metaIcon: "icon-link",
+        metaKicker: "Linked item",
+        metaValue: doc.linkedItem || "—",
+      },
+      docs: [doc],
+    };
+  }
+
+  // Inventory item / lot — matched by SKU or item name.
+  if (context?.item) {
+    const want = slug(context.item);
+    const docs = documents.filter(
+      (d) => slug(d.sku) === want || slug(d.linkedItem) === want || slug(d.detailItem) === want,
+    );
+    if (!docs.length) return { notFound: true, kind: "item", id: context.item };
+    const first = docs[0];
+    const name = first.detailItem || first.linkedItem;
+    return {
+      kind: "item",
+      title: `${name} evidence`,
+      subtitle: "Item / lot evidence · Read-only presentation mode",
+      card: {
+        icon: "icon-package",
+        heading: name,
+        kicker: "SKU / lot",
+        value: first.sku && first.sku !== "—" ? first.sku : "No lot on file",
+        metaIcon: "icon-tag",
+        metaKicker: "Category",
+        metaValue: first.category || "—",
+      },
+      docs,
+    };
+  }
+
+  // Single location.
+  if (context?.location) {
+    const want = slug(context.location);
+    const docs = documents.filter((d) => slug(d.location) === want);
+    if (!docs.length) return { notFound: true, kind: "location", id: context.location };
+    const name = docs[0].location;
+    return {
+      kind: "location",
+      title: `${name} evidence`,
+      subtitle: "Location evidence · Read-only presentation mode",
+      card: {
+        icon: "icon-cabinet",
+        heading: name,
+        kicker: "Location",
+        value: "Practice location",
+        metaIcon: "icon-folder",
+        metaKicker: "Files on file",
+        metaValue: String(docs.filter(isOpenable).length),
+      },
+      docs,
+    };
+  }
+
+  // Whole practice (no context params).
+  return {
+    kind: "all",
+    title: `${data.practiceName} evidence`,
+    subtitle: "All-practice evidence · Read-only presentation mode",
+    card: {
+      icon: "icon-building",
+      heading: data.practiceName,
+      kicker: "Scope",
+      value: "All practice locations",
+      metaIcon: "icon-folder",
+      metaKicker: "Documents on file",
+      metaValue: String(documents.filter(isOpenable).length),
+    },
+    docs: documents,
+  };
+}
+
+export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, context = null, onBack }) {
+  const view = resolveEvidenceContext(data, context);
   const [sheetOpen, setSheetOpen] = useState(false);
   const filesRef = useRef(null);
 
@@ -54,89 +175,111 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, onBack }) {
     filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  return (
-    <section className={s.screen} aria-label={`${LOCATION_NAME} evidence viewer`}>
-      <header className={s.topbar}>
-        <button type="button" className={s.backBtn} onClick={onBack} aria-label="Back to Evidence Library">
-          <Icon name="icon-chevron-left" />
-        </button>
-        <div className={s.brand} aria-label="TraceDDS">
-          <BrandLogoMark className={s.brandMark} />
-          <span>TraceDDS</span>
+  if (view.notFound) {
+    return (
+      <section className={s.screen} aria-label="Evidence not found">
+        <ViewerTopbar onBack={onBack} />
+        <div className={s.notFound}>
+          <span className={s.notFoundIcon}><Icon name="icon-alert-triangle" /></span>
+          <h1>Evidence not found</h1>
+          <p>
+            We couldn&rsquo;t find {NOT_FOUND_NOUN[view.kind]} for{" "}
+            <strong>{view.id}</strong>. It may have been moved, or the link is out of date.
+          </p>
+          <button type="button" className={s.notFoundBtn} onClick={onBack}>
+            <Icon name="icon-chevron-left" />Back to Evidence Library
+          </button>
         </div>
-        <span className={s.topSpacer} aria-hidden="true" />
-      </header>
+      </section>
+    );
+  }
+
+  const openDocs = view.docs.filter(isOpenable);
+  const statusRows = deriveStatusRows(view.docs);
+  const activity = deriveActivity(view.docs);
+
+  return (
+    <section className={s.screen} aria-label={`${view.card.heading} evidence viewer`}>
+      <ViewerTopbar onBack={onBack} />
 
       <main className={s.body}>
         <div className={s.hero}>
-          <h1>{LOCATION_NAME} Evidence</h1>
-          <p>Read-only presentation mode</p>
+          <h1>{view.title}</h1>
+          <p>{view.subtitle}</p>
         </div>
 
-        <section className={s.contextCard} aria-label="Location context">
-          <div className={s.contextIcon}><Icon name="icon-cabinet" /></div>
+        <section className={s.contextCard} aria-label="Evidence context">
+          <div className={s.contextIcon}><Icon name={view.card.icon} /></div>
           <div className={s.contextMain}>
-            <h2>{LOCATION_NAME}</h2>
-            <span className={s.kicker}>Location type</span>
-            <strong>Cabinet</strong>
-            <span className={s.qrPill}><Icon name="icon-scan" />Opened from QR label</span>
+            <h2>{view.card.heading}</h2>
+            <span className={s.kicker}>{view.card.kicker}</span>
+            <strong>{view.card.value}</strong>
+            <span className={s.qrPill}><Icon name="icon-eye" />Read-only view</span>
           </div>
           <div className={s.auditBlock}>
-            <span className={s.auditIcon}><Icon name="icon-calendar" /></span>
-            <span className={s.kicker}>Last shelf audit</span>
-            <strong>May 16, 2026</strong>
+            <span className={s.auditIcon}><Icon name={view.card.metaIcon} /></span>
+            <span className={s.kicker}>{view.card.metaKicker}</span>
+            <strong>{view.card.metaValue}</strong>
           </div>
         </section>
 
-        <EvidenceSection title="Evidence status">
-          <div className={s.listCard}>
-            {STATUS_ROWS.map((row) => (
-              <div className={s.statusRow} key={row.key}>
-                <span className={s.rowIcon}><Icon name={row.icon} /></span>
-                <span className={s.rowLabel}>{row.label}</span>
-                {row.status ? (
+        {statusRows.length > 0 && (
+          <EvidenceSection title="Evidence status">
+            <div className={s.listCard}>
+              {statusRows.map((row) => (
+                <div className={s.statusRow} key={row.key}>
+                  <span className={s.rowIcon}><Icon name={row.icon} /></span>
+                  <span className={s.rowLabel}>{row.label}</span>
                   <span className={`${s.statusValue} ${STATUS_META[row.status].tone}`}>
                     <Icon name={STATUS_META[row.status].icon} />
                     {STATUS_META[row.status].label}
                   </span>
-                ) : (
-                  <span className={s.dateValue}>{row.value}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </EvidenceSection>
+                </div>
+              ))}
+            </div>
+          </EvidenceSection>
+        )}
 
         <EvidenceSection title="Open files" anchorRef={filesRef}>
-          <div className={s.listCard}>
-            {docs.map((doc) => {
-              const meta = DOC_TYPES[doc.type];
-              return (
-                <article className={s.fileRow} key={doc.id} aria-label={`${doc.fileName}, ${meta.badge}`}>
-                  <span className={s.fileIcon}><Icon name={fileIcon(doc)} /></span>
-                  <span className={s.fileName}>{doc.fileName}</span>
-                  <span className={s.fileType}>{fileFormat(doc)}</span>
-                </article>
-              );
-            })}
-          </div>
+          {openDocs.length > 0 ? (
+            <div className={s.listCard}>
+              {openDocs.map((doc) => {
+                const meta = DOC_TYPES[doc.type];
+                return (
+                  <article className={s.fileRow} key={doc.id} aria-label={`${doc.fileName}, ${meta.badge}`}>
+                    <span className={s.fileIcon}><Icon name={fileIcon(doc)} /></span>
+                    <span className={s.fileName}>{doc.fileName}</span>
+                    <span className={s.fileType}>{fileFormat(doc)}</span>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className={s.emptyCard}>
+              <span className={s.emptyIcon}><Icon name="icon-folder" /></span>
+              <strong>No files to open yet</strong>
+              <span>No documents have been captured for this context. The evidence status above shows what&rsquo;s still missing.</span>
+            </div>
+          )}
         </EvidenceSection>
 
-        <EvidenceSection title="Evidence activity">
-          <ol className={s.activityCard}>
-            {ACTIVITY.map((item) => (
-              <li key={item.title}>
-                <span className={s.activityDot} aria-hidden="true" />
-                <span className={s.activityTitle}>{item.title}</span>
-                <time>{item.at}</time>
-              </li>
-            ))}
-          </ol>
-        </EvidenceSection>
+        {activity.length > 0 && (
+          <EvidenceSection title="Evidence activity">
+            <ol className={s.activityCard}>
+              {activity.map((item, i) => (
+                <li key={`${item.docId}-${i}`}>
+                  <span className={s.activityDot} aria-hidden="true" />
+                  <span className={s.activityTitle}>{item.title}</span>
+                  <time>{item.at}</time>
+                </li>
+              ))}
+            </ol>
+          </EvidenceSection>
+        )}
       </main>
 
       <footer className={s.footer}>
-        <button type="button" className={s.footerGhost} onClick={scrollToFiles}>
+        <button type="button" className={s.footerGhost} onClick={scrollToFiles} disabled={openDocs.length === 0}>
           <Icon name="icon-folder" />Open files
         </button>
         <button
@@ -149,8 +292,29 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, onBack }) {
         </button>
       </footer>
 
-      {sheetOpen && <ShareSheet location={LOCATION_NAME} onClose={() => setSheetOpen(false)} />}
+      {sheetOpen && <ShareSheet heading={view.card.heading} onClose={() => setSheetOpen(false)} />}
     </section>
+  );
+}
+
+const NOT_FOUND_NOUN = {
+  document: "a document",
+  item: "an item or lot",
+  location: "a location",
+};
+
+function ViewerTopbar({ onBack }) {
+  return (
+    <header className={s.topbar}>
+      <button type="button" className={s.backBtn} onClick={onBack} aria-label="Back to Evidence Library">
+        <Icon name="icon-chevron-left" />
+      </button>
+      <div className={s.brand} aria-label="TraceDDS">
+        <BrandLogoMark className={s.brandMark} />
+        <span>TraceDDS</span>
+      </div>
+      <span className={s.topSpacer} aria-hidden="true" />
+    </header>
   );
 }
 
@@ -167,7 +331,7 @@ function EvidenceSection({ title, children, anchorRef }) {
 // presentation URL, hand off to the OS share sheet, or print/save as PDF.
 // Capabilities are feature-detected after mount (SSR-safe) so unsupported
 // browsers show a clear disabled "Unavailable" state instead of a dead button.
-function ShareSheet({ location, onClose }) {
+function ShareSheet({ heading, onClose }) {
   const [caps, setCaps] = useState({ clipboard: false, share: false, print: false });
   const [copied, setCopied] = useState(false);
 
@@ -203,7 +367,7 @@ function ShareSheet({ location, onClose }) {
   async function share() {
     if (!caps.share) return;
     try {
-      await navigator.share({ title: `${location} Evidence`, url: shareUrl });
+      await navigator.share({ title: `${heading} Evidence`, url: shareUrl });
     } catch {
       /* user cancelled or share failed — read-only, nothing to undo */
     }

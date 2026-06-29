@@ -97,7 +97,18 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/scan-session" || path === "/app/scan-sessions")
     return { view: "scanner", isLoggedIn: true, scanLocationId: query.get("location") || "", scanMode: query.get("mode") || "" };
   if (path.startsWith("/app/scan-sessions/")) return { view: "scanner", isLoggedIn: true };
-  if (path === "/app/evidence/viewer") return { view: "evidenceViewer", isLoggedIn: true };
+  if (path === "/app/evidence/viewer")
+    return {
+      view: "evidenceViewer",
+      isLoggedIn: true,
+      // Context-filtered presentation mode: no params = whole practice; a
+      // location / item-or-lot / document id narrows the same read-only shell.
+      evidenceContext: {
+        location: query.get("location") || "",
+        item: query.get("item") || query.get("lot") || "",
+        doc: query.get("doc") || "",
+      },
+    };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
   if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
   if (path === "/app/reports") return { view: "reports", isLoggedIn: true };
