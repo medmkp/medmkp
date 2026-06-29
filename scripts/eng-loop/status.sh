@@ -69,6 +69,13 @@ fmt_dur() {  # seconds → "1h 02m" / "5m 12s" / "9s"
   elif [ "$s" -ge 60 ]; then printf '%dm %02ds' $((s/60)) $((s%60))
   else printf '%ds' "$s"; fi
 }
+rel() {  # seconds → coarse "9s ago" / "22m ago" / "2h ago" / "3d ago"
+  local s="${1:-0}"
+  if   [ "$s" -lt 60 ];    then printf '%ds ago' "$s"
+  elif [ "$s" -lt 3600 ];  then printf '%dm ago' $((s/60))
+  elif [ "$s" -lt 86400 ]; then printf '%dh ago' $((s/3600))
+  else printf '%dd ago' $((s/86400)); fi
+}
 esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }  # HTML-escape stdin
 e() { printf '%s' "$1" | esc; }                                     # HTML-escape an arg
 
@@ -82,6 +89,9 @@ H="${NUC_LOOP_HOME:-$HOME/eng-loop}"
 echo "###hostname###"; hostname 2>/dev/null
 echo "###now_epoch###"; date +%s
 echo "###now_human###"; date "+%Y-%m-%d %H:%M:%S %Z"
+echo "###uptime###"; uptime -p 2>/dev/null
+echo "###platform###"; { . /etc/os-release 2>/dev/null && echo "$PRETTY_NAME"; } || uname -sr 2>/dev/null
+echo "###version###"; git -C "$H/checkout" describe --tags --always --dirty 2>/dev/null
 echo "###cron###"; crontab -l 2>/dev/null | grep -F "# eng-loop"
 echo "###pause###"; [ -f "$H/PAUSE" ] && echo yes || echo no
 echo "###rotation###"; cat "$H/.rotation" 2>/dev/null
@@ -106,9 +116,12 @@ section() { awk -v s="###$1###" '$0==s{f=1;next} /^###[a-z_]+###$/{f=0} f' <<<"$
 # --- 2. Liveness vars -------------------------------------------------------
 host=""; now_epoch=""; now_human=""; sched=""; pause="no"; rotation=""
 mtime=""; ago=""; worktrees=0; hv=""; hd=""; cl=""; cx=""
+uptime_h=""; platform=""; version=""; tz=""
 if [ "$NUC_OK" = "1" ]; then
   host="$(section hostname)"
   now_epoch="$(section now_epoch)"; now_human="$(section now_human)"
+  uptime_h="$(section uptime | sed 's/^up //')"; platform="$(section platform)"; version="$(section version)"
+  tz="$(printf '%s' "$now_human" | awk '{print $NF}')"
   cron_line="$(section cron)"; pause="$(section pause)"; rotation="$(section rotation)"
   mtime="$(section cronlog_mtime)"
   worktrees="$(section worktrees | grep -c . || true)"
@@ -186,7 +199,8 @@ RECENT_PR_ROWS="$(printf '%s' "$recent_prs" | jq -r '
   [ .[] | select(.headRefName|startswith("eng-loop-")) ]
   | sort_by(.createdAt) | reverse | .[:8][]
   | (.headRefName | sub("^eng-loop-";"") | sub("-[0-9]{8}-[0-9]{6}$";"")) as $cat
-  | [ .number, (if .mergedAt then "MERGED" else .state end), $cat, .title ] | @tsv' 2>/dev/null)"
+  | ((now - (.createdAt|fromdateiso8601)) | floor) as $age
+  | [ .number, (if .mergedAt then "MERGED" else .state end), $cat, $age, .title ] | @tsv' 2>/dev/null)"
 
 # --- 5. Open loop PRs (local gh) --------------------------------------------
 prs="$(gh pr list --repo "$LOOP_REPO" --state open --limit 100 \
@@ -240,112 +254,176 @@ dq="$(count_label data-quality)"
 #  HTML RENDERER (card dashboard)
 # ============================================================================
 if [ "$HTML" = "1" ]; then
-  # health badge class
-  case "$hv" in OK) hclass=ok ;; DEGRADED) hclass=warn ;; STALLED|DOWN) hclass=bad ;; *) hclass=mut ;; esac
+  # ---- small inline-SVG helpers ------------------------------------------
+  ck='<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>'
+  xk='<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
 
-  # status chips
-  chips=""
-  if [ "$NUC_OK" = "0" ]; then
-    chips+="<span class='chip bad'>NUC ($(e "$NUC_HOST")) unreachable</span>"
-  else
-    [ -n "$hv" ] && chips+="<span class='chip $hclass'>$(e "$hv")</span>"
-    chips+="<span class='chip'>NUC $(e "${host:-$NUC_HOST}")</span>"
-    if [ -n "$sched" ]; then chips+="<span class='chip ok'>cron $(e "$sched")</span>"
-    else chips+="<span class='chip bad'>cron not installed</span>"; fi
-    [ "$pause" = "yes" ] && chips+="<span class='chip warn'>PAUSED</span>"
-    [ -n "$ago" ] && chips+="<span class='chip'>last activity $(e "$(fmt_dur "$ago")") ago</span>"
-    [ "${worktrees:-0}" -gt 0 ] && chips+="<span class='chip warn'>${worktrees} worktree(s)</span>"
-    [ -n "$rotation" ] && chips+="<span class='chip mut'>next lane: $(e "$rotation")</span>"
-    if [ -n "$cl" ]; then
-      cln="${cl%\%}"; ucls=warn; [ -n "$cln" ] && [ "$cln" -gt "$GATE_THRESHOLD" ] && ucls=ok
-      chips+="<span class='chip $ucls'>Claude $(e "$cl") left</span>"
-    fi
-    [ -n "$cx" ] && chips+="<span class='chip'>Codex $(e "$cx") left</span>"
+  lane_pill() {  # colored pill whose hue is derived from the lane name (stable per lane)
+    local L="$1"
+    [ -z "$L" ] && { printf '<span class="lane mut">—</span>'; return; }
+    local h; h=$(printf '%s' "$L" | od -An -tu1 2>/dev/null | awk '{for(i=1;i<=NF;i++)s+=$i} END{print (s%360)}')
+    printf '<span class="lane" style="--h:%s">%s</span>' "${h:-210}" "$(e "$L")"
+  }
+  donut() {  # $1=used% $2=hue $3=engine-name ; centre shows N% / used
+    local pct="${1:-0}" hue="$2" name="$3"
+    [ -z "$pct" ] && pct=0
+    local circ off
+    circ=$(awk 'BEGIN{printf "%.2f", 2*3.14159265*42}')
+    off=$(awk -v c="$circ" -v p="$pct" 'BEGIN{printf "%.2f", c*(1-p/100)}')
+    printf '<div class="donut"><svg viewBox="0 0 108 108"><circle class="dt" cx="54" cy="54" r="42"/><circle class="dv" cx="54" cy="54" r="42" style="--hue:%s;stroke-dasharray:%s;stroke-dashoffset:%s"/></svg><div class="dc"><b style="color:hsl(%s,70%%,42%%)">%s</b><span>used</span></div><div class="dl">%s</div></div>' \
+      "$hue" "$circ" "$off" "$hue" "${pct}%" "$(e "$name")"
+  }
+  clock() { printf '%s' "$1" | awk -F: '{h=$1+0; ap=(h<12?"AM":"PM"); hh=h%12; if(hh==0)hh=12; printf "%d:%s:%s %s", hh, $2, $3, ap}'; }
+
+  # ---- health verdict ----------------------------------------------------
+  case "$hv" in OK) hclass=ok; hword="${hv}"; hsub="${hd:-All systems normal}" ;;
+    DEGRADED) hclass=warn; hword="$hv"; hsub="${hd:-Running with warnings}" ;;
+    STALLED|DOWN) hclass=bad; hword="$hv"; hsub="${hd:-Loop not advancing}" ;;
+    *) hclass=mut; hword="?"; hsub="health unknown" ;; esac
+  [ "$NUC_OK" = "0" ] && { hclass=bad; hword="DOWN"; hsub="NUC ($NUC_HOST) unreachable"; }
+
+  # ---- derived liveness numbers -----------------------------------------
+  now_time="$(printf '%s' "$now_human" | awk '{print $2}')"
+  now_date="$(printf '%s' "$now_human" | awk '{print $1}')"
+  cur_min="$(printf '%s' "$now_time" | cut -d: -f2)"
+  mfield="$(printf '%s' "$sched" | awk '{print $1}')"; ival=""
+  case "$mfield" in */[0-9]*) ival="${mfield#*/}" ;; esac
+  nextrun=""
+  if [ -n "$ival" ] && [ -n "$cur_min" ]; then
+    cm=$((10#$cur_min)); ni=$(( ival - (cm % ival) )); [ "$ni" -eq 0 ] && ni=$ival
+    nextrun="~${ni}m"
   fi
+  ivh="${ival:-30}"
+  ready_hours=""; [ "${qn:-0}" -gt 0 ] && ready_hours="$(awk -v q="$qn" -v i="$ivh" 'BEGIN{printf "%.0f", q*i/60}')"
 
-  # current run line
-  if [ "$NUC_OK" = "0" ]; then cur_html="<span class='mut'>NUC unreachable</span>"
-  elif [ -n "$CUR" ]; then
-    el=""; [ -n "$ago" ] && el=" · running $(fmt_dur "$ago")"
-    cur_html="<b>$(e "$cwork")</b> on <span class='cyn'>$(e "$ceng")</span> · started $(e "$ctime")$(e "$el")"
-  else cur_html="<span class='ok'>idle</span> — last tick complete; waiting for next cron fire."; fi
+  cl_rem="${cl%\%}"; cx_rem="${cx%\%}"
+  claude_used=""; codex_used=""
+  [ -n "$cl_rem" ] && claude_used=$(( 100 - cl_rem ))
+  [ -n "$cx_rem" ] && codex_used=$(( 100 - cx_rem ))
+  eng_next="Claude"; { [ -n "$cl_rem" ] && [ "$cl_rem" -le "$GATE_THRESHOLD" ]; } && eng_next="Codex"
 
-  # PRs created recently
-  recent_html=""
-  if [ -n "$RECENT_PR_ROWS" ]; then
-    while IFS=$'\t' read -r num state cat title; do
-      [ -z "$num" ] && continue
-      case "$state" in MERGED) sc=ok ;; OPEN) sc=blu ;; CLOSED) sc=mut ;; *) sc=mut ;; esac
-      recent_html+="<li><a href='https://github.com/$LOOP_REPO/pull/$num' target='_blank'>#$num</a> <span class='pill $sc'>$(e "$state")</span> <span class='cat'>$(e "$cat")</span> <span class='t'>$(e "$title")</span></li>"
-    done <<EOF
-$RECENT_PR_ROWS
-EOF
-  else recent_html="<li class='mut'>no loop PRs found</li>"; fi
+  # pipeline health verdict
+  if   [ "${qn:-0}" -ge 8 ]; then pipe_word="Healthy pipeline"; pipe_cls=ok
+  elif [ "${qn:-0}" -ge 3 ]; then pipe_word="Adequate backlog"; pipe_cls=warn
+  else pipe_word="Low — backfill soon"; pipe_cls=bad; fi
+  pipe_sub="queue empty"; [ -n "$ready_hours" ] && pipe_sub="Enough ready work for ~${ready_hours} hours"
 
-  # open PRs (awaiting review)
-  open_html=""
-  if [ "$GH_OK" = "0" ]; then open_html="<li class='bad'>could not query GitHub (is gh authed?)</li>"
-  elif [ -n "$PR_ROWS" ]; then
-    while IFS=$'\t' read -r num merge review ci cat title; do
-      [ -z "$num" ] && continue
-      mc=ok; [ "$merge" = "CONFLICTING" ] && mc=bad; [ "$merge" = "UNKNOWN" ] && mc=mut
-      case "$review" in CHANGES_REQUESTED) rv="changes requested"; rvc=warn ;; APPROVED) rv=approved; rvc=ok ;; *) rv="review required"; rvc=mut ;; esac
-      case "$ci" in FAIL) cic=bad ;; pending) cic=warn ;; none) cic=mut ;; *) cic=ok ;; esac
-      open_html+="<li><a href='https://github.com/$LOOP_REPO/pull/$num' target='_blank'>#$num</a> <span class='pill $mc'>$(e "$merge")</span> <span class='pill $rvc'>$(e "$rv")</span> <span class='pill $cic'>CI $(e "$ci")</span> <span class='cat'>$(e "$cat")</span><br><span class='t'>$(e "$title")</span></li>"
-    done <<EOF
-$PR_ROWS
-EOF
-  else open_html="<li class='mut'>none open — all created PRs merged or closed</li>"; fi
-
-  # work queue (real pick order) + backlog counts
-  backlog_html="<div class='kv'><span>Queued · next-up order</span><b>${qn:-0}</b></div>"
-  if [ "${qn:-0}" != "0" ]; then
-    backlog_html+="<ol class='queue'>"
-    n=0
-    while IFS=$'\t' read -r pos num label title; do
-      [ -z "$num" ] && continue
-      n=$((n+1)); [ "$n" -gt 15 ] && continue
-      backlog_html+="<li><span class='pos'>${pos}</span><a href='https://github.com/$LOOP_REPO/issues/$num' target='_blank'>#$num</a> <span class='cat'>$(e "$label")</span> <span class='t'>$(e "$title")</span></li>"
-    done <<EOF
-$QUEUE_ROWS
-EOF
-    [ "${qn:-0}" -gt 15 ] && backlog_html+="<li class='mut'>… +$((qn-15)) more</li>"
-    backlog_html+="</ol>"
-  else
-    rot_note=""; [ -n "$rotation" ] && rot_note=" (next: $(e "$rotation"))"
-    backlog_html+="<div class='mut' style='padding:5px 0 8px'>queue empty — drawing from autonomous rotation${rot_note}</div>"
+  # ---- recent ticks → cycles table + failure tally + sparkline ----------
+  fail_n=0
+  # lane for a cycle's PR — look it up in RECENT_PR_ROWS (portable; no assoc arrays)
+  pr_lane() { printf '%s\n' "$RECENT_PR_ROWS" | awk -F'\t' -v n="$1" '$1==n{print $3; exit}'; }
+  spark_bars=""
+  if [ -n "$TICKS" ]; then
+    while IFS=$'\t' read -r t eng work result flag; do
+      [ -z "$t" ] && continue
+      cls=ok; v=3
+      case "$result" in
+        *"exit="[1-9]*|*"locked"*)             cls=bad; v=2; fail_n=$((fail_n+1)) ;;
+        *"no PR"*|*"skipped"*|*"quiet"*)       cls=mut; v=1 ;;
+        *"→ PR"*|*"revised"*|*"reconciled"*)   cls=ok;  v=3 ;;
+      esac
+      [ "$flag" = "run" ] && { cls=run; v=2; }
+      spark_bars+="<i class='$cls' style='--v:$v'></i>"
+    done < <(printf '%s\n' "$TICKS" | tail -24)
   fi
-  backlog_html+="<div class='kv'><span>Blocked · needs-design</span><b class='warn'>${nd}</b></div>"
-  backlog_html+="<div class='kv'><span>data-quality</span><b>${dq}</b></div>"
+  pipe_spark="$(printf '%s\n' "$TICKS" | tail -40 | awk -F'\t' '
+    { r=$4; f=$5; v=2;
+      if (r ~ /exit=[1-9]|locked/) v=1; else if (r ~ /no PR|skipped|quiet/) v=1; else if (r ~ /PR|revised|reconciled/) v=3;
+      if (f=="run") v=2; vals[n++]=v }
+    END{ if(n<2){exit}; w=300;h=44; pts="";
+      for(i=0;i<n;i++){ x=(i/(n-1))*w; y=h-3-(vals[i]-1)/2*(h-8); pts=pts sprintf("%.1f,%.1f ",x,y) }
+      printf "<svg viewBox=\"0 0 %d %d\" preserveAspectRatio=\"none\" class=\"trend\"><polyline points=\"%s\"/></svg>", w,h,pts }')"
 
-  # recent ticks table + failure tally
-  ticks_html=""; fail_n=0
-  if [ "$NUC_OK" = "0" ]; then ticks_html="<tr><td class='mut' colspan='4'>NUC unreachable</td></tr>"
+  cycles_html=""
+  if [ "$NUC_OK" = "0" ]; then cycles_html="<tr><td class='mut' colspan='5'>NUC unreachable</td></tr>"
   elif [ -n "$TICKS" ]; then
     while IFS=$'\t' read -r t eng work result flag; do
       [ -z "$t" ] && continue
-      rc=ok
+      oc=ok; oicon="$ck"
       case "$result" in
-        *"no PR"*|*"skipped"*|*"quiet"*) rc=mut ;;
-        *"exit="[1-9]*|*"locked"*)       rc=bad; fail_n=$((fail_n+1)) ;;
-        *"revised"*|*"reconciled"*)      rc=blu ;;
+        *"exit="[1-9]*|*"locked"*)           oc=bad; oicon="$xk" ;;
+        *"no PR"*|*"skipped"*|*"quiet"*)     oc=mut; oicon="$ck" ;;
+        *"revised"*|*"reconciled"*)          oc=blu; oicon="$ck" ;;
       esac
-      [ "$flag" = "run" ] && { rc=cyn; result="…running"; }
-      engc=mut; [ "$eng" = "codex" ] && engc=warn
-      ticks_html+="<tr><td class='mut'>$(e "$t")</td><td class='$engc'>$(e "$eng")</td><td>$(e "$work")</td><td class='$rc'>$(e "$result")</td></tr>"
+      [ "$flag" = "run" ] && { oc=run; oicon="$ck"; result="…running"; }
+      # lane: from the PR this cycle opened, else the autonomous "auto: <cat>" category
+      lane=""; prn="$(printf '%s' "$result" | grep -oE '#[0-9]+' | head -1 | tr -d '#')"
+      [ -n "$prn" ] && lane="$(pr_lane "$prn")"
+      [ -z "$lane" ] && case "$work" in auto:\ *) lane="${work#auto: }" ;; esac
+      engc=cla; [ "$eng" = "codex" ] && engc=cod
+      cycles_html+="<tr><td class='mut'>$(e "$t")</td><td><span class='eng $engc'>$(e "$(printf '%s' "$eng" | tr a-z A-Z)")</span></td><td>$(lane_pill "$lane")</td><td class='wi'>$(e "$work")</td><td class='$oc'><span class='oi'>$oicon</span>$(e "$result")</td></tr>"
     done < <(printf '%s\n' "$TICKS" | tail -10)
-  else ticks_html="<tr><td class='mut' colspan='4'>no ticks in the last $TAIL_HIST log lines</td></tr>"; fi
+  else cycles_html="<tr><td class='mut' colspan='5'>no cycles in the last $TAIL_HIST log lines</td></tr>"; fi
 
-  # attention banner (failures in recent ticks + conflicting/failing open PRs)
-  attn=""
-  pr_fail="$(printf '%s' "$PR_ROWS" | awk -F'\t' '$2=="CONFLICTING" || $4=="FAIL"{n++} END{print n+0}')"
-  [ "$fail_n" -gt 0 ] && attn+="<span class='chip bad'>$fail_n recent tick failure(s)</span>"
-  [ "${pr_fail:-0}" -gt 0 ] && attn+="<span class='chip bad'>$pr_fail open PR(s) conflicting / CI-failing</span>"
-  [ -z "$attn" ] && attn="<span class='chip ok'>no failures in view</span>"
+  # ---- recently created PRs table ---------------------------------------
+  recent_html=""
+  if [ -n "$RECENT_PR_ROWS" ]; then
+    while IFS=$'\t' read -r num state cat age title; do
+      [ -z "$num" ] && continue
+      case "$state" in MERGED) sc=ok ;; OPEN) sc=blu ;; *) sc=mut ;; esac
+      recent_html+="<tr><td><a href='https://github.com/$LOOP_REPO/pull/$num' target='_blank'>#$num</a></td><td><span class='pill $sc'>$(e "$state")</span></td><td>$(lane_pill "$cat")</td><td class='wi'>$(e "$title")</td><td class='mut'>$(rel "${age:-0}")</td></tr>"
+    done <<EOF
+$RECENT_PR_ROWS
+EOF
+  else recent_html="<tr><td class='mut' colspan='5'>no loop PRs found</td></tr>"; fi
 
-  # log tail
-  logtail_html="$(section crontail | tail -n "$TAIL_N" | esc)"
-  [ "$NUC_OK" = "0" ] && logtail_html="(NUC unreachable)"
+  # ---- open PRs awaiting review table -----------------------------------
+  open_html=""; pr_fail=0
+  if [ "$GH_OK" = "0" ]; then open_html="<tr><td class='bad' colspan='6'>could not query GitHub (is gh authed?)</td></tr>"
+  elif [ -n "$PR_ROWS" ]; then
+    while IFS=$'\t' read -r num merge review ci cat title; do
+      [ -z "$num" ] && continue
+      case "$merge" in CONFLICTING) mc=bad; mw="Conflicting"; mi="$xk" ;; UNKNOWN) mc=mut; mw="Unknown"; mi="<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg>" ;; *) mc=ok; mw="Ready"; mi="$ck" ;; esac
+      case "$review" in CHANGES_REQUESTED) rv="Changes requested"; rvc=warn ;; APPROVED) rv="Approved"; rvc=ok ;; *) rv="Review required"; rvc=mut ;; esac
+      case "$ci" in FAIL) cic=bad; cw="Fail" ;; pending) cic=warn; cw="Pending" ;; none) cic=mut; cw="—" ;; *) cic=ok; cw="Pass" ;; esac
+      { [ "$merge" = "CONFLICTING" ] || [ "$ci" = "FAIL" ]; } && pr_fail=$((pr_fail+1))
+      open_html+="<tr><td><a href='https://github.com/$LOOP_REPO/pull/$num' target='_blank'>#$num</a></td><td class='$mc'><span class='si'>$mi</span>$mw</td><td class='$rvc'>$(e "$rv")</td><td class='$cic'>$cw</td><td>$(lane_pill "$cat")</td><td class='wi'>$(e "$title")</td></tr>"
+    done <<EOF
+$PR_ROWS
+EOF
+  else open_html="<tr><td class='mut' colspan='6'>none open — all created PRs merged or closed</td></tr>"; fi
+
+  # ---- queued-next list --------------------------------------------------
+  queued_html=""
+  if [ "${qn:-0}" != "0" ]; then
+    n=0
+    while IFS=$'\t' read -r pos num label title; do
+      [ -z "$num" ] && continue
+      n=$((n+1)); [ "$n" -gt 5 ] && continue
+      queued_html+="<li><span class='qn'>${pos}.</span><a href='https://github.com/$LOOP_REPO/issues/$num' target='_blank'>#$num</a> $(lane_pill "$label") <span class='qt'>$(e "$title")</span> <span class='badge ok'>Ready</span></li>"
+    done <<EOF
+$QUEUE_ROWS
+EOF
+  else
+    rot_note=""; [ -n "$rotation" ] && rot_note=" (next: $(e "$rotation"))"
+    queued_html="<li class='mut'>queue empty — drawing from autonomous rotation${rot_note}</li>"
+  fi
+
+  # ---- failures banner ---------------------------------------------------
+  if [ "$fail_n" -eq 0 ] && [ "${pr_fail:-0}" -eq 0 ]; then
+    fail_cls=ok; fail_icon="$ck"; fail_word="No failures in view"
+  else
+    fail_cls=bad; fail_icon="$xk"; fail_word="Attention needed"
+  fi
+
+  # ---- system info -------------------------------------------------------
+  gh_word="Connected"; gh_cls=ok; [ "$GH_OK" = "0" ] && { gh_word="Disconnected"; gh_cls=bad; }
+
+  # ---- log tail (colorized) ---------------------------------------------
+  if [ "$NUC_OK" = "0" ]; then logtail_html="<div class='lg mut'>(NUC unreachable)</div>"
+  else
+    logtail_html="$(section crontail | tail -n "$TAIL_N" | esc | awk '{
+      cls="logi"; if ($0 ~ /ERROR|FAIL|exit=[1-9]/) cls="loge"; else if ($0 ~ /WARN/) cls="logw";
+      printf "<div class=\"lg %s\">%s</div>\n", cls, $0 }')"
+    [ -z "$logtail_html" ] && logtail_html="<div class='lg mut'>(no log lines)</div>"
+  fi
+
+  # status pill for schedule
+  if [ "$NUC_OK" = "0" ]; then sched_word="UNREACHABLE"; sched_cls=bad
+  elif [ "$pause" = "yes" ]; then sched_word="PAUSED"; sched_cls=warn
+  elif [ -n "$sched" ]; then sched_word="ACTIVE"; sched_cls=ok
+  else sched_word="NO CRON"; sched_cls=bad; fi
+  wt_sub="Idle"; [ "${worktrees:-0}" -gt 0 ] && wt_sub="Active"
 
   gen="$(date '+%Y-%m-%d %H:%M:%S %Z')"
   page="$(cat <<HTMLEOF
@@ -354,60 +432,264 @@ EOF
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="60">
-<title>eng-loop dashboard</title>
+<title>Engineering Loop · dashboard</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:#0d1117; color:#c9d1d9;
-         font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
-  a { color:#58a6ff; text-decoration:none; } a:hover { text-decoration:underline; }
-  .wrap { max-width:1040px; margin:0 auto; padding:22px 18px 48px; }
-  h1 { font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#8b949e; margin:0 0 12px; }
-  .bar { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
-  .chip { display:inline-block; padding:2px 9px; border-radius:999px; background:#161b22; border:1px solid #30363d; color:#c9d1d9; font-size:11.5px; }
-  .chip.ok{ color:#3fb950; border-color:#23502f } .chip.warn{ color:#d29922; border-color:#5a4413 }
-  .chip.bad{ color:#f85149; border-color:#5e2126 } .chip.mut{ color:#8b949e }
-  .now { margin:10px 0 16px; padding:10px 12px; background:#161b22; border:1px solid #30363d; border-radius:8px; }
-  .now .lbl { color:#8b949e; font-size:11px; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media (max-width:760px){ .grid{ grid-template-columns:1fr } }
-  .card { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px 14px; }
-  .card h2 { font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:#8b949e; margin:0 0 10px; }
-  .card.wide { grid-column:1 / -1; }
-  ul { list-style:none; margin:0; padding:0; }
-  li { padding:5px 0; border-bottom:1px solid #21262d; }
-  li:last-child { border-bottom:0; }
-  ul.tight li { padding:2px 0; border:0; color:#8b949e; }
-  ol.queue { list-style:none; margin:6px 0 10px; padding:0; }
-  ol.queue li { padding:4px 0; border-bottom:1px solid #21262d; }
-  ol.queue li:last-child { border-bottom:0; }
-  .pos { display:inline-block; min-width:20px; text-align:right; margin-right:7px; color:#6e7681; }
-  .pill { display:inline-block; padding:0 6px; border-radius:4px; font-size:10.5px; border:1px solid #30363d; }
-  .pill.ok{color:#3fb950} .pill.warn{color:#d29922} .pill.bad{color:#f85149} .pill.blu{color:#58a6ff} .pill.mut{color:#8b949e}
-  .cat { color:#8b949e; font-size:11px; }
-  .t { color:#c9d1d9; }
-  table { width:100%; border-collapse:collapse; font-size:12px; }
-  td { padding:4px 8px 4px 0; vertical-align:top; border-bottom:1px solid #21262d; }
-  tr:last-child td { border-bottom:0; }
-  .kv { display:flex; justify-content:space-between; padding:3px 0; }
-  .kv span { color:#8b949e; }
-  pre.log { white-space:pre-wrap; word-break:break-word; margin:0; color:#6e7681; font-size:11.5px; }
-  details summary { cursor:pointer; color:#8b949e; }
-  .ok{color:#3fb950} .warn{color:#d29922} .bad{color:#f85149} .blu{color:#58a6ff} .cyn{color:#39c5cf} .mut{color:#8b949e} b{color:#f0f6fc}
-  footer { margin-top:18px; color:#6e7681; font-size:11.5px; }
-</style></head><body><div class="wrap">
-<h1>TraceDDS · eng-loop dashboard</h1>
-<div class="bar">$chips</div>
-<div class="bar">$attn</div>
-<div class="now"><div class="lbl">Current run</div>$cur_html</div>
-<div class="grid">
-  <div class="card"><h2>PRs created (recent)</h2><ul>$recent_html</ul></div>
-  <div class="card"><h2>Open PRs · awaiting review</h2><ul>$open_html</ul></div>
-  <div class="card"><h2>Work queue · next-up order</h2>$backlog_html</div>
-  <div class="card"><h2>Recent ticks</h2><table>$ticks_html</table></div>
-  <div class="card wide"><h2>cron.log · last $TAIL_N</h2><details open><summary>log tail</summary><pre class="log">$logtail_html</pre></details></div>
-</div>
-<footer>generated $gen · auto-refreshes every 60s · read-only · repo $LOOP_REPO</footer>
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --line:#e6e9ee; --line2:#eef1f5;
+    --ink:#1f2430; --ink2:#5b6573; --mut:#8a93a2;
+    --ok:#1f9d57; --okbg:#e9f7ef; --warn:#b9770b; --warnbg:#fdf4e3;
+    --bad:#d23a3a; --badbg:#fdecec; --blu:#2563c9; --blubg:#e8f0fd;
+    --accent:#5b6cff; --shadow:0 1px 2px rgba(20,28,45,.05),0 1px 3px rgba(20,28,45,.04);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:13.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  a{color:var(--blu);text-decoration:none} a:hover{text-decoration:underline}
+  .ic{width:1em;height:1em;display:inline-block;vertical-align:-.12em}
+  .app{display:grid;grid-template-columns:208px 1fr;min-height:100vh}
+  /* ---- sidebar ---- */
+  .side{background:var(--panel);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column}
+  .brand{display:flex;gap:10px;align-items:center;padding:2px 6px 18px}
+  .brand .logo{width:26px;height:26px;border:1.5px solid var(--ink);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+  .brand b{font-size:13.5px;font-weight:650;letter-spacing:-.01em;display:block;line-height:1.2}
+  .brand small{color:var(--mut);font-size:11px}
+  .nav{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  .nav a{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;color:var(--ink2);font-size:13px;font-weight:500}
+  .nav a:hover{background:var(--line2);text-decoration:none}
+  .nav a.on{background:#eef0fb;color:var(--accent)}
+  .nav .gi{width:15px;height:15px;opacity:.85}
+  .side .foot{margin-top:auto;padding-top:16px;color:var(--mut);font-size:11px;line-height:1.6}
+  .side .foot .ar{display:flex;align-items:center;gap:7px;color:var(--ink2);font-size:12px;margin-bottom:10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block}
+  .pillbox{border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--ink2);font-size:11px}
+  /* ---- main ---- */
+  .main{padding:20px 22px 40px;max-width:1480px}
+  .grid{display:grid;gap:14px}
+  .r1{grid-template-columns:1.55fr 1fr 1fr}
+  .r2{grid-template-columns:1fr 1.25fr 1.1fr .95fr;margin-top:14px}
+  .r3{grid-template-columns:1fr 1fr;margin-top:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:15px 16px;box-shadow:var(--shadow)}
+  .ct{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+  .ct h2,.card>h2{font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin:0}
+  .ct a{font-size:12px;font-weight:500}
+  .card>h2{margin-bottom:12px}
+  /* health card */
+  .health{display:flex;gap:18px;align-items:stretch}
+  .hbig{display:flex;gap:13px;align-items:center;min-width:172px;padding-right:18px;border-right:1px solid var(--line2)}
+  .hring{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px}
+  .hring.ok{background:var(--okbg);color:var(--ok)} .hring.warn{background:var(--warnbg);color:var(--warn)}
+  .hring.bad{background:var(--badbg);color:var(--bad)} .hring.mut{background:var(--line2);color:var(--mut)}
+  .hword{font-size:27px;font-weight:680;letter-spacing:-.02em;line-height:1}
+  .hword.ok{color:var(--ok)} .hword.warn{color:var(--warn)} .hword.bad{color:var(--bad)} .hword.mut{color:var(--mut)}
+  .hsub{color:var(--mut);font-size:11.5px;margin-top:3px}
+  .hstats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;flex:1}
+  .hstats .s .k{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+  .hstats .s .v{font-size:13px;font-weight:560;display:flex;align-items:center;gap:5px}
+  .hstats .s .sub{color:var(--mut);font-size:11px;font-weight:400;margin-top:1px}
+  /* donuts */
+  .donuts{display:flex;gap:8px;justify-content:space-around}
+  .donut{position:relative;text-align:center}
+  .donut svg{width:96px;height:96px;transform:rotate(-90deg)}
+  .donut .dt{fill:none;stroke:var(--line2);stroke-width:10}
+  .donut .dv{fill:none;stroke:hsl(var(--hue),70%,48%);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .6s}
+  .donut .dc{position:absolute;top:34px;left:0;right:0;text-align:center;line-height:1.1}
+  .donut .dc b{font-size:17px;font-weight:680;display:block} .donut .dc span{font-size:10px;color:var(--mut)}
+  .donut .dl{margin-top:4px;color:var(--ink2);font-size:12px;font-weight:540}
+  /* failures card */
+  .fail{display:flex;gap:13px;align-items:center}
+  .fic{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:23px;flex-shrink:0}
+  .fic.ok{background:var(--okbg);color:var(--ok)} .fic.bad{background:var(--badbg);color:var(--bad)}
+  .fail .fw{font-size:15px;font-weight:600} .fail .fs{color:var(--mut);font-size:11.5px;margin-top:2px}
+  .spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin-left:auto}
+  .spark i{width:5px;border-radius:1px;height:calc(var(--v)*8px + 4px);background:var(--ok)}
+  .spark i.bad{background:var(--bad)} .spark i.mut{background:var(--line)} .spark i.run{background:var(--blu)}
+  .sparklbl{text-align:right;color:var(--mut);font-size:10px;margin-top:4px}
+  /* current activity */
+  .pulse{display:flex;flex-direction:column;align-items:center;gap:13px;padding:6px 0 2px}
+  .pwrap{position:relative;width:118px;height:118px;display:flex;align-items:center;justify-content:center}
+  .pring{position:absolute;inset:0;border-radius:50%;border:2px dashed var(--line);animation:spin 22s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .pcore{color:var(--ok);font-size:30px;line-height:1}
+  .pcore.run{color:var(--blu)}
+  .ptext{text-align:center}
+  .ptext .st{font-size:17px;font-weight:650;letter-spacing:.02em} .ptext .ss{color:var(--mut);font-size:12px;margin-top:2px}
+  .pmeta{width:100%;border-top:1px solid var(--line2);padding-top:9px;margin-top:3px;display:flex;flex-direction:column;gap:5px}
+  .pmeta .kv{display:flex;justify-content:space-between;font-size:12px} .pmeta .kv span{color:var(--mut)}
+  /* queued list */
+  .queue{list-style:none;margin:0;padding:0}
+  .queue li{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line2);font-size:12.5px}
+  .queue li:last-child{border-bottom:0}
+  .queue .qn{color:var(--mut);min-width:16px} .queue .qt{flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qfoot{margin-top:10px;color:var(--mut);font-size:11.5px} .qfoot b{color:var(--ink2);font-weight:600}
+  /* pipeline */
+  .pipe{display:flex;justify-content:space-between;text-align:center;gap:8px}
+  .pipe .pn{font-size:30px;font-weight:680;line-height:1} .pipe .pk{font-size:12px;font-weight:560;margin-top:4px} .pipe .psub{color:var(--mut);font-size:10.5px;margin-top:1px}
+  .pipe .ok{color:var(--ok)} .pipe .warn{color:var(--warn)} .pipe .blu{color:var(--blu)}
+  .pbar{margin-top:13px;border-top:1px solid var(--line2);padding-top:11px;display:flex;gap:11px;align-items:center}
+  .pbar .pi{width:30px;height:30px;border-radius:50%;background:var(--okbg);color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+  .pbar .pi.warn{background:var(--warnbg);color:var(--warn)} .pbar .pi.bad{background:var(--badbg);color:var(--bad)}
+  .pbar .pw{font-size:13px;font-weight:600} .pbar .ps{color:var(--mut);font-size:11px}
+  .pbar .trend{width:120px;height:38px;margin-left:auto}
+  .trend polyline{fill:none;stroke:var(--ok);stroke-width:1.5;vector-effect:non-scaling-stroke;opacity:.7}
+  /* system info */
+  .sys{display:flex;flex-direction:column}
+  .sys .row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line2);font-size:12.5px}
+  .sys .row:last-child{border-bottom:0}
+  .sys .row .k{color:var(--ink2)} .sys .row .v{font-weight:540;color:var(--ink);display:flex;align-items:center;gap:6px}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  thead th{text-align:left;color:var(--mut);font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:0 10px 8px 0;border-bottom:1px solid var(--line)}
+  tbody td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line2);vertical-align:middle}
+  tbody tr:last-child td{border-bottom:0}
+  td.wi{color:var(--ink);max-width:1px;width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .si,.oi{display:inline-flex;margin-right:5px;vertical-align:-.12em}
+  /* chips / pills */
+  .lane{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:540;white-space:nowrap;
+    background:hsl(var(--h),62%,96%);color:hsl(var(--h),48%,40%);border:1px solid hsl(var(--h),50%,90%)}
+  .lane.mut{background:var(--line2);color:var(--mut);border-color:var(--line)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:5px;font-size:10.5px;font-weight:600;letter-spacing:.02em}
+  .pill.ok{background:var(--okbg);color:var(--ok)} .pill.blu{background:var(--blubg);color:var(--blu)} .pill.mut{background:var(--line2);color:var(--mut)}
+  .badge{margin-left:auto;padding:1px 8px;border-radius:5px;font-size:10.5px;font-weight:600}
+  .badge.ok{background:var(--okbg);color:var(--ok)} .badge.warn{background:var(--warnbg);color:var(--warn)} .badge.bad{background:var(--badbg);color:var(--bad)}
+  .eng{display:inline-block;padding:1px 8px;border-radius:5px;font-size:10.5px;font-weight:650;letter-spacing:.03em}
+  .eng.cla{background:#eafaf1;color:#178a4c} .eng.cod{background:#eef0fb;color:#4b59d6}
+  /* log */
+  .logwrap{font:11.5px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;max-height:236px;overflow:auto;background:#fbfcfd;border:1px solid var(--line2);border-radius:8px;padding:10px 12px}
+  .lg{white-space:pre-wrap;word-break:break-word;color:var(--ink2)}
+  .lg.logw{color:var(--warn)} .lg.loge{color:var(--bad)} .lg.mut{color:var(--mut)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .blu{color:var(--blu)} .mut{color:var(--mut)} .run{color:var(--blu)}
+  .eng.cla,.eng.cod{color:inherit}
+  @media(max-width:1180px){.r1,.r2,.r3{grid-template-columns:1fr 1fr}}
+  @media(max-width:720px){.app{grid-template-columns:1fr}.side{display:none}.r1,.r2,.r3{grid-template-columns:1fr}}
+</style></head><body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="logo">$ck</span><span><b>Engineering Loop</b><small>Autonomous dev cycle</small></span></div>
+    <ul class="nav">
+      <li><a class="on" href="#overview"><span class="gi">▦</span> Overview</a></li>
+      <li><a href="#prs"><span class="gi">⤴</span> PRs</a></li>
+      <li><a href="#queue"><span class="gi">☰</span> Issues Queue</a></li>
+      <li><a href="#cycles"><span class="gi">↻</span> Cycles</a></li>
+      <li><a href="#queue"><span class="gi">▤</span> Backlog</a></li>
+      <li><a href="#logs"><span class="gi">≣</span> Logs</a></li>
+    </ul>
+    <div class="foot">
+      <div class="ar"><span class="dot"></span> Auto-refresh <span class="pillbox">60s</span></div>
+      Last updated<br>$(clock "$now_time")<br>$(e "$now_date")
+    </div>
+  </aside>
+  <main class="main" id="overview">
+    <div class="grid r1">
+      <div class="card">
+        <div class="ct"><h2>Health &amp; Liveness</h2></div>
+        <div class="health">
+          <div class="hbig">
+            <div class="hring $hclass">$([ "$hclass" = bad ] && printf '%s' "$xk" || printf '%s' "$ck")</div>
+            <div><div class="hword $hclass">$(e "$hword")</div><div class="hsub">$(e "$hsub")</div></div>
+          </div>
+          <div class="hstats">
+            <div class="s"><div class="k">Host</div><div class="v"><span class="dot"></span>$(e "${host:-$NUC_HOST}")</div></div>
+            <div class="s"><div class="k">Schedule</div><div class="v">$(e "${sched:-—}")</div><div class="sub $sched_cls">$sched_word</div></div>
+            <div class="s"><div class="k">Last activity</div><div class="v">$([ -n "$ago" ] && rel "$ago" || echo "—")</div><div class="sub">$([ -n "$mtime" ] && { date -r "$mtime" "+%-I:%M %p" 2>/dev/null || date -d "@$mtime" "+%-I:%M %p" 2>/dev/null; } || echo "")</div></div>
+            <div class="s"><div class="k">Worktrees</div><div class="v">${worktrees:-0}</div><div class="sub">$wt_sub</div></div>
+            <div class="s"><div class="k">Next lane</div><div class="v">$(lane_pill "${rotation:-—}")</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ct"><h2>Usage budget <span class="mut" style="text-transform:none;letter-spacing:0">(used)</span></h2></div>
+        <div class="donuts">
+          $(donut "${claude_used:-0}" 145 "Claude")
+          $(donut "${codex_used:-0}" 35 "Codex")
+        </div>
+      </div>
+      <div class="card">
+        <div class="ct"><h2>Pipeline status</h2></div>
+        <div class="fail">
+          <div class="fic $fail_cls">$fail_icon</div>
+          <div><div class="fw">$fail_word</div><div class="fs">$fail_n cycle failure(s) (recent) &middot; ${pr_fail:-0} conflicting or failing PRs</div></div>
+          <div><div class="spark">$spark_bars</div><div class="sparklbl">recent cycles</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid r2">
+      <div class="card">
+        <div class="ct"><h2>Current activity</h2></div>
+        <div class="pulse">
+          <div class="pwrap"><div class="pring"></div><div class="pcore $([ -n "$CUR" ] && echo run)">$([ -n "$CUR" ] && printf '↻' || printf '%s' "$ck")</div></div>
+          <div class="ptext">
+            <div class="st">$([ -n "$CUR" ] && echo "RUNNING" || echo "IDLE")</div>
+            <div class="ss">$([ -n "$CUR" ] && e "$cwork" || echo "Waiting for next cycle")</div>
+          </div>
+          <div class="pmeta">
+            $(if [ -n "$CUR" ]; then
+                printf '<div class="kv"><span>Engine</span><b>%s</b></div>' "$(e "$ceng")"
+                printf '<div class="kv"><span>Started</span><b>%s</b></div>' "$(e "$ctime")"
+                [ -n "$ago" ] && printf '<div class="kv"><span>Elapsed</span><b>%s</b></div>' "$(fmt_dur "$ago")"
+              else
+                printf '<div class="kv"><span>Next run</span><b>%s</b></div>' "${nextrun:-—}"
+                printf '<div class="kv"><span>Planned lane</span><b>%s</b></div>' "$(lane_pill "${rotation:-—}")"
+              fi)
+          </div>
+        </div>
+      </div>
+      <div class="card" id="queue">
+        <div class="ct"><h2>Queued next</h2><a href="https://github.com/$LOOP_REPO/issues" target="_blank">View full queue →</a></div>
+        <ul class="queue">$queued_html</ul>
+        <div class="qfoot">Engine likely for next: <b>$eng_next</b></div>
+      </div>
+      <div class="card">
+        <div class="ct"><h2>Pipeline health</h2><a href="https://github.com/$LOOP_REPO/issues" target="_blank">View all issues →</a></div>
+        <div class="pipe">
+          <div><div class="pn ok">${qn:-0}</div><div class="pk">Ready to work</div><div class="psub">Loopable issues</div></div>
+          <div><div class="pn warn">${nd:-0}</div><div class="pk">Needs design</div><div class="psub">Blocked</div></div>
+          <div><div class="pn blu">${dq:-0}</div><div class="pk">Data quality</div><div class="psub">Needs attention</div></div>
+        </div>
+        <div class="pbar">
+          <div class="pi $pipe_cls">$([ "$pipe_cls" = bad ] && printf '%s' "$xk" || printf '%s' "$ck")</div>
+          <div><div class="pw">$pipe_word</div><div class="ps">$pipe_sub</div></div>
+          $pipe_spark
+        </div>
+      </div>
+      <div class="card">
+        <div class="ct"><h2>System info</h2></div>
+        <div class="sys">
+          <div class="row"><span class="k">Server time</span><span class="v">$(clock "$now_time")</span></div>
+          <div class="row"><span class="k">Uptime</span><span class="v">$(e "${uptime_h:-—}")</span></div>
+          <div class="row"><span class="k">Time zone</span><span class="v">$(e "${tz:-—}")</span></div>
+          <div class="row"><span class="k">Platform</span><span class="v">$(e "${platform:-—}")</span></div>
+          <div class="row"><span class="k">GitHub API</span><span class="v $gh_cls"><span class="dot" style="background:currentColor"></span>$gh_word</span></div>
+          <div class="row"><span class="k">Loop version</span><span class="v">$(e "${version:-—}")</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid r3" id="prs">
+      <div class="card">
+        <div class="ct"><h2>Recently created pull requests</h2><a href="https://github.com/$LOOP_REPO/pulls" target="_blank">View all →</a></div>
+        <table><thead><tr><th>PR</th><th>Status</th><th>Lane</th><th>Title</th><th>Created</th></tr></thead><tbody>$recent_html</tbody></table>
+      </div>
+      <div class="card">
+        <div class="ct"><h2>Open PRs awaiting review</h2><a href="https://github.com/$LOOP_REPO/pulls" target="_blank">View all →</a></div>
+        <table><thead><tr><th>PR</th><th>Merge</th><th>Review</th><th>CI</th><th>Lane</th><th>Title</th></tr></thead><tbody>$open_html</tbody></table>
+      </div>
+    </div>
+
+    <div class="grid r3">
+      <div class="card" id="cycles">
+        <div class="ct"><h2>Recent cycles <span class="mut" style="text-transform:none;letter-spacing:0">(last 10)</span></h2></div>
+        <table><thead><tr><th>Time</th><th>Engine</th><th>Lane</th><th>Work item</th><th>Outcome</th></tr></thead><tbody>$cycles_html</tbody></table>
+      </div>
+      <div class="card" id="logs">
+        <div class="ct"><h2>Log tail <span class="mut" style="text-transform:none;letter-spacing:0">($(e "${host:-$NUC_HOST}"))</span></h2><span class="mut" style="font-size:12px">last $TAIL_N</span></div>
+        <div class="logwrap">$logtail_html</div>
+      </div>
+    </div>
+
+    <footer style="margin-top:18px;color:var(--mut);font-size:11px">generated $gen · auto-refreshes every 60s · read-only · repo $LOOP_REPO</footer>
+  </main>
 </div></body></html>
 HTMLEOF
 )"
@@ -463,10 +745,10 @@ hdr "PRs CREATED (recent)"
 if [ "$GH_OK" = "0" ]; then
   printf '  %s(could not query GitHub — is `gh` authed?)%s\n' "$RED" "$R"
 elif [ -n "$RECENT_PR_ROWS" ]; then
-  printf '%s\n' "$RECENT_PR_ROWS" | while IFS=$'\t' read -r num state cat title; do
+  printf '%s\n' "$RECENT_PR_ROWS" | while IFS=$'\t' read -r num state cat age title; do
     sc="$GRN"; case "$state" in OPEN) sc="$BLU" ;; CLOSED) sc="$DIM" ;; esac
     [ ${#title} -gt 46 ] && title="${title:0:45}…"
-    printf '  %s#%-4s%s %s%-7s%s %-11s %s\n' "$B" "$num" "$R" "$sc" "$state" "$R" "$cat" "$title"
+    printf '  %s#%-4s%s %s%-7s%s %-11s %-46s %s%s%s\n' "$B" "$num" "$R" "$sc" "$state" "$R" "$cat" "$title" "$DIM" "$(rel "${age:-0}")" "$R"
   done
 else
   printf '  %snone%s\n' "$DIM" "$R"
