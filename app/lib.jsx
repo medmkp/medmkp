@@ -673,6 +673,7 @@ export const SUPPLIER_LOGOS = [
   { match: "darby", src: "/suppliers/darbydental.png" },
   { match: "dc dental", src: "/suppliers/dcdental.png" },
   { match: "dental city", src: "/suppliers/dentalcity.png" },
+  { match: "net32", src: "/suppliers/net32.png" },
   { match: "patterson", src: "/suppliers/pattersondental.png" },
   { match: "pearson", src: "/suppliers/pearsondental.png" },
   { match: "schein", src: "/suppliers/henryschein.png" },
