@@ -1656,43 +1656,70 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                 <h2>Also available on {marketplaceLabel} <span className="pdp-mkt-flag"><Icon name="icon-info" className="pdp-mkt-flag-icon" />Marketplace</span></h2>
                 <p className="pdp-mkt-note">Marketplace listings are matched by name from our catalog and sit outside the direct supplier price comparison above. Verify the item, seller, and pack size before ordering.</p>
               </div>
-              <div className="pdp-mkt-grid">
-                {marketplaceListings.map((listing, index) => {
-                  const logo = supplierLogoSrc(listing.supplier_name);
-                  const priceLabel = listing.price_cents != null ? money.format(listing.price_cents / 100) : "See price";
-                  return (
-                    <div className="pdp-mkt-card" key={listing.sku || index}>
-                      <span className="pdp-mkt-thumb">
-                        {listing.image_url ? <img src={listing.image_url} alt={listing.name} loading="lazy" /> : <Icon name="icon-package" className="nav-icon" />}
-                      </span>
-                      <div className="pdp-mkt-body">
-                        <div className="pdp-mkt-supplier">
+              <div className="pdp-table-wrap">
+                <div className="pdp-table">
+                  <div className="pdp-thead">
+                    <span>Supplier</span>
+                    <span>Supplier SKU</span>
+                    <span>Unit price</span>
+                    <span>Est. extended price</span>
+                    <span>Availability</span>
+                    <span>Actions</span>
+                  </div>
+                  {marketplaceListings.map((listing, index) => {
+                    const logo = supplierLogoSrc(listing.supplier_name);
+                    const avail = availabilityInfo(listing.availability);
+                    const packPrice = listing.price_cents != null ? listing.price_cents / 100 : null;
+                    const perUnit = listing.unit_price_cents != null ? listing.unit_price_cents / 100 : null;
+                    const packLabel = listing.pack_size || "";
+                    return (
+                      <div className="pdp-row" key={listing.sku || index}>
+                        <div className="pdp-row-supplier">
                           <span className={`pdp-supplier-logo ${logo ? "has-img" : ""}`}>
                             {logo ? <img src={logo} alt="" /> : initials(listing.supplier_name)}
                           </span>
-                          <strong>{listing.supplier_name}</strong>
-                          {listing.match_status === "substitute" && <span className="pdp-mkt-grade">Similar item</span>}
+                          <div>
+                            <strong>{listing.supplier_name}{listing.match_status !== "exact" && <span className="pdp-mkt-grade">Similar item</span>}</strong>
+                            <small title={listing.name}>{listing.name}</small>
+                          </div>
                         </div>
-                        <p className="pdp-mkt-name">{listing.name}</p>
-                        {listing.pack_size && <small className="pdp-mkt-pack">{listing.pack_size}</small>}
+                        <div className="pdp-row-sku">{listing.sku || "—"}</div>
+                        <div className="pdp-row-unit">
+                          {perUnit != null ? (
+                            <>
+                              <strong>{money.format(perUnit)}</strong> <span>/ {unitBasis}</span>
+                              {packPrice != null && <small className="pdp-unit-sub">{money.format(packPrice)}{packLabel ? ` · ${packLabel}` : ""}</small>}
+                            </>
+                          ) : packPrice != null ? (
+                            <>
+                              <strong>{money.format(packPrice)}</strong> <span>/ {packLabel ? "pack" : uomLabel}</span>
+                              {packLabel && <small className="pdp-unit-sub muted">{packLabel}</small>}
+                            </>
+                          ) : (
+                            <strong>See price</strong>
+                          )}
+                        </div>
+                        <div className="pdp-row-ext">{packPrice != null ? money.format(packPrice * qty) : "—"}</div>
+                        <div className={`pdp-row-avail ${avail.tone}`}>
+                          <span><span className="pdp-dot" aria-hidden="true" />{avail.label}</span>
+                        </div>
+                        <div className="pdp-row-actions">
+                          {listing.product_url ? (
+                            <a className="pdp-open" href={listing.product_url} target="_blank" rel="noreferrer">
+                              <Icon name="icon-link" className="button-icon" />
+                              View on {listing.supplier_name}
+                            </a>
+                          ) : (
+                            <button className="pdp-open" type="button" onClick={() => onToast(`Link unavailable for this ${listing.supplier_name} listing`)}>
+                              <Icon name="icon-link" className="button-icon" />
+                              View on {listing.supplier_name}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <div className="pdp-mkt-action">
-                        <span className="pdp-mkt-price">{priceLabel}</span>
-                        {listing.product_url ? (
-                          <a className="pdp-open" href={listing.product_url} target="_blank" rel="noreferrer">
-                            <Icon name="icon-link" className="button-icon" />
-                            View on {listing.supplier_name}
-                          </a>
-                        ) : (
-                          <button className="pdp-open" type="button" onClick={() => onToast(`Link unavailable for this ${listing.supplier_name} listing`)}>
-                            <Icon name="icon-link" className="button-icon" />
-                            View on {listing.supplier_name}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </section>
           )}
