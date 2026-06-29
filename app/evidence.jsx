@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import s from "./evidence.module.css";
 
@@ -199,6 +199,137 @@ export const EVIDENCE_MOCK = {
     { id: "cov_spore", product: "Weekly Spore Test", category: "Sterilization monitoring", location: "Sterilization", required: ["service"], present: ["service"] },
     { id: "cov_waterline", product: "Operatory 2 Dental Unit", category: "Waterline", location: "Operatory 2", required: ["waterline"], present: ["waterline"] },
   ],
+};
+
+// ---------------------------------------------------------------------------
+// Compliance Update Review (redline) — frame-26 surface.
+//
+// When a supplier publishes a newer version of a document we already hold (an SDS
+// reissued under a new GHS revision, an IFU update), the practice has to review
+// what changed before it replaces the accepted copy on file. This fixture is the
+// FE-first stand-in for the planned CR-3 diff response: a per-field change list
+// plus a section-level redline. Shape is deliberately API-ready so the mock maps
+// 1:1 onto the future endpoint (document identity, accepted-vs-pending versions,
+// change[] with kind/impact/confidence, and section[] redline segments).
+//
+// Honesty: nothing here is presented as a verified regulatory determination. The
+// changes are a detected diff awaiting human review; every action is an honest
+// stub (toast) — we never fabricate a reviewer, an approval, or an audit date.
+// Each text run is a segment: a plain string is unchanged; { del } was removed
+// from the accepted copy; { add } appears only in the pending copy.
+export const REDLINE_MOCK = {
+  document: {
+    type: "sds",
+    name: "CaviWipes SDS",
+    product: "CaviWipes Disinfectant Wipes",
+    manufacturer: "Metrex",
+    linkedLocation: "Bright Smiles Dental",
+  },
+  // The copy currently on file (accepted) vs the newer one detected (pending).
+  accepted: { version: "Jan 2026", label: "Current saved version" },
+  pending: { version: "Apr 2026", label: "Latest detected version" },
+  confidence: "High",
+  // Acknowledgment is *recommended* when the diff touches these sections — stated
+  // as guidance, not a regulatory requirement we're asserting on the user's behalf.
+  ackTriggers: ["use", "PPE", "contact time", "sterilization", "storage", "expiration", "disposal"],
+  ackRecommended: true,
+  // Per-field change list. `segments` is reused to render both the saved cell
+  // (text + del) and the latest cell (text + add). `minor` rows hide behind a toggle.
+  changes: [
+    {
+      id: "c1", kind: "changed", title: "Hazard statement changed", section: "2.2", sectionLabel: "Hazards",
+      impact: "high", confidence: "High",
+      segments: ["Causes serious eye ", { del: "irritation" }, { add: "damage" }, "."],
+    },
+    {
+      id: "c2", kind: "changed", title: "PPE guidance updated", section: "8.2", sectionLabel: "Controls",
+      impact: "high", confidence: "High",
+      segments: ["Wear ", { del: "protective" }, { add: "chemical-resistant" }, " gloves, eye protection", { add: ", and face shield" }, "."],
+    },
+    {
+      id: "c3", kind: "changed", title: "Contact time changed", section: "7.3", sectionLabel: "Use",
+      impact: "high", impactNote: "Review disinfectant protocol", confidence: "High",
+      segments: ["Contact time: ", { del: "2 minutes" }, { add: "3 minutes" }],
+    },
+    {
+      id: "c4", kind: "changed", title: "Storage instruction changed", section: "7.1", sectionLabel: "Storage",
+      impact: "medium", confidence: "High",
+      segments: ["Store ", { del: "at room temperature (15–30°C)" }, { add: "in a cool, dry place (5–25°C)" }],
+    },
+    {
+      id: "c5", kind: "added", title: "First-aid note added", section: "4.1", sectionLabel: "First aid", minor: true,
+      impact: "low", confidence: "Medium",
+      segments: [{ add: "If swallowed, rinse mouth. Do NOT induce vomiting." }],
+    },
+    {
+      id: "c6", kind: "removed", title: "Outdated handling note removed", section: "8.2", sectionLabel: "Controls", minor: true,
+      impact: "low", confidence: "Medium",
+      segments: [{ del: "Product is non-irritating to skin under normal use." }],
+    },
+  ],
+  // Section-level redline of the document body. `changeRef` links the [Change N]
+  // tag back to the change list; unchanged sections carry no ref.
+  sections: [
+    {
+      id: "2.2", num: "2.2", title: "Hazards", changeRef: 1,
+      body: ["Hazard statements: Causes serious eye ", { del: "irritation" }, { add: "damage" }, ". May cause skin irritation. Harmful if swallowed."],
+    },
+    {
+      id: "7.1", num: "7.1", title: "Storage", changeRef: 4,
+      body: ["Store ", { del: "at room temperature (15–30°C)" }, { add: "in a cool, dry place (5–25°C)" }, ". Keep container tightly closed. Keep out of reach of children."],
+    },
+    {
+      id: "7.3", num: "7.3", title: "Use", changeRef: 3,
+      body: ["Apply to hard, non-porous surfaces. Ensure surface remains wet for the entire contact time. Contact time: ", { del: "2 minutes" }, { add: "3 minutes" }, "."],
+    },
+    {
+      id: "8.2", num: "8.2", title: "PPE & Controls", changeRef: 2,
+      body: ["Wear ", { del: "protective" }, { add: "chemical-resistant" }, " gloves, eye protection", { add: ", and face shield" }, ". Long-sleeved protective clothing is recommended."],
+    },
+    {
+      id: "13", num: "13", title: "Disposal", changeRef: null,
+      body: ["Dispose of contents/container in accordance with local, state, and federal regulations."],
+    },
+  ],
+};
+
+// Render an array of text segments in one of several modes. A plain string is
+// unchanged text; { del } was removed from the accepted copy; { add } is new in
+// the pending copy.
+//   redline — show both, struck deletions + marked insertions (the diff)
+//   saved   — the accepted copy as text (drop additions, keep deletions plain)
+//   latest  — the pending copy as text (drop deletions, keep additions plain)
+//   old     — the saved cell: unchanged text + struck deletions, no additions
+//   new     — the latest cell: unchanged text + marked insertions, no deletions
+function RedlineText({ segments, mode = "redline", dim = false }) {
+  const out = [];
+  segments.forEach((seg, i) => {
+    if (typeof seg === "string") { out.push(<span key={i} className={dim ? s.rlDimText : undefined}>{seg}</span>); return; }
+    if (seg.del != null) {
+      if (mode === "latest" || mode === "new") return;
+      if (mode === "saved") out.push(<span key={i}>{seg.del}</span>);
+      else out.push(<del key={i} className={s.rlDel}>{seg.del}</del>);
+      return;
+    }
+    if (seg.add != null) {
+      if (mode === "saved" || mode === "old") return;
+      if (mode === "latest") out.push(<span key={i}>{seg.add}</span>);
+      else out.push(<ins key={i} className={s.rlAdd}>{seg.add}</ins>);
+    }
+  });
+  return out.length ? out : <span className={s.rlEmpty}>—</span>;
+}
+
+const IMPACT_META = {
+  high: { label: "High", cls: "impactHigh" },
+  medium: { label: "Medium", cls: "impactMed" },
+  low: { label: "Low", cls: "impactLow" },
+};
+
+const CHANGE_KIND_META = {
+  changed: { label: "Changed", cls: "kindChanged" },
+  added: { label: "Added", cls: "kindAdded" },
+  removed: { label: "Removed", cls: "kindRemoved" },
 };
 
 // ---------------------------------------------------------------------------
@@ -434,7 +565,7 @@ function Select({ label, value, onChange, options }) {
 // ---------------------------------------------------------------------------
 // Evidence Library (main surface)
 // ---------------------------------------------------------------------------
-export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket, onReviewMatch }) {
+export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket, onReviewUpdate, onReviewMatch, pendingUpdate = REDLINE_MOCK }) {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -510,6 +641,20 @@ export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket, onR
         <StatCard icon="icon-alert-triangle" tint="amber" label="Missing proof" value={data.stats.missing} sub="Needs follow-up" />
         <StatCard icon="icon-link" tint="blue" label="Linked to tracked items" value={data.stats.linked} sub="Connected to inventory" />
       </section>
+
+      {/* A supplier published a newer version of a document on file — surface the
+          review entry point (the redline surface). Honest: it's a detected diff
+          awaiting review, not an applied change. */}
+      {pendingUpdate && onReviewUpdate && (
+        <button type="button" className={s.updateBanner} onClick={() => onReviewUpdate()}>
+          <span className={s.updateIcon}><Icon name="icon-refresh" /></span>
+          <span className={s.updateBody}>
+            <strong>{pendingUpdate.document.name} has a newer version to review</strong>
+            <span>{pendingUpdate.changes.filter((c) => !c.minor).length} material changes detected between {pendingUpdate.accepted.version} and {pendingUpdate.pending.version} — review before it replaces the saved copy.</span>
+          </span>
+          <span className={s.updateCta}>Review update <Icon name="icon-arrow-right" /></span>
+        </button>
+      )}
 
       <div className={s.main}>
         {/* The library table */}
@@ -922,6 +1067,323 @@ export function EvidenceBinderView({ data = EVIDENCE_MOCK, onBack }) {
           Generated by TraceDDS · {data.practiceName} · {today}. Evidence records reflect documents captured in the practice&rsquo;s compliance library.
         </footer>
       </article>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compliance Update Review (redline) — frame-26. A focused review surface for one
+// pending document update: the before/after identity, a per-field change list,
+// the section-level redline, and an action footer. Every action is an honest
+// stub — accepting/keeping is a backend write that lands when storage is wired.
+// ---------------------------------------------------------------------------
+export function RedlineView({ data = REDLINE_MOCK, onBack, onToast }) {
+  const [showMinor, setShowMinor] = useState(false);
+  const [docMode, setDocMode] = useState("redline"); // saved | latest | redline
+  const [highlightOnly, setHighlightOnly] = useState(true);
+  const [comment, setComment] = useState("");
+  const [openChange, setOpenChange] = useState(null);
+
+  const soon = (what) => onToast?.(`${what} connects when storage is wired up.`);
+
+  const material = data.changes.filter((c) => !c.minor);
+  const minor = data.changes.filter((c) => c.minor);
+  const visibleChanges = showMinor ? data.changes : material;
+  // Index changes by their 1-based position in the full list so the redline's
+  // [Change N] tags line up with the numbered rows above.
+  const changeNumber = useMemo(() => {
+    const map = new Map();
+    data.changes.forEach((c, i) => map.set(c.id, i + 1));
+    return map;
+  }, [data.changes]);
+
+  const meta = DOC_TYPES[data.document.type];
+  // "Highlight changes only" dims unchanged context so the redline pops — it
+  // doesn't hide sections (the full document stays reviewable).
+  const dimContext = docMode === "redline" && highlightOnly;
+
+  return (
+    <div className={s.rlPage}>
+      <header className={s.rlHead}>
+        <div>
+          {onBack && (
+            <button type="button" className={s.rlBack} onClick={() => onBack()}>
+              <Icon name="icon-chevron-left" />Back to evidence
+            </button>
+          )}
+          <h1 className={s.rlTitle}>Compliance Update Review</h1>
+          <p className={s.rlSubtitle}>Review material changes before replacing saved evidence.</p>
+        </div>
+      </header>
+
+      {/* Identity + summary */}
+      <section className={s.rlIdentity}>
+        <div className={s.rlIdentCol}>
+          <div className={s.rlIdentRow}>
+            <span className={`${s.rlIdentIcon} ${s[`tint_${meta.tint}`]}`}><Icon name="icon-file-text" /></span>
+            <div><span className={s.rlIdentLabel}>Document</span><strong className={s.rlIdentValue}>{data.document.name}</strong></div>
+          </div>
+          <div className={s.rlIdentRow}>
+            <span className={s.rlIdentIcon}><Icon name="icon-package" /></span>
+            <div><span className={s.rlIdentLabel}>Product</span><strong className={s.rlIdentValue}>{data.document.product}</strong></div>
+          </div>
+          <div className={s.rlIdentRow}>
+            <span className={s.rlIdentIcon}><Icon name="icon-building" /></span>
+            <div><span className={s.rlIdentLabel}>Manufacturer</span><strong className={s.rlIdentValue}>{data.document.manufacturer}</strong></div>
+          </div>
+        </div>
+
+        <div className={s.rlIdentCol}>
+          <div className={s.rlIdentRow}>
+            <span className={s.rlIdentIcon}><Icon name="icon-calendar" /></span>
+            <div>
+              <span className={s.rlIdentLabel}>{data.accepted.label}</span>
+              <span className={s.rlVersionLine}><strong className={s.rlIdentValue}>{data.accepted.version}</strong><span className={`${s.rlVerTag} ${s.rlVerCurrent}`}>Current</span></span>
+            </div>
+          </div>
+          <div className={s.rlIdentRow}>
+            <span className={s.rlIdentIcon}><Icon name="icon-calendar" /></span>
+            <div>
+              <span className={s.rlIdentLabel}>{data.pending.label}</span>
+              <span className={s.rlVersionLine}><strong className={s.rlIdentValue}>{data.pending.version}</strong><span className={`${s.rlVerTag} ${s.rlVerPending}`}>Pending</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div className={s.rlSummary}>
+          <div className={s.rlStatusRow}>
+            <span className={s.rlIdentLabel}>Status</span>
+            <span className={s.rlNeedsReview}>Needs review</span>
+          </div>
+          <div className={s.rlCounts}>
+            <div className={s.rlCount}>
+              <strong className={s.rlCountMaterial}>{material.length}</strong>
+              <span>material changes detected</span>
+            </div>
+            <div className={s.rlCount}>
+              <strong>{minor.length}</strong>
+              <span>minor updates</span>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" className={s.rlOutlineBtn} onClick={() => soon("Original document preview")}>
+          <Icon name="icon-share" />View original PDFs
+        </button>
+
+        <p className={s.rlAckNote}>
+          <Icon name="icon-info" />
+          Staff acknowledgment recommended if the update affects {data.ackTriggers.join(", ")}.
+        </p>
+      </section>
+
+      <div className={s.rlMain}>
+        <div className={s.rlLeft}>
+          {/* Detected changes */}
+          <section className={s.rlCard}>
+            <div className={s.rlCardHead}>
+              <h2 className={s.rlCardTitle}><span className={s.rlStep}>1</span>Detected changes ({material.length})</h2>
+              {minor.length > 0 && (
+                <label className={s.rlToggle}>
+                  <span>Show minor changes ({minor.length})</span>
+                  <input type="checkbox" checked={showMinor} onChange={(e) => setShowMinor(e.target.checked)} />
+                  <span className={s.rlToggleTrack} aria-hidden="true"><span className={s.rlToggleKnob} /></span>
+                </label>
+              )}
+            </div>
+
+            <div className={s.rlTableScroll}>
+              <table className={s.rlTable}>
+                <colgroup>
+                  <col className={s.rlColChange} />
+                  <col className={s.rlColSection} />
+                  <col className={s.rlColOld} />
+                  <col className={s.rlColNew} />
+                  <col className={s.rlColImpact} />
+                  <col className={s.rlColConf} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Change</th>
+                    <th>Section</th>
+                    <th>Old text (saved)</th>
+                    <th>New text (latest)</th>
+                    <th>Impact</th>
+                    <th>Confidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleChanges.map((c) => {
+                    const n = changeNumber.get(c.id);
+                    const imp = IMPACT_META[c.impact] || IMPACT_META.low;
+                    const kind = CHANGE_KIND_META[c.kind] || CHANGE_KIND_META.changed;
+                    const expanded = openChange === c.id;
+                    return (
+                      <Fragment key={c.id}>
+                        <tr className={s.rlRow} onClick={() => setOpenChange(expanded ? null : c.id)}>
+                          <td>
+                            <span className={s.rlChangeCell}>
+                              <span className={`${s.rlNum} ${s[imp.cls]}`}>{n}</span>
+                              <span className={s.rlChangeText}>
+                                <span className={s.rlChangeTitle}>{c.title}</span>
+                                <span className={`${s.rlKind} ${s[kind.cls]}`}>{kind.label}</span>
+                              </span>
+                            </span>
+                          </td>
+                          <td className={s.rlSectionCell}>{c.section} {c.sectionLabel}</td>
+                          <td className={s.rlOldCell}><RedlineText segments={c.segments} mode="old" /></td>
+                          <td className={s.rlNewCell}><RedlineText segments={c.segments} mode="new" /></td>
+                          <td>
+                            <span className={s.rlImpactCell}>
+                              <span className={`${s.rlImpact} ${s[imp.cls]}`}>{imp.label}</span>
+                              {c.impactNote && <span className={s.rlImpactNote}>{c.impactNote}</span>}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={s.rlConfCell}>
+                              <Icon name="icon-check-circle" className={s.rlConfIcon} />
+                              {c.confidence}
+                              <Icon name="icon-chevron-down" className={`${s.rlConfChevron} ${expanded ? s.rlConfChevronOpen : ""}`} />
+                            </span>
+                          </td>
+                        </tr>
+                        {expanded && (
+                          <tr className={s.rlDetailRow}>
+                            <td colSpan={6}>
+                              <div className={s.rlDetail}>
+                                <span className={s.rlDetailLabel}>Redline</span>
+                                <RedlineText segments={c.segments} mode="redline" />
+                                <span className={s.rlDetailMeta}>
+                                  Section {c.section} · {c.sectionLabel} · {kind.label} · {imp.label} impact · {c.confidence} confidence
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Redline document */}
+          <section className={s.rlCard}>
+            <div className={s.rlCardHead}>
+              <h2 className={s.rlCardTitle}><span className={s.rlStep}>2</span>Redline document</h2>
+            </div>
+
+            <div className={s.rlDocBar}>
+              <div className={s.rlTabs}>
+                {[["saved", "Saved version"], ["latest", "Latest version"], ["redline", "Redline"]].map(([m, label]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`${s.rlTab} ${docMode === m ? s.rlTabOn : ""}`}
+                    onClick={() => setDocMode(m)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className={s.rlDocActions}>
+                <button type="button" className={s.rlDocBtn} onClick={() => soon("Document search")}><Icon name="icon-search" />Search</button>
+                <button type="button" className={s.rlDocBtn} onClick={() => soon("Document download")}><Icon name="icon-archive-down" />Download</button>
+              </div>
+            </div>
+
+            <div className={s.rlDocBody}>
+              <nav className={s.rlJump}>
+                <span className={s.rlJumpLabel}>Jump to section</span>
+                {data.sections.map((sec) => (
+                  <button key={sec.id} type="button" className={s.rlJumpItem} onClick={() => soon("Section jump")}>
+                    <Icon name="icon-file-text" />{sec.num} {sec.title}
+                  </button>
+                ))}
+              </nav>
+
+              <div className={s.rlDoc}>
+                {data.sections.map((sec) => (
+                  <article key={sec.id} className={s.rlSection}>
+                    <div className={s.rlSectionHead}>
+                      <h3 className={s.rlSectionTitle}><span className={s.rlSectionNum}>{sec.num}</span>{sec.title}</h3>
+                      {sec.changeRef != null && <span className={s.rlSectionRef}>[Change {sec.changeRef}]</span>}
+                    </div>
+                    <p className={s.rlSectionBody}><RedlineText segments={sec.body} mode={docMode} dim={dimContext} /></p>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className={s.rlDocFoot}>
+              <label className={s.rlCheck}>
+                <input type="checkbox" checked={highlightOnly} onChange={(e) => setHighlightOnly(e.target.checked)} />
+                <span>Highlight changes only</span>
+              </label>
+              <button type="button" className={s.rlLink} onClick={() => soon("Full redline view")}>
+                Open full redline in new tab <Icon name="icon-share" />
+              </button>
+            </div>
+          </section>
+        </div>
+
+        {/* Right rail */}
+        <aside className={s.rlRail}>
+          <div className={s.rlCard}>
+            <h3 className={s.rlRailTitle}>Review actions</h3>
+            <div className={s.rlActions}>
+              <button type="button" className={s.rlActPrimary} onClick={() => soon("Accepting the update")}>
+                <Icon name="icon-check" />Accept and archive previous version
+              </button>
+              <button type="button" className={s.rlAct} onClick={() => soon("Keeping the current version")}>
+                <Icon name="icon-refresh" />Keep current version
+              </button>
+              <button type="button" className={s.rlAct} onClick={() => soon("Staff acknowledgment requests")}>
+                <Icon name="icon-users" />Request staff acknowledgment
+              </button>
+              <button type="button" className={s.rlAct} onClick={() => soon("Task creation")}>
+                <Icon name="icon-edit" />Create task
+              </button>
+              <button type="button" className={s.rlAct} onClick={() => soon("Marking not applicable")}>
+                <Icon name="icon-x-circle" />Mark not applicable
+              </button>
+            </div>
+
+            <label className={s.rlCommentLabel} htmlFor="rl-comment">Reviewer comment</label>
+            <textarea
+              id="rl-comment"
+              className={s.rlComment}
+              placeholder="Add a note for the record (optional)…"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+            />
+
+            {data.ackRecommended && (
+              <p className={s.rlWarn}>
+                <Icon name="icon-alert-triangle" />
+                This update affects use, PPE, storage, and disposal. Staff acknowledgment is recommended.
+              </p>
+            )}
+          </div>
+
+          <div className={s.rlCard}>
+            <h3 className={s.rlRailTitle}>Document details</h3>
+            <dl className={s.rlDetails}>
+              <div><dt>Manufacturer</dt><dd>{data.document.manufacturer}</dd></div>
+              <div><dt>Linked item</dt><dd>{data.document.product}</dd></div>
+              <div><dt>Linked location</dt><dd>{data.document.linkedLocation}</dd></div>
+              <div><dt>Current saved version</dt><dd>{data.accepted.version}</dd></div>
+              <div><dt>Latest detected version</dt><dd><span className={s.rlPendingInline}>{data.pending.version}<span className={`${s.rlVerTag} ${s.rlVerPending}`}>Pending</span></span></dd></div>
+              <div><dt>Confidence</dt><dd className={s.rlConfDd}>{data.confidence}<Icon name="icon-check-circle" /></dd></div>
+            </dl>
+            <button type="button" className={s.rlLink} onClick={() => soon("Version history")}>
+              View version history <Icon name="icon-share" />
+            </button>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

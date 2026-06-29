@@ -59,6 +59,7 @@ export const routeByView = {
   evidence: "/app/evidence",
   evidenceReview: "/app/evidence/review",
   evidenceViewer: "/app/evidence/viewer",
+  evidenceRedline: "/app/evidence/redline",
   evidenceBinder: "/app/evidence/binder",
   reports: "/app/reports",
   plan: "/app/review",
@@ -113,6 +114,7 @@ export function viewFromPath(pathname = "/") {
         doc: query.get("doc") || "",
       },
     };
+  if (path === "/app/evidence/redline") return { view: "evidenceRedline", isLoggedIn: true };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
   // Evidence Match Review — confirm an ambiguous upload before it's linked.
   // `?sample=empty` previews the no-candidate state (manual-link / review-later).

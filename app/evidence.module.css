@@ -635,6 +635,271 @@
   .binder { padding: 24px 20px; }
 }
 
+/* =========================================================================
+   Compliance Update Review (redline) — frame-26. Token-only: all color comes
+   from the canonical CSS vars in styles.css (no hardcoded hex), with semantic
+   tints derived via color-mix so they track the tokens.
+   ========================================================================= */
+.rlPage { display: flex; flex-direction: column; gap: 16px; max-width: 1320px; }
+
+.rlHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.rlBack {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; font-weight: 500; color: var(--muted);
+  background: none; border: 0; padding: 0; margin: 0 0 8px; cursor: pointer;
+}
+.rlBack svg { width: 15px; height: 15px; }
+.rlBack:hover { color: var(--blue); }
+.rlTitle { font-size: 26px; font-weight: 600; color: var(--ink); margin: 0; line-height: 1.15; }
+.rlSubtitle { font-size: 14px; color: var(--muted); margin: 5px 0 0; }
+
+/* Identity + summary band */
+.rlIdentity {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto auto;
+  gap: 20px 28px;
+  align-items: start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 18px 22px;
+}
+.rlIdentCol { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rlIdentRow { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.rlIdentIcon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+  background: var(--surface-2); color: var(--muted);
+}
+.rlIdentIcon svg { width: 18px; height: 18px; }
+.rlIdentLabel { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 1px; }
+.rlIdentValue { font-size: 14px; font-weight: 600; color: var(--ink); }
+.rlVersionLine { display: inline-flex; align-items: center; gap: 8px; }
+.rlVerTag { font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.rlVerCurrent { color: var(--muted); background: var(--surface-2); }
+.rlVerPending { color: var(--gold); background: color-mix(in srgb, var(--gold) 16%, transparent); }
+
+.rlSummary { display: flex; flex-direction: column; gap: 12px; }
+.rlStatusRow { display: flex; align-items: center; gap: 10px; }
+.rlNeedsReview {
+  font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 3px 11px;
+  color: var(--gold); background: color-mix(in srgb, var(--gold) 16%, transparent);
+}
+.rlCounts { display: flex; gap: 26px; }
+.rlCount { display: flex; flex-direction: column; gap: 1px; max-width: 12ch; }
+.rlCount strong { font-size: 26px; font-weight: 700; color: var(--ink); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.rlCount span { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
+.rlCountMaterial { color: var(--red) !important; }
+
+.rlOutlineBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  align-self: start; white-space: nowrap;
+  font-size: 13.5px; font-weight: 500; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 11px; padding: 9px 15px; cursor: pointer;
+}
+.rlOutlineBtn svg { width: 15px; height: 15px; color: var(--muted); }
+.rlOutlineBtn:hover { border-color: var(--blue); color: var(--blue); }
+.rlOutlineBtn:hover svg { color: var(--blue); }
+
+.rlAckNote {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 8px;
+  margin: 2px 0 0; padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px; color: var(--muted);
+}
+.rlAckNote svg { width: 15px; height: 15px; color: var(--blue); flex-shrink: 0; }
+
+/* Main grid */
+.rlMain { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.rlLeft { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.rlRail { display: flex; flex-direction: column; gap: 16px; }
+
+.rlCard { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+.rlCardHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.rlCardTitle { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; color: var(--ink); margin: 0; }
+.rlStep {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 600;
+}
+
+/* Minor-changes toggle */
+.rlToggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.rlToggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.rlToggleTrack { position: relative; width: 34px; height: 18px; border-radius: 999px; background: var(--line); transition: background .15s ease; flex-shrink: 0; }
+.rlToggleKnob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(11, 21, 51, .25); transition: transform .15s ease; }
+.rlToggle input:checked ~ .rlToggleTrack { background: var(--blue); }
+.rlToggle input:checked ~ .rlToggleTrack .rlToggleKnob { transform: translateX(16px); }
+.rlToggle input:focus-visible ~ .rlToggleTrack { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* Detected-changes table */
+.rlTableScroll { overflow-x: auto; }
+.rlTable { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.rlTable col.rlColChange { width: 130px; }
+.rlTable col.rlColSection { width: 66px; }
+.rlTable col.rlColOld { width: 124px; }
+.rlTable col.rlColNew { width: 130px; }
+.rlTable col.rlColImpact { width: 74px; }
+.rlTable col.rlColConf { width: 70px; }
+.rlTable thead th {
+  text-align: left; font-size: 11px; font-weight: 600; color: var(--muted);
+  background: var(--surface-2); padding: 9px 8px;
+}
+.rlTable thead th:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.rlTable thead th:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+.rlTable tbody td { padding: 11px 8px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink); overflow-wrap: break-word; }
+.rlRow { cursor: pointer; }
+.rlRow:hover { background: var(--surface-2); }
+
+.rlChangeCell { display: inline-flex; align-items: flex-start; gap: 10px; }
+.rlNum {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  font-size: 12px; font-weight: 700; color: var(--surface);
+}
+.rlNum.impactHigh { background: var(--red); }
+.rlNum.impactMed { background: var(--gold); }
+.rlNum.impactLow { background: var(--muted); }
+.rlChangeText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rlChangeTitle { font-size: 13px; font-weight: 600; color: var(--ink); }
+.rlKind { align-self: flex-start; font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 1px 8px; }
+.kindChanged { color: var(--blue); background: var(--blue-2); }
+.kindAdded { color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+.kindRemoved { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+.rlSectionCell { color: var(--muted); }
+.rlOldCell, .rlNewCell { line-height: 1.45; }
+.rlDel { color: var(--red); text-decoration: line-through; }
+.rlAdd { color: var(--blue); font-weight: 600; text-decoration: none; }
+.rlEmpty { color: var(--muted); }
+
+.rlImpactCell { display: flex; flex-direction: column; gap: 4px; }
+.rlImpact { align-self: flex-start; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.rlImpact.impactHigh { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+.rlImpact.impactMed { color: var(--gold); background: color-mix(in srgb, var(--gold) 16%, transparent); }
+.rlImpact.impactLow { color: var(--muted); background: var(--surface-2); }
+.rlImpactNote { font-size: 11px; color: var(--muted); }
+
+.rlConfCell { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink); }
+/* Custom-classed Icons drop the default .nav-icon styling — restore stroke rendering. */
+.rlConfIcon, .rlConfChevron { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.rlConfIcon { width: 14px; height: 14px; color: var(--green); }
+.rlConfChevron { width: 14px; height: 14px; color: var(--muted); transition: transform .15s ease; }
+.rlConfChevronOpen { transform: rotate(180deg); }
+
+.rlDetailRow td { background: var(--surface-2); padding: 0 !important; border-bottom: 1px solid var(--line); }
+.rlDetail { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px 14px 44px; }
+.rlDetailLabel { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rlDetail { font-size: 13px; color: var(--ink); line-height: 1.5; }
+.rlDetailMeta { font-size: 11.5px; color: var(--muted); }
+
+/* Redline document */
+.rlDocBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.rlTabs { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 10px; padding: 3px; }
+.rlTab { font-size: 13px; font-weight: 500; color: var(--muted); background: none; border: 0; border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+.rlTab:hover { color: var(--ink); }
+.rlTabOn { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(11, 21, 51, .08); }
+.rlDocActions { display: inline-flex; gap: 8px; }
+.rlDocBtn { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 6px 12px; cursor: pointer; }
+.rlDocBtn svg { width: 15px; height: 15px; color: var(--muted); }
+.rlDocBtn:hover { border-color: var(--blue); color: var(--blue); }
+.rlDocBtn:hover svg { color: var(--blue); }
+
+.rlDocBody { display: grid; grid-template-columns: 184px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.rlJump { display: flex; flex-direction: column; gap: 2px; padding: 14px 12px; border-right: 1px solid var(--line); background: var(--surface-2); }
+.rlJumpLabel { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; padding: 0 8px; }
+.rlJumpItem { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); background: none; border: 0; border-radius: 8px; padding: 7px 8px; text-align: left; cursor: pointer; }
+.rlJumpItem svg { width: 15px; height: 15px; color: var(--blue); flex-shrink: 0; }
+.rlJumpItem:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
+
+.rlDoc { display: flex; flex-direction: column; gap: 18px; padding: 18px 22px; }
+.rlSection { display: flex; flex-direction: column; gap: 4px; }
+.rlSectionHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.rlSectionTitle { display: flex; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ink); margin: 0; }
+.rlSectionNum { color: var(--muted); font-weight: 600; }
+.rlSectionRef { font-size: 11.5px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.rlSectionBody { font-size: 13.5px; line-height: 1.65; color: var(--ink); margin: 0; }
+.rlDimText { color: var(--muted); }
+
+.rlDocFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.rlCheck { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.rlCheck input { width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; }
+.rlLink { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--blue); background: none; border: 0; padding: 0; cursor: pointer; }
+.rlLink svg { width: 14px; height: 14px; }
+.rlLink:hover { text-decoration: underline; }
+
+/* Review actions rail */
+.rlRailTitle { font-size: 15px; font-weight: 600; color: var(--ink); margin: 0 0 14px; }
+.rlActions { display: flex; flex-direction: column; gap: 8px; }
+.rlActPrimary, .rlAct {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  font-size: 13.5px; border-radius: 11px; padding: 10px 14px; cursor: pointer;
+}
+.rlActPrimary svg, .rlAct svg { width: 16px; height: 16px; flex-shrink: 0; }
+.rlActPrimary { font-weight: 600; color: var(--surface); background: var(--blue); border: 1px solid var(--blue); justify-content: center; }
+.rlActPrimary svg { color: var(--surface); }
+.rlActPrimary:hover { background: color-mix(in srgb, var(--blue) 88%, var(--ink)); border-color: color-mix(in srgb, var(--blue) 88%, var(--ink)); }
+.rlAct { font-weight: 500; color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
+.rlAct svg { color: var(--muted); }
+.rlAct:hover { border-color: var(--blue); color: var(--blue); }
+.rlAct:hover svg { color: var(--blue); }
+
+.rlCommentLabel { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); margin: 16px 0 6px; }
+.rlComment { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 13px; color: var(--ink); resize: vertical; min-height: 64px; }
+.rlComment::placeholder { color: var(--muted); }
+.rlComment:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 16%, transparent); }
+
+.rlWarn {
+  display: flex; align-items: flex-start; gap: 8px; margin: 14px 0 0; padding: 11px 12px;
+  border-radius: 10px; font-size: 12.5px; line-height: 1.45;
+  color: color-mix(in srgb, var(--gold) 80%, var(--ink));
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+}
+.rlWarn svg { width: 15px; height: 15px; color: var(--gold); flex-shrink: 0; margin-top: 1px; }
+
+.rlDetails { display: flex; flex-direction: column; margin: 0; }
+.rlDetails > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-top: 1px solid var(--line); }
+.rlDetails > div:first-child { border-top: 0; }
+.rlDetails dt { font-size: 12.5px; color: var(--muted); flex-shrink: 0; }
+.rlDetails dd { font-size: 13px; font-weight: 500; color: var(--ink); margin: 0; text-align: right; }
+.rlPendingInline { display: inline-flex; align-items: center; gap: 7px; }
+.rlConfDd { display: inline-flex; align-items: center; gap: 6px; }
+.rlConfDd svg { width: 15px; height: 15px; color: var(--green); }
+
+/* Pending-update banner (Evidence Library entry point) */
+.updateBanner {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
+  border-radius: 14px; padding: 14px 18px; cursor: pointer;
+}
+.updateBanner:hover { border-color: var(--blue); }
+.updateIcon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0; background: var(--blue-2); color: var(--blue); }
+.updateIcon svg { width: 20px; height: 20px; }
+.updateBody { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.updateBody strong { font-size: 14px; font-weight: 600; color: var(--ink); }
+.updateBody span { font-size: 12.5px; color: var(--muted); }
+.updateCta { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--blue); white-space: nowrap; flex-shrink: 0; }
+.updateCta svg { width: 15px; height: 15px; }
+
+@media (max-width: 1100px) {
+  .rlMain { grid-template-columns: 1fr; }
+  .rlRail { flex-direction: row; flex-wrap: wrap; }
+  .rlRail .rlCard { flex: 1 1 280px; }
+}
+@media (max-width: 860px) {
+  .rlIdentity { grid-template-columns: 1fr 1fr; }
+  .rlOutlineBtn { grid-column: 1 / -1; }
+}
+@media (max-width: 620px) {
+  .rlIdentity { grid-template-columns: 1fr; }
+  .rlDocBody { grid-template-columns: 1fr; }
+  .rlJump { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+
 /* Print: only the binder article prints (app chrome + .evd-noprint toolbar are
    dropped by the global @media print block in styles.css). */
 @media print {
