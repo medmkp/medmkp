@@ -60,6 +60,52 @@ export function SearchResults({ results, query = "", loading, onNavigate }) {
   );
 }
 
+// Net32-style query suggestions: as you type, surface the popular search
+// *phrases* people actually look for instead of a preview of products. The
+// matched prefix renders light; the completion is emphasized, so "gloves" reads
+// as "gloves small". Selecting a row runs that search.
+export function SearchSuggestions({ query = "", suggestions = [], onNavigate }) {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  const go = (term) => (event) => {
+    event.preventDefault();
+    onNavigate?.(`/app/catalog/search?q=${encodeURIComponent(term)}`);
+  };
+  const qLower = trimmed.toLowerCase();
+  return (
+    <div className="search-suggest" role="listbox" aria-label="Search suggestions">
+      <a
+        className="search-suggest-row search-suggest-raw"
+        href={`/app/catalog/search?q=${encodeURIComponent(trimmed)}`}
+        onClick={go(trimmed)}
+        role="option"
+      >
+        <Icon name="icon-search" className="search-suggest-icon" />
+        <span>Search for <strong>{trimmed}</strong></span>
+      </a>
+      {suggestions.map((term) => {
+        const isPrefix = term.toLowerCase().startsWith(qLower);
+        const head = isPrefix ? term.slice(0, trimmed.length) : "";
+        const tail = isPrefix ? term.slice(trimmed.length) : term;
+        return (
+          <a
+            className="search-suggest-row"
+            key={term}
+            href={`/app/catalog/search?q=${encodeURIComponent(term)}`}
+            onClick={go(term)}
+            role="option"
+          >
+            <Icon name="icon-search" className="search-suggest-icon" />
+            <span className="search-suggest-text">
+              {head}<strong>{tail}</strong>
+            </span>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 
 export function CatBestPrice({ best, showBadge }) {
   const perUnit = best && best.unit_comparable && best.unit_price_cents != null ? best.unit_price_cents : null;

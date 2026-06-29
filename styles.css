@@ -1022,6 +1022,80 @@ main:has(.upload-view) {
   padding: 10px 8px 12px;
 }
 
+/* Net32-style query suggestions in the top-bar search dropdown. Reuses the
+   .search-results positioning (see .topbar-search-wrap rule); rows are compact
+   text suggestions rather than product cards. */
+.search-suggest {
+  position: absolute;
+  top: 66px;
+  left: 28px;
+  z-index: 8;
+  width: min(520px, calc(100vw - 56px));
+  max-height: min(520px, calc(100vh - 96px));
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-strong);
+  padding: 6px;
+}
+
+.topbar-search-wrap .search-suggest {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  width: auto;
+  max-width: none;
+}
+
+.search-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 13.5px;
+  text-decoration: none;
+}
+
+.search-suggest-row:hover {
+  background: #f4f7ff;
+}
+
+.search-suggest-row strong {
+  font-weight: 600;
+}
+
+.search-suggest-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: var(--muted);
+}
+
+.search-suggest-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-suggest-raw {
+  color: var(--muted);
+}
+
+.search-suggest-raw strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .search-icon {
   width: 21px;
   height: 21px;

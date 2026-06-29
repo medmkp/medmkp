@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchResults } from "./catalog";
+import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchSuggestions } from "./catalog";
+import { suggestSearchTerms } from "./searchSuggestions";
 import { BrandMark, Icon, IconSprite } from "./icons";
 import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
@@ -771,6 +772,8 @@ export default function Home() {
       };
     });
   }, [canonicalResults, canonicalSource, catalogMatches]);
+
+  const searchSuggestions = useMemo(() => suggestSearchTerms(searchTerm, 8), [searchTerm]);
 
   function navigate(path) {
     if (window.location.pathname !== path) {
@@ -1622,9 +1625,8 @@ export default function Home() {
               <kbd className="topbar-kbd">⌘K</kbd>
             </label>
             {searchTerm.trim() && (
-              <SearchResults
-                results={searchResults}
-                loading={searchLoading}
+              <SearchSuggestions
+                suggestions={searchSuggestions}
                 query={searchTerm.trim()}
                 onNavigate={navigate}
               />
