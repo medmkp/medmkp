@@ -990,6 +990,9 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const [uom, setUom] = useState("Box");
   // Full-screen image viewer (the "View larger image" affordance).
   const [lightbox, setLightbox] = useState(false);
+  // Chosen pack quantity when a canonical's offers span multiple packs (null
+  // falls back to the pack of the best per-unit offer).
+  const [packQty, setPackQty] = useState(null);
 
   useEffect(() => {
     if (!handle) {
@@ -1001,6 +1004,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
     setStatus("loading");
     setLightbox(false);
     setActiveIdx(0);
+    setPackQty(null);
 
     fetch(`/api/canonical-products?handle=${encodeURIComponent(handle)}`)
       .then((response) => response.json())
@@ -1056,6 +1060,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   // Switch the selected variant in place (no refetch); keep the URL shareable.
   function selectVariant(index) {
     setActiveIdx(index);
+    setPackQty(null);
     const nextHandle = variants[index]?.handle;
     if (nextHandle) {
       window.history.replaceState({}, "", `/app/product/${nextHandle}`);
@@ -1104,8 +1109,30 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
     if (ua !== ub) return ua - ub;
     return (a.price_cents ?? 0) - (b.price_cents ?? 0);
   });
+  // Pack selector: when this canonical's offers span multiple pack quantities
+  // (e.g. a 100/box and a 200/box of the same glove), let the user choose one.
+  // Keyed on the clean numeric pack_quantity so dirty pack_size strings
+  // ("100/Box" vs "100/Pkg") collapse to a single option. Default to the pack
+  // of the best per-unit offer.
+  const packValues = [
+    ...new Set(sortedOffers.map((offer) => offer.pack_quantity).filter((q) => q != null)),
+  ].sort((a, b) => a - b);
+  const hasPackChoice = packValues.length > 1;
+  const packOptions = packValues.map((q) => {
+    const rep = sortedOffers.find((offer) => offer.pack_quantity === q);
+    return { qty: q, label: formatPackLabel(q, rep.pack_basis, rep.base_unit, rep.pack_size) };
+  });
+  const defaultPack = sortedOffers[0]?.pack_quantity ?? null;
+  const activePack =
+    packQty != null && packValues.includes(packQty) ? packQty : defaultPack;
+  const activePackLabel = packOptions.find((option) => option.qty === activePack)?.label || "";
+  // Scope the supplier comparison to the chosen pack, then collapse to the
+  // lowest-priced offer per supplier so each supplier reads as one row.
+  const packScoped = hasPackChoice
+    ? sortedOffers.filter((offer) => offer.pack_quantity === activePack)
+    : sortedOffers;
   const seenSuppliers = new Set();
-  const offers = sortedOffers.filter((offer) => {
+  const offers = packScoped.filter((offer) => {
     const key = offer.supplier_id || offer.supplier_name;
     if (seenSuppliers.has(key)) return false;
     seenSuppliers.add(key);
@@ -1116,6 +1143,16 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const image = product.image_url || offers.find((offer) => offer.image_url)?.image_url || "";
   const brand = best?.brand || attrs.brands?.[0] || "";
   const brandLogo = brandLogoSrc(brand);
+  // When offers span packs, the canonical name is stamped with one pack (e.g.
+  // "… 100/Bx") that no longer describes the whole listing — the pack lives in
+  // the selector now, so strip the trailing pack token from the shown title.
+  const stripTrailingPack = (name) =>
+    (name || "")
+      .replace(/[\s,–-]*\b\d+\s*\/\s*[A-Za-z.]+\s*$/, "")
+      .replace(/[\s,–-]+$/, "")
+      .trim();
+  const rawTitle = family ? family.family_name : product.name;
+  const displayName = hasPackChoice ? stripTrailingPack(rawTitle) || rawTitle : rawTitle;
   const packSize = normalizePackText(attrs.pack_sizes?.[0] || best?.name?.match(/(\d+\s*\/\s*[A-Za-z.]+)/)?.[1]) || "—";
   const uomLabel = (uom || "unit").toLowerCase();
   // Whether the group's per-unit prices are comparable (same base unit), and the
@@ -1192,7 +1229,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
             </>
           )}
           <Icon name="icon-chevron-right" className="nav-icon" />
-          <span>{family ? family.family_name : product.name}</span>
+          <span>{displayName}</span>
         </nav>
         <div className="pdp-top-actions">
           <button className="secondary-action compact" type="button" onClick={() => window.history.back()}>
@@ -1224,7 +1261,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
             </div>
             <div className="pdp-hero-body">
               <div className="pdp-hero-headline">
-                <h1>{family ? family.family_name : product.name}</h1>
+                <h1>{displayName}</h1>
                 {supplierCount === 0 ? (
                   <span className="pdp-badge muted">
                     <Icon name="icon-info" className="button-icon" />
@@ -1261,9 +1298,30 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                   </div>
                 </div>
               )}
+              {hasPackChoice && (
+                <div className="pdp-pack" role="group" aria-label="Choose packaging">
+                  <span className="pdp-pack-label">Packaging: <strong>{activePackLabel}</strong></span>
+                  <div className="pdp-pack-options">
+                    {packOptions.map((option) => (
+                      <button
+                        key={option.qty}
+                        type="button"
+                        className={`pdp-pack-option ${option.qty === activePack ? "active" : ""}`}
+                        aria-pressed={option.qty === activePack}
+                        onClick={() => setPackQty(option.qty)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {bestPerUnit != null && (
+                    <span className="pdp-pack-best">Comparing per {unitBasis} — lowest price wins regardless of pack</span>
+                  )}
+                </div>
+              )}
               <div className="pdp-spec-row">
                 <div><span>SKU</span><strong>{best?.sku || "—"}</strong></div>
-                <div><span>Pack Size</span><strong>{packSize}</strong></div>
+                <div><span>Pack Size</span><strong>{hasPackChoice ? activePackLabel : packSize}</strong></div>
                 <div><span>UOM</span><strong>{cap(product.unit_of_measure) || "Unit"}</strong></div>
                 <div><span>Category</span><strong>{product.category}</strong></div>
               </div>
