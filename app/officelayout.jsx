@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./icons";
 import { traceApi, traceErrorMessage } from "./lib";
+import { changedPositions, splitLocations, summarizeLayout } from "./officeLayoutData";
 
 // Mock locations for the standalone demo. The real page passes its own
 // `locations` from the parent; this is only the default so the component
@@ -34,18 +35,6 @@ const TYPE_META = {
 
 function typeMeta(type) {
   return TYPE_META[type] || TYPE_META.other;
-}
-
-function positionOf(location) {
-  return {
-    id: location.id,
-    layout_x: location.layout_x ?? null,
-    layout_y: location.layout_y ?? null,
-  };
-}
-
-function samePosition(a, b) {
-  return (a?.layout_x ?? null) === (b?.layout_x ?? null) && (a?.layout_y ?? null) === (b?.layout_y ?? null);
 }
 
 function formatLastScanned(value) {
@@ -109,6 +98,36 @@ function MarkerDetail({ location, onOpenLocation, onStartScan }) {
           <Icon name="icon-scan" className="button-icon" />
           Start scan
         </button>
+      </div>
+    </section>
+  );
+}
+
+// Honest "at a glance" summary of the office. Every number is a real count from
+// the loaded locations — no fabricated scan-status states (Active / In progress).
+function GlanceBar({ summary }) {
+  const stats = [
+    { key: "total", icon: "icon-map-pin", value: summary.total, label: `Location${summary.total === 1 ? "" : "s"}` },
+    { key: "placed", icon: "icon-grid", value: summary.placed, label: "On the map" },
+    { key: "unplaced", icon: "icon-archive-down", value: summary.unplaced, label: "Unplaced" },
+    { key: "items", icon: "icon-package", value: summary.itemCount, label: "Items" },
+    { key: "attention", icon: "icon-alert-triangle", value: summary.needsAttention, label: "Need attention", attention: summary.needsAttention > 0 },
+  ];
+  return (
+    <section className="ol-glance" aria-label="Your office at a glance">
+      <h2 className="ol-glance-title">Your office at a glance</h2>
+      <div className="ol-glance-stats">
+        {stats.map((stat) => (
+          <div key={stat.key} className={`ol-glance-stat ${stat.attention ? "attention" : ""}`}>
+            <span className="ol-glance-icon">
+              <Icon name={stat.icon} className="nav-icon" />
+            </span>
+            <span className="ol-glance-text">
+              <span className="ol-glance-value">{stat.value}</span>
+              <span className="ol-glance-label">{stat.label}</span>
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -178,21 +197,12 @@ export function OfficeLayoutView({
     setSaveError("");
   }, [locations]);
 
-  const changedPositions = useMemo(() => {
-    const savedById = new Map(savedItems.map((location) => [location.id, positionOf(location)]));
-    return items
-      .map(positionOf)
-      .filter((position) => !samePosition(position, savedById.get(position.id)));
-  }, [items, savedItems]);
+  const changed = useMemo(() => changedPositions(items, savedItems), [items, savedItems]);
 
-  const dirty = changedPositions.length > 0;
+  const dirty = changed.length > 0;
 
-  useEffect(() => {
-    setItems(locations);
-  }, [locations]);
-
-  const placed = useMemo(() => items.filter((l) => l.layout_x != null && l.layout_y != null), [items]);
-  const unplaced = useMemo(() => items.filter((l) => l.layout_x == null || l.layout_y == null), [items]);
+  const { placed, unplaced } = useMemo(() => splitLocations(items), [items]);
+  const summary = useMemo(() => summarizeLayout(items), [items]);
   const selectedLocation = useMemo(() => items.find((l) => l.id === selectedId) || null, [items, selectedId]);
 
   // How many rows to render: enough for the lowest placed tile, plus a spare row
@@ -259,7 +269,7 @@ export function OfficeLayoutView({
     setSaving(true);
     setSaveError("");
     try {
-      await traceApi.saveLocationLayout(changedPositions);
+      await traceApi.saveLocationLayout(changed);
       setSavedItems(items);
       onLayoutSaved?.(items);
     } catch (err) {
@@ -285,7 +295,7 @@ export function OfficeLayoutView({
         </div>
         <div className="ol-actions" aria-label="Office layout actions">
           <span className={`ol-save-status ${dirty ? "dirty" : ""}`} role="status">
-            {saving ? "Saving layout..." : dirty ? `${changedPositions.length} unsaved change${changedPositions.length === 1 ? "" : "s"}` : "Layout saved"}
+            {saving ? "Saving layout..." : dirty ? `${changed.length} unsaved change${changed.length === 1 ? "" : "s"}` : "Layout saved"}
           </span>
           <button type="button" className="secondary-action compact" onClick={resetLayout} disabled={!dirty || saving}>
             <Icon name="icon-refresh" className="button-icon" />
@@ -329,6 +339,7 @@ export function OfficeLayoutView({
           <p>Add a location first, then come back to place it on the office layout.</p>
         </div>
       ) : (
+        <>
         <div className="ol-board">
           <div
             className="ol-grid"
@@ -407,6 +418,8 @@ export function OfficeLayoutView({
             </aside>
           </div>
         </div>
+        <GlanceBar summary={summary} />
+        </>
       )}
     </div>
   );
