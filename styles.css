@@ -9121,6 +9121,8 @@ th {
 /* Matched but unpriced (login-gated supplier) — honest "not listed" state */
 .crl-noprice { display: grid; gap: 1px; justify-items: flex-end; text-align: right; color: var(--muted); font-weight: 500; font-size: 13px; }
 .crl-noprice small { color: var(--muted); font-weight: 500; font-size: 11px; }
+.crl-noprice-supplier { display: inline-flex; align-items: center; gap: 4px; }
+.crl-noprice-logo { height: 12px; width: auto; max-width: 44px; object-fit: contain; border-radius: 2px; }
 .m-card-noprice { color: var(--muted); font-weight: 500; }
 .src-noprice { color: var(--muted); font-weight: 500; }
 

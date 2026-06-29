@@ -1099,7 +1099,18 @@ export function ReorderRow({ row, active, selected, onToggleSelect, onOpen, onCo
       </span>
       <span className="crl-price">
         {notFound ? <span className="crl-dash">—</span> : row.priceMissing ? (
-          <span className="crl-noprice">Price not listed<small>Login required</small></span>
+          (() => {
+            const sup = row.supplier && row.supplier !== "—" ? row.supplier : row.matchBrand;
+            const supName = sup && sup.toLowerCase().includes("schein") ? "Henry Schein" : sup;
+            return (
+              <span className="crl-noprice">Price not listed
+                <small className="crl-noprice-supplier">
+                  {sup && supplierLogoSrc(sup) && <img className="crl-noprice-logo" src={supplierLogoSrc(sup)} alt="" />}
+                  {supName ? `${supName} — login required` : "Login required"}
+                </small>
+              </span>
+            );
+          })()
         ) : (
           <>
             <strong>{mrMoney(row.price)}</strong>
