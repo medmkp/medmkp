@@ -816,7 +816,11 @@ main:has(.upload-view) {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 3;
+  /* Sits above the page's sticky table header band (.crl-row-head, z-index:3) so
+     topbar dropdowns (search results, alerts/user menus) — nested in the topbar's
+     own backdrop-filter stacking context — paint over page content instead of
+     having the column-header band bleed through. */
+  z-index: 4;
   display: flex;
   justify-content: flex-end;
   align-items: center;
