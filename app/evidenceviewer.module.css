@@ -291,6 +291,69 @@
   color: var(--red);
 }
 
+.tInfo {
+  color: var(--blue);
+}
+
+/* ── Empty / not-found state ──────────────────────────────────────── */
+.emptyCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 40px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.emptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  background: var(--blue-2);
+  color: var(--blue);
+  margin-bottom: 2px;
+}
+
+.emptyIcon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.emptyCard h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.emptyCard p {
+  margin: 0;
+  max-width: 32ch;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.inlineEmpty {
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .dateValue,
 .fileType {
   color: var(--muted);
@@ -419,6 +482,15 @@
 
 .footerPrimary:active {
   background: color-mix(in srgb, var(--blue) 88%, var(--ink));
+}
+
+.footerGhost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.footerWide {
+  grid-column: 1 / -1;
 }
 
 .footerGhost svg,
