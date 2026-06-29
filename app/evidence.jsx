@@ -201,6 +201,99 @@ export const EVIDENCE_MOCK = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// Evidence Match Review fixture. Mirrors the planned candidate-generation
+// response (epic #309 / EM-2): an uploaded document the extractor has read but
+// that isn't yet linked to a tracked item. Shape is the contract the future API
+// returns — extracted fields each carry a *reason label*, and candidates are an
+// ordered list with reason chips. We never store or invent a confidence percent
+// and never assert a verification outcome; the human confirms the link.
+// ---------------------------------------------------------------------------
+export const EVIDENCE_REVIEW_MOCK = {
+  file: {
+    name: "caviwipes_sds.pdf", size: "1.2 MB", fileType: "pdf", pages: 10,
+    uploadedBy: "Alex Kim", uploadedAt: "May 16, 2026 · 9:52 AM", source: "Manual upload",
+  },
+  docType: "sds",
+  // Hazard block — present only for SDS / hazardous documents. Drives the GHS
+  // pictogram + signal-word treatment in the preview and the rail badge.
+  hazard: {
+    signalWord: "Warning",
+    pictograms: ["flammable"],
+    statements: [
+      "H226 — Flammable liquid and vapor",
+      "H315 — Causes skin irritation",
+      "H319 — Causes serious eye irritation",
+    ],
+  },
+  // OCR'd document body — what we read off the upload, rendered as the preview
+  // page. Honest representation of the file, not a verification claim.
+  preview: {
+    brand: "Metrex", title: "Safety Data Sheet",
+    product: "CaviWipes Disinfectant Wipes", revision: "SDS-50B · Rev. 08/24",
+    sections: [
+      { n: "1", h: "Identification", rows: [
+        ["Product identifier", "CaviWipes Disinfectant Wipes"],
+        ["Recommended use", "Surface disinfectant and cleaner"],
+        ["Manufacturer", "Metrex Research, LLC"],
+        ["Emergency phone", "(800) 424-9300 (USA)"],
+      ] },
+      { n: "2", h: "Hazards identification", rows: [
+        ["Signal word", "Warning"],
+        ["Hazard statements", "H226, H315, H319"],
+        ["Precautionary", "P210 — Keep away from heat and open flames"],
+      ] },
+      { n: "3", h: "Composition / information on ingredients", rows: [
+        ["n-Alkyl dimethyl benzyl ammonium chloride", "0.20%"],
+        ["n-Alkyl dimethyl ethylbenzyl ammonium chloride", "0.20%"],
+        ["Isopropanol", "5.00%"],
+      ] },
+    ],
+  },
+  // Fields the extractor read. `reason` is a label, never a percentage.
+  extracted: [
+    { id: "doctype", icon: "icon-file-text", label: "Document type", value: "SDS", reason: "OCR suggestion", tone: "info" },
+    { id: "product", icon: "icon-package", label: "Product", value: "CaviWipes", reason: "Possible match", tone: "ok" },
+    { id: "manufacturer", icon: "icon-store", label: "Manufacturer", value: "Metrex", reason: "Possible match", tone: "ok" },
+    { id: "revision", icon: "icon-calendar", label: "Revision date", value: "Jan 2026", reason: "Possible match", tone: "ok" },
+    { id: "item", icon: "icon-link", label: "Linked item", value: "CaviWipes 160 ct", reason: "Needs confirmation", tone: "warn" },
+    { id: "location", icon: "icon-building", label: "Linked location", value: "Hygiene Cabinet", reason: "Needs confirmation", tone: "warn" },
+  ],
+  // Candidate tracked items, strongest first. Strength is conveyed by the
+  // reason chips and the order — there is deliberately no score/percentage.
+  candidates: [
+    { id: "cav160", name: "CaviWipes Surface Wipes, 160 ct", sku: "CW-160", location: "Hygiene Cabinet",
+      reasons: ["Product name match", "Manufacturer match", "Same category"] },
+    { id: "cav45", name: "CaviWipes Surface Wipes, 45 ct", sku: "CW-45", location: "Operatory 2",
+      reasons: ["Product name match", "Manufacturer match"] },
+    { id: "cavicide", name: "CaviCide Surface Disinfectant, 24 oz", sku: "CC-24", location: "Sterilization Room",
+      reasons: ["Same manufacturer", "Same category"] },
+  ],
+  locationOptions: ["Hygiene Cabinet", "Operatory 1", "Operatory 2", "Sterilization Room", "Main Office", "Storage"],
+  manualItems: [
+    "CaviWipes Surface Wipes, 160 ct",
+    "CaviWipes Surface Wipes, 45 ct",
+    "CaviCide Surface Disinfectant, 24 oz",
+    "Nitrile Exam Gloves, Medium",
+    "Patient Bibs",
+  ],
+};
+
+// No-candidate variant: the extractor read the file but search returned nothing
+// to link against. The UI must still let the user link manually or defer.
+export const EVIDENCE_REVIEW_EMPTY = {
+  ...EVIDENCE_REVIEW_MOCK,
+  file: { ...EVIDENCE_REVIEW_MOCK.file, name: "unknown_label_scan.jpg", size: "0.8 MB", fileType: "image", pages: 1, source: "Mobile scan" },
+  extracted: EVIDENCE_REVIEW_MOCK.extracted.map((f) =>
+    f.id === "item" || f.id === "location"
+      ? { ...f, value: "—", reason: "No match found", tone: "bad" }
+      : f.id === "product"
+        ? { ...f, value: "Unclear", reason: "Text hard to read", tone: "warn" }
+        : f,
+  ),
+  candidates: [],
+};
+
 // Readiness derived from the coverage snapshot: covered required-slots over total.
 // Outcome-gamified — it only moves when real completeness changes.
 function readinessFromSnapshot(snapshot) {
@@ -341,7 +434,7 @@ function Select({ label, value, onChange, options }) {
 // ---------------------------------------------------------------------------
 // Evidence Library (main surface)
 // ---------------------------------------------------------------------------
-export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket }) {
+export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket, onReviewMatch }) {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -398,9 +491,16 @@ export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket }) {
             Centralize SDS, IFUs, expiration proof, lot records, service records, and pricing evidence across your practice.
           </p>
         </div>
-        <button type="button" className={s.btnPrimary} onClick={() => soon("Document upload")}>
-          <Icon name="icon-cloud-upload" />Upload evidence
-        </button>
+        <div className={s.headActions}>
+          {onReviewMatch && (
+            <button type="button" className={s.btnOutline} onClick={() => onReviewMatch()}>
+              <Icon name="icon-link" />Review matches
+            </button>
+          )}
+          <button type="button" className={s.btnPrimary} onClick={() => soon("Document upload")}>
+            <Icon name="icon-cloud-upload" />Upload evidence
+          </button>
+        </div>
       </header>
 
       {/* Headline counts */}
@@ -822,6 +922,328 @@ export function EvidenceBinderView({ data = EVIDENCE_MOCK, onBack }) {
           Generated by TraceDDS · {data.practiceName} · {today}. Evidence records reflect documents captured in the practice&rsquo;s compliance library.
         </footer>
       </article>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Evidence Match Review (wireframe 22). An ambiguous upload, read by the
+// extractor but not yet linked. The reviewer sees the file preview, the
+// extracted-field callouts (each with a reason label, never a %), a ranked
+// candidate list (strength = reason chips + order), and the review actions.
+// Backend writes (accept/reject/edit, #339/#341) aren't wired yet, so the
+// action buttons are honest stubs that toast rather than fake an outcome.
+// ---------------------------------------------------------------------------
+
+// GHS hazard pictogram — the red-bordered diamond from a Safety Data Sheet.
+// Rendered in tokens (var(--red) border) so SDS uploads read as hazardous.
+function GhsPictogram({ kind = "flammable", size = 64 }) {
+  return (
+    <span className={s.ghs} style={{ width: size, height: size }} role="img" aria-label={`GHS ${kind} pictogram`}>
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <rect className={s.ghsDiamond} x="9" y="9" width="46" height="46" rx="4" transform="rotate(45 32 32)" />
+        {kind === "flammable" && (
+          <path className={s.ghsGlyph} d="M33 17c1 6-3 8-5 12-2 3-2 7 1 9-3-1-4-4-4-7-3 3-5 7-5 11 0 7 5 12 12 12s12-5 12-12c0-9-7-13-11-25z" />
+        )}
+      </svg>
+    </span>
+  );
+}
+
+function ReasonBadge({ reason, tone = "info" }) {
+  return <span className={`${s.reasonBadge} ${s[`reason_${tone}`]}`}>{reason}</span>;
+}
+
+export function EvidenceMatchReview({ sample = "", data, onBack, onToast }) {
+  const review = data || (sample === "empty" ? EVIDENCE_REVIEW_EMPTY : EVIDENCE_REVIEW_MOCK);
+  const docMeta = DOC_TYPES[review.docType] || DOC_TYPES.sds;
+
+  const [docType, setDocType] = useState(review.docType);
+  const [selectedCandidate, setSelectedCandidate] = useState(review.candidates[0]?.id || "");
+  const [manualItem, setManualItem] = useState("");
+  const [location, setLocation] = useState(review.candidates[0]?.location || "");
+  const [officeWide, setOfficeWide] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [zoom, setZoom] = useState(100);
+  const [rotate, setRotate] = useState(0);
+
+  const soon = (what) => onToast?.(`${what} connects when the review API is wired up.`);
+
+  const hasCandidates = review.candidates.length > 0;
+  const chosen = review.candidates.find((c) => c.id === selectedCandidate) || null;
+  const linkedItemLabel = officeWide
+    ? "Entire practice"
+    : chosen?.name || manualItem || "Not linked yet";
+  const canConfirm = officeWide || Boolean(chosen) || Boolean(manualItem);
+
+  function pickCandidate(id) {
+    setSelectedCandidate(id);
+    const c = review.candidates.find((x) => x.id === id);
+    if (c?.location) setLocation(c.location);
+  }
+
+  return (
+    <div className={s.reviewPage}>
+      <header className={s.reviewHead}>
+        <button type="button" className={s.backLink} onClick={() => onBack?.()}>
+          <Icon name="icon-chevron-left" />Evidence library
+        </button>
+        <div>
+          <h1 className={s.title}>Evidence Match Review</h1>
+          <p className={s.subtitle}>Review ambiguous uploads before linking them to inventory, locations, or office-wide records.</p>
+        </div>
+      </header>
+
+      <div className={s.reviewGrid}>
+        {/* Uploaded file identity + preview */}
+        <section className={s.viewer}>
+          <div className={s.viewerHead}>
+            <span className={s.fileCell}>
+              <FileGlyph name={review.file.name} />
+              <span className={s.fileMeta}>
+                <span className={s.fileName}>{review.file.name}</span>
+                <span className={s.fileSub}>{review.file.size} · {review.file.fileType.toUpperCase()}</span>
+              </span>
+            </span>
+            <span className={s.reviewFlag}><Icon name="icon-clock" />Needs review</span>
+          </div>
+
+          <div className={s.viewerToolbar}>
+            <span className={s.pageNav}>
+              <button type="button" className={s.toolBtn} aria-label="Previous page" disabled><Icon name="icon-chevron-left" /></button>
+              <span className={s.pageCount}>1 <span>/ {review.file.pages}</span></span>
+              <button type="button" className={s.toolBtn} aria-label="Next page" disabled={review.file.pages < 2} onClick={() => soon("Page navigation")}><Icon name="icon-chevron-right" /></button>
+            </span>
+            <span className={s.zoomGroup}>
+              <button type="button" className={s.toolBtn} aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(50, z - 10))}>&minus;</button>
+              <span className={s.zoomVal}>{zoom}%</span>
+              <button type="button" className={s.toolBtn} aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(200, z + 10))}>+</button>
+            </span>
+            <span className={s.toolSpacer} />
+            <button type="button" className={s.toolBtn} aria-label="Rotate" onClick={() => setRotate((r) => (r + 90) % 360)}><Icon name="icon-refresh" /></button>
+            <button type="button" className={s.toolBtn} aria-label="Download" onClick={() => soon("Download")}><Icon name="icon-archive-down" /></button>
+            <button type="button" className={s.toolBtn} aria-label="Open full file" onClick={() => soon("Open full file")}><Icon name="icon-share" /></button>
+          </div>
+
+          <div className={s.viewerStage}>
+            {review.file.fileType === "image" ? (
+              <div className={s.imgPreview} style={{ transform: `scale(${zoom / 100}) rotate(${rotate}deg)` }}>
+                <Icon name="icon-image" />
+                <span>Photo upload — {review.file.name}</span>
+                <small>Captured by mobile scan. Confirm the item this label belongs to.</small>
+              </div>
+            ) : (
+              <article className={s.sdsDoc} style={{ transform: `scale(${zoom / 100}) rotate(${rotate}deg)` }}>
+                <div className={s.sdsTop}>
+                  <span className={s.sdsBrand}>{review.preview.brand}</span>
+                  <div className={s.sdsTitleWrap}>
+                    <h2 className={s.sdsTitle}>{review.preview.title}</h2>
+                    <p className={s.sdsProduct}>{review.preview.product}</p>
+                  </div>
+                  <span className={s.sdsRev}>{review.preview.revision}</span>
+                </div>
+                {review.preview.sections.map((sec) => (
+                  <div className={s.sdsSection} key={sec.n}>
+                    <h3 className={s.sdsSectionHead}>{sec.n}. {sec.h}</h3>
+                    <dl className={s.sdsRows}>
+                      {sec.rows.map(([k, v]) => (
+                        <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
+                      ))}
+                    </dl>
+                    {sec.n === "2" && review.hazard && (
+                      <div className={s.sdsHazard}>
+                        <GhsPictogram kind={review.hazard.pictograms[0]} />
+                        <div className={s.sdsHazardBody}>
+                          <span className={s.sdsSignal}>{review.hazard.signalWord}</span>
+                          <ul>{review.hazard.statements.map((h) => <li key={h}>{h}</li>)}</ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </article>
+            )}
+          </div>
+        </section>
+
+        {/* Review rail */}
+        <aside className={s.reviewRail}>
+          {/* Extracted-field callouts */}
+          <div className={s.railCard}>
+            <div className={s.railTitleRow}>
+              <h3 className={s.railTitle}>Extracted details</h3>
+              {review.hazard && <span className={s.hazardTag}><Icon name="icon-alert-triangle" />Hazardous (SDS)</span>}
+            </div>
+            <ul className={s.extractList}>
+              {review.extracted.map((f) => (
+                <li key={f.id} className={s.extractRow}>
+                  <span className={s.extractIcon}><Icon name={f.icon} /></span>
+                  <span className={s.extractLabel}>{f.label}</span>
+                  <span className={s.extractValue}>{f.value}</span>
+                  <ReasonBadge reason={f.reason} tone={f.tone} />
+                </li>
+              ))}
+            </ul>
+            <div className={s.infoBanner}>
+              <Icon name="icon-info" />
+              <p>{hasCandidates
+                ? "We read these details from the document. Confirm or update the match before linking — nothing is linked until you confirm."
+                : "We read this document but couldn't match it to a tracked item. Link it manually or save it for later review."}</p>
+            </div>
+          </div>
+
+          {/* Candidate list — ranked, reason-labelled, single-select */}
+          <div className={s.railCard}>
+            <h3 className={s.railTitle}>Candidate matches</h3>
+            {hasCandidates ? (
+              <div className={s.candidateList} role="radiogroup" aria-label="Candidate matches">
+                {review.candidates.map((c, i) => {
+                  const on = c.id === selectedCandidate && !officeWide;
+                  return (
+                    <button
+                      type="button"
+                      key={c.id}
+                      role="radio"
+                      aria-checked={on}
+                      disabled={officeWide}
+                      className={`${s.candidate} ${on ? s.candidateOn : ""}`}
+                      onClick={() => pickCandidate(c.id)}
+                    >
+                      <span className={s.candidateRadio} aria-hidden="true" />
+                      <span className={s.candidateBody}>
+                        <span className={s.candidateTop}>
+                          <span className={s.candidateName}>{c.name}</span>
+                          {i === 0 && <span className={s.strongest}>Strongest</span>}
+                        </span>
+                        <span className={s.candidateSub}>{c.sku} · {c.location}</span>
+                        <span className={s.reasonRow}>
+                          {c.reasons.map((r) => (
+                            <span className={s.reasonChip} key={r}><Icon name="icon-check" />{r}</span>
+                          ))}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+                <button type="button" className={s.candidateManual} onClick={() => soon("Manual item search")}>
+                  <Icon name="icon-search" />None of these — search all items
+                </button>
+              </div>
+            ) : (
+              <div className={s.emptyMatch}>
+                <span className={s.emptyIcon}><Icon name="icon-link" /></span>
+                <strong>No candidate matches found</strong>
+                <p>We couldn&rsquo;t match this upload to a tracked item automatically.</p>
+                <label className={s.manualField}>
+                  <span className={s.fieldLabel}>Link manually</span>
+                  <span className={s.selectWrap}>
+                    <select className={s.select} value={manualItem} onChange={(e) => setManualItem(e.target.value)}>
+                      <option value="">Search tracked items…</option>
+                      {review.manualItems.map((it) => <option key={it} value={it}>{it}</option>)}
+                    </select>
+                    <Icon name="icon-chevron-down" className={s.selectChevron} />
+                  </span>
+                </label>
+                <button type="button" className={s.revBtnOutline} onClick={() => soon("Save for later review")}>
+                  <Icon name="icon-clock" />Save for later review
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Confirm form */}
+          <div className={s.railCard}>
+            <h3 className={s.railTitle}>Review &amp; confirm match</h3>
+            <div className={s.confirmForm}>
+              <label className={s.field}>
+                <span className={s.fieldLabel}>Document type <em>*</em></span>
+                <span className={s.selectWrap}>
+                  <select className={s.select} value={docType} onChange={(e) => setDocType(e.target.value)}>
+                    {Object.entries(DOC_TYPES).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
+                  </select>
+                  <Icon name="icon-chevron-down" className={s.selectChevron} />
+                </span>
+              </label>
+
+              <label className={s.field}>
+                <span className={s.fieldLabel}>Linked item <em>*</em></span>
+                <span className={`${s.fieldValue} ${officeWide ? s.fieldValueMuted : ""}`}>
+                  <Icon name="icon-link" />{linkedItemLabel}
+                </span>
+              </label>
+
+              <label className={s.field}>
+                <span className={s.fieldLabel}>Linked location <em>*</em></span>
+                <span className={s.selectWrap}>
+                  <select className={s.select} value={officeWide ? "" : location} onChange={(e) => setLocation(e.target.value)} disabled={officeWide}>
+                    <option value="">Select location…</option>
+                    {review.locationOptions.map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                  <Icon name="icon-chevron-down" className={s.selectChevron} />
+                </span>
+              </label>
+
+              <div className={s.toggleRow}>
+                <span className={s.toggleLabel}>
+                  Mark as office-wide
+                  <span className={s.toggleHint} title="Applies to the whole practice rather than one item or location"><Icon name="icon-info" /></span>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={officeWide}
+                  className={`${s.toggle} ${officeWide ? s.toggleOn : ""}`}
+                  onClick={() => setOfficeWide((v) => !v)}
+                >
+                  <span className={s.toggleKnob} />
+                </button>
+              </div>
+
+              <label className={s.field}>
+                <span className={s.fieldLabel}>Reviewer notes</span>
+                <textarea
+                  className={s.textarea}
+                  value={notes}
+                  maxLength={500}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add any notes or context about this match…"
+                />
+                <span className={s.charCount}>{notes.length}/500</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Detection provenance */}
+          <div className={s.railCard}>
+            <h3 className={s.railTitle}>Detection details</h3>
+            <dl className={s.detectGrid}>
+              <div><dt><Icon name="icon-users" />Uploaded by</dt><dd>{review.file.uploadedBy}</dd></div>
+              <div><dt><Icon name="icon-cloud-upload" />Source</dt><dd>{review.file.source}</dd></div>
+              <div><dt><Icon name="icon-calendar" />Last updated</dt><dd>{review.file.uploadedAt}</dd></div>
+              <div><dt><Icon name="icon-file-text" />File type</dt><dd>{review.file.fileType.toUpperCase()}</dd></div>
+            </dl>
+          </div>
+
+          {/* Review actions */}
+          <div className={s.actionStack}>
+            <button type="button" className={s.revBtnPrimary} disabled={!canConfirm} onClick={() => soon("Confirm match")}>
+              <Icon name="icon-check-circle" />Confirm match
+            </button>
+            <button type="button" className={s.revBtnOutline} onClick={() => soon("Change item")}>
+              <Icon name="icon-edit" />Change item
+            </button>
+            <button type="button" className={s.revBtnOutline} onClick={() => setOfficeWide(true)}>
+              <Icon name="icon-users" />Mark office-wide
+            </button>
+            <button type="button" className={s.revBtnOutline} onClick={() => soon("Request better proof")}>
+              <Icon name="icon-camera" />Request better proof
+            </button>
+            <button type="button" className={s.revBtnDanger} onClick={() => soon("Archive upload")}>
+              <Icon name="icon-trash" />Archive
+            </button>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

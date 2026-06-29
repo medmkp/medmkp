@@ -1888,6 +1888,89 @@ describe("end-to-end clustering", () => {
     ).toBe(true)
   })
 
+  it("bridges a verbose, brand/SKU-less listing into its clean size family (issue: split Large)", () => {
+    // Real case: Darby/DC Dental list this glove with structured brand + SKU and
+    // clean names, so Small and Medium cluster and exact-key into one family. The
+    // Large comes only from an identity-only supplier as marketing copy with no
+    // brand/SKU column and a dozen extra descriptor words, so its token key never
+    // equals the family's and it stranded as a one-off card. The bridge re-homes
+    // it because the family's whole token set sits inside the Large's name.
+    const rows = [
+      product({
+        supplier_id: "msup_darby_com",
+        brand: "Halyard Health",
+        manufacturer_sku: "44992",
+        name: "Purple Nitrile Max Exam Gloves, Small, 50/Box",
+        pack_size: "50/Box",
+      }),
+      product({
+        supplier_id: "msup_darby_com",
+        brand: "Halyard Health",
+        manufacturer_sku: "44993",
+        name: "Purple Nitrile Max Exam Gloves, Medium, 50/Box",
+        pack_size: "50/Box",
+      }),
+      product({
+        supplier_id: "msup_identityonly_com",
+        brand: "",
+        manufacturer_sku: "",
+        name: 'HALYARD Purple Nitrile MAX Exam Gloves, Textured Palm/Fingertips, Powder-Free, 11.8 mil, Extended 16" Cuff, Purple, Large, 44994 (Case of 400)',
+        pack_size: "",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+
+    // Three distinct sizes → three canonicals (a size conflict still vetoes a
+    // merge; the bridge is a display overlay only).
+    expect(result.clusters).toHaveLength(3)
+
+    // All three land in ONE family with Small/Medium/Large selectable.
+    const familyIds = new Set(
+      result.clusters.map((cluster) => result.families.get(cluster.key)?.familyId).filter(Boolean)
+    )
+    expect(familyIds.size).toBe(1)
+    const labels = result.clusters
+      .map((cluster) => result.families.get(cluster.key)?.variantLabel)
+      .filter(Boolean)
+      .sort()
+    expect(labels).toEqual(["Large", "Medium", "Small"])
+  })
+
+  it("does not bridge a same-line listing of a size the family already has", () => {
+    // The bridge must add only NEW variant values: a verbose Large when the
+    // family already has a Large is a duplicate, not a new selectable size, so it
+    // stays its own card rather than creating two "Large" entries.
+    const rows = [
+      product({
+        supplier_id: "msup_darby_com",
+        brand: "Halyard Health",
+        manufacturer_sku: "44992",
+        name: "Purple Nitrile Max Exam Gloves, Small, 50/Box",
+        pack_size: "50/Box",
+      }),
+      product({
+        supplier_id: "msup_darby_com",
+        brand: "Halyard Health",
+        manufacturer_sku: "44994",
+        name: "Purple Nitrile Max Exam Gloves, Large, 50/Box",
+        pack_size: "50/Box",
+      }),
+      product({
+        supplier_id: "msup_identityonly_com",
+        brand: "",
+        manufacturer_sku: "",
+        name: 'HALYARD Purple Nitrile MAX Exam Gloves, Textured Palm/Fingertips, Powder-Free, 11.8 mil, Extended 16" Cuff, Purple, Large, 44994 (Case of 400)',
+        pack_size: "",
+      }),
+    ]
+    const result = runMatching(rows.map(normalizeProduct))
+    // The verbose Large is NOT folded in (the family's Large value already exists).
+    const largeFamilies = result.clusters
+      .map((cluster) => result.families.get(cluster.key)?.variantLabel)
+      .filter((label) => label === "Large")
+    expect(largeFamilies.length).toBeLessThanOrEqual(1)
+  })
+
   it("clamps an out-of-range variant_rank to int4 so the commit can't abort", () => {
     // A catalog number mis-read as a "#" variant value scales (x100) into the
     // billions — past PostgreSQL int4. Emitting singletons pushed such a product

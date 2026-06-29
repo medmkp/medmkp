@@ -16,10 +16,10 @@ import s from "./evidenceviewer.module.css";
 // matching evidence shows an honest empty state. Nothing here mutates.
 
 const STATUS_META = {
-  verified: { label: "Verified", icon: "icon-check-circle", tone: s.tOk },
-  partial: { label: "Partial", icon: "icon-clock", tone: s.tWarn },
-  captured: { label: "Captured", icon: "icon-info", tone: s.tInfo },
-  missing: { label: "Missing", icon: "icon-x-circle", tone: s.tBad },
+  verified: { label: "Verified", icon: "icon-check-circle", tone: s.tOk, pill: s.pOk },
+  partial: { label: "Partial", icon: "icon-clock", tone: s.tWarn, pill: s.pWarn },
+  captured: { label: "Captured", icon: "icon-info", tone: s.tInfo, pill: s.pInfo },
+  missing: { label: "Missing", icon: "icon-x-circle", tone: s.tBad, pill: s.pBad },
 };
 
 function fileIcon(doc) {
@@ -63,6 +63,33 @@ function docStatusRows(docs) {
     label: DOC_TYPES[doc.type]?.label || "Document",
     status: doc.status,
   }));
+}
+
+// Group the filing list by document type, in the canonical DOC_TYPES order, so
+// the viewer reads like a compliance binder (SDS, then IFU, …) instead of a flat
+// dump. Only types that actually have a file on hand produce a group.
+function groupFilesByType(files) {
+  const buckets = new Map();
+  for (const doc of files) {
+    if (!buckets.has(doc.type)) buckets.set(doc.type, []);
+    buckets.get(doc.type).push(doc);
+  }
+  return Object.keys(DOC_TYPES)
+    .filter((type) => buckets.has(type))
+    .map((type) => ({ type, meta: DOC_TYPES[type], docs: buckets.get(type) }));
+}
+
+// The compliance note worth surfacing on a card — only for records that need a
+// human's eye (expiring, missing, captured-but-unreviewed). Verified records stay
+// quiet so attention lands where it's needed.
+function reviewerNote(doc) {
+  if (doc.status === "verified") return null;
+  const note = doc.auditNote;
+  if (!note || note === "—") return null;
+  const icon = doc.status === "missing" || doc.review?.tone === "bad" ? "icon-alert-triangle"
+    : doc.status === "partial" ? "icon-clock"
+    : "icon-info";
+  return { icon, text: note };
 }
 
 // Resolve the parsed query params into a single view model. Pure — no I/O, so a
@@ -215,6 +242,7 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, context = null, onB
 
   const isResolved = !vm.empty && !vm.notFound;
   const hasFiles = isResolved && vm.files.length > 0;
+  const fileGroups = hasFiles ? groupFilesByType(vm.files) : [];
 
   return (
     <section className={s.screen} aria-label={`${vm.title} evidence viewer`}>
@@ -286,22 +314,59 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, context = null, onB
               </div>
             </EvidenceSection>
 
-            <EvidenceSection title="Open files" anchorRef={filesRef}>
+            <EvidenceSection title="Filed evidence" anchorRef={filesRef}>
               {hasFiles ? (
-                <div className={s.listCard}>
-                  {vm.files.map((doc) => {
-                    const meta = DOC_TYPES[doc.type];
-                    return (
-                      <article className={s.fileRow} key={doc.id} aria-label={`${doc.fileName}, ${meta.badge}`}>
-                        <span className={s.fileIcon}><Icon name={fileIcon(doc)} /></span>
-                        <span className={s.fileName}>{doc.fileName}</span>
-                        <span className={s.fileType}>{fileFormat(doc)}</span>
-                      </article>
-                    );
-                  })}
+                <div className={s.fileGroups}>
+                  {fileGroups.map((group) => (
+                    <div className={s.fileGroup} key={group.type}>
+                      <div className={s.groupHead}>
+                        <span className={s.groupBadge}>{group.meta.short}</span>
+                        <span className={s.groupLabel}>{group.meta.label}</span>
+                        <span className={s.groupCount}>
+                          {group.docs.length} {group.docs.length === 1 ? "file" : "files"}
+                        </span>
+                      </div>
+                      <div className={s.listCard}>
+                        {group.docs.map((doc) => {
+                          const st = STATUS_META[doc.status] || STATUS_META.verified;
+                          const note = reviewerNote(doc);
+                          const linked = [doc.detailItem || doc.linkedItem, doc.location].filter(Boolean).join(" · ");
+                          return (
+                            <article className={s.fileCard} key={doc.id} aria-label={`${doc.fileName}, ${group.meta.label}, ${st.label}`}>
+                              <span className={s.fileIcon}><Icon name={fileIcon(doc)} /></span>
+                              <div className={s.fileMain}>
+                                <div className={s.fileTop}>
+                                  <span className={s.fileName}>{doc.fileName}</span>
+                                  <span className={s.fileType}>{fileFormat(doc)}</span>
+                                </div>
+                                <div className={s.fileSub}>
+                                  <span className={`${s.cardPill} ${st.pill}`}>
+                                    <Icon name={st.icon} />{st.label}
+                                  </span>
+                                  {linked && <span className={s.fileLink}>{linked}</span>}
+                                </div>
+                                <div className={s.fileMetaLine}>
+                                  <span className={doc.review?.tone === "bad" ? s.reviewBad : undefined}>
+                                    {doc.review?.text || "No review scheduled"}
+                                  </span>
+                                  <span className={s.metaSep}>·</span>
+                                  <span>Updated {doc.updatedAt}</span>
+                                </div>
+                                {note && (
+                                  <div className={s.fileNote}>
+                                    <Icon name={note.icon} />{note.text}
+                                  </div>
+                                )}
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <p className={s.inlineEmpty}>No files attached in this context yet.</p>
+                <p className={s.inlineEmpty}>No files filed in this context yet.</p>
               )}
             </EvidenceSection>
 

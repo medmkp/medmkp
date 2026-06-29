@@ -25,6 +25,27 @@ function normalize(value: string | null) {
   return value?.trim().toLowerCase() || ""
 }
 
+// Derive a slug-prefix matcher for a stale canonical handle whose trailing id
+// suffix changed across a re-match. Auto handles are "auto-<slug>-<idSuffix>";
+// the slug is stable but the suffix is regenerated each match (the pre-#321
+// positional scheme produced base-36 suffixes like "9i0", the current scheme
+// produces 6 hex chars like "093332"). Stripping the final token leaves the
+// shared slug, so "...-24-pack-9i0" and "...-24-pack-093332" prefix-match each
+// other. Returns null when there is no strippable suffix or the remainder is
+// too short to prefix-match safely. The regex anchors the match to exactly one
+// trailing id token so a longer slug that merely starts with this one (e.g.
+// "...-24-pack-deluxe-093332") can't be mistaken for the same product. (A handle
+// carrying a collision counter like "...-093332-2" is intentionally not matched
+// — counters require an identical slug AND hash suffix, which is vanishingly
+// rare, and the caller's exactly-one guard would reject the ambiguity anyway.)
+export function slugPrefixMatcher(
+  handle: string
+): { like: string; regex: string } | null {
+  const stripped = handle.replace(/-[a-z0-9]+$/, "")
+  if (!stripped || stripped === handle || !stripped.includes("-")) return null
+  return { like: `${stripped}-%`, regex: `^${stripped}-[a-z0-9]+$` }
+}
+
 // Synthesize a single-product response for a supplier-product-backed identity
 // hit (id "msp_<supplier_product_id>"). The search route returns these for
 // products matched by barcode/SKU that have no persisted canonical row (e.g. a
@@ -546,6 +567,33 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         }
       } catch {
         // alias table unavailable — treat as not found
+      }
+    }
+    // Slug-prefix fallback: a handle minted by the pre-#321 positional-id scheme
+    // (suffix like "-9i0") was never written to the alias table, yet the product
+    // still exists under a new content-hash suffix on the SAME slug
+    // ("...-24-pack-9i0" -> "...-24-pack-093332"). When the alias also misses,
+    // resolve by the slug — but only when it maps to exactly one live product, so
+    // we never guess between genuine near-duplicate clusters.
+    if (handle && !filteredCanonicalProducts.length) {
+      const matcher = slugPrefixMatcher(handle)
+      if (matcher) {
+        try {
+          const pool = getPostgresPool()
+          const { rows } = await pool.query<{ id: string }>(
+            `SELECT id FROM medmkp_canonical_product
+               WHERE deleted_at IS NULL AND handle LIKE $1 AND handle ~ $2
+               LIMIT 2`,
+            [matcher.like, matcher.regex]
+          )
+          if (rows.length === 1) {
+            filteredCanonicalProducts = await medmkp.listCanonicalProducts({
+              id: rows[0].id,
+            } as any)
+          }
+        } catch {
+          // lookup failed — treat as not found
+        }
       }
     }
     if (!filteredCanonicalProducts.length) {

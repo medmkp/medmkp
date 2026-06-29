@@ -57,6 +57,7 @@ export const routeByView = {
   qrLabels: "/app/locations/qr-labels",
   scanner: "/app/scan-session",
   evidence: "/app/evidence",
+  evidenceReview: "/app/evidence/review",
   evidenceViewer: "/app/evidence/viewer",
   evidenceBinder: "/app/evidence/binder",
   reports: "/app/reports",
@@ -113,6 +114,10 @@ export function viewFromPath(pathname = "/") {
       },
     };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
+  // Evidence Match Review — confirm an ambiguous upload before it's linked.
+  // `?sample=empty` previews the no-candidate state (manual-link / review-later).
+  if (path === "/app/evidence/review")
+    return { view: "evidenceReview", isLoggedIn: true, evidenceSample: query.get("sample") || "" };
   if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
   if (path === "/app/reports") return { view: "reports", isLoggedIn: true };
   // /app/plan is the former name — kept so old links/bookmarks still resolve.
