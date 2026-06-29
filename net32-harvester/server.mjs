@@ -5,7 +5,7 @@
 // Run on the NUC under a virtual display:
 //   NET32_HARVESTER_TOKEN=... xvfb-run -a node server.mjs
 import http from "node:http"
-import { search, health, close } from "./net32.mjs"
+import { search, prices, health, close } from "./net32.mjs"
 
 const PORT = Number(process.env.NET32_HARVESTER_PORT || 8791)
 const HOST = process.env.NET32_HARVESTER_HOST || "127.0.0.1"
@@ -19,6 +19,15 @@ function authed(req) {
 function sendJson(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" })
   res.end(JSON.stringify(body))
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let data = ""
+    req.on("data", (chunk) => (data += chunk))
+    req.on("end", () => resolve(data))
+    req.on("error", () => resolve(""))
+  })
 }
 
 const server = http.createServer(async (req, res) => {
@@ -38,6 +47,27 @@ const server = http.createServer(async (req, res) => {
       const result = await search(q, { max })
       console.log(
         `[net32-harvester] q=${JSON.stringify(q)} products=${result.products.length}` +
+          ` priced=${Object.keys(result.bestPriceMap).length} blocked=${result.blocked}` +
+          ` ${Date.now() - started}ms`
+      )
+      return sendJson(res, 200, result)
+    }
+
+    // Price-only refresh: best prices for a set of known mpIds, no search nav.
+    if (u.pathname === "/prices" && req.method === "POST") {
+      if (!authed(req)) return sendJson(res, 401, { error: "unauthorized" })
+      let payload
+      try {
+        payload = JSON.parse((await readBody(req)) || "{}")
+      } catch {
+        return sendJson(res, 400, { error: "invalid json body" })
+      }
+      const mpIds = Array.isArray(payload.mpIds) ? payload.mpIds : []
+      if (!mpIds.length) return sendJson(res, 400, { error: "missing mpIds" })
+      const started = Date.now()
+      const result = await prices(mpIds, payload.postal ? { postal: payload.postal } : {})
+      console.log(
+        `[net32-harvester] prices mpIds=${mpIds.length}` +
           ` priced=${Object.keys(result.bestPriceMap).length} blocked=${result.blocked}` +
           ` ${Date.now() - started}ms`
       )
