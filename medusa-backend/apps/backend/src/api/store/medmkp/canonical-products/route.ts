@@ -795,7 +795,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     // Marketplace alternatives, surfaced separately. Listings may
     // be price-less (e.g. Alibaba "contact supplier"), so a missing price is kept
     // rather than dropped — the link-out is still useful.
-    const marketplaceListings = (marketplaceByCanonical.get(product.id) ?? [])
+    const rankedMarketplaceListings = (marketplaceByCanonical.get(product.id) ?? [])
       .map((match) => {
         const supplierProduct = supplierProductById.get(match.supplier_product_id)
         if (!supplierProduct) {
@@ -832,6 +832,24 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         }
         return (a.price_cents ?? Infinity) - (b.price_cents ?? Infinity)
       })
+
+    // Collapse duplicate matches that resolve to the same marketplace listing.
+    // One SKU can be matched to a canonical more than once (e.g. via different
+    // source_catalog runs), which would otherwise render as identical rows. The
+    // list is already best-match-first, so keeping the first occurrence per
+    // listing keeps the strongest match.
+    const seenMarketplaceKeys = new Set<string>()
+    const marketplaceListings = rankedMarketplaceListings.filter((listing) => {
+      const key = listing.product_url || listing.sku
+      if (!key) {
+        return true
+      }
+      if (seenMarketplaceKeys.has(key)) {
+        return false
+      }
+      seenMarketplaceKeys.add(key)
+      return true
+    })
 
     return {
       ...product,
