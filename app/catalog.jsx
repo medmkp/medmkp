@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "./icons";
-import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, cap, catMoney, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel } from "./lib";
+import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, cap, catMoney, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
 import { CatalogSupplierAvatar, QtyStepper, UomSelect } from "./ui";
 import { CATALOG_CATEGORIES, CATALOG_TINTS, bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
 
@@ -1152,6 +1152,12 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const variantGroupLabel = family
     ? family.variant_axis_label || variantAxisLabel(variants)
     : null;
+  // Collapse cosmetic duplicate variants (same gauge/shade, only pack-string
+  // noise apart) and drop the redundant pack suffix into one pill each.
+  const variantOptions = variantOptionList(variants);
+  const activeVariantLabel =
+    variantOptions.find((option) => option.indices.includes(activeIdx))?.label ||
+    product.variant_label;
   // The API returns one offer per supplier variant; collapse to the lowest-priced
   // offer per supplier so the comparison reads as a supplier comparison (one row
   // each) and the "N suppliers" counts stay consistent with the hero badge.
@@ -1341,21 +1347,24 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                   <span>{brand}</span>
                 </span>
               )}
-              {variants.length > 1 && (
+              {variantOptions.length > 1 && (
                 <div className="pdp-variants" role="group" aria-label={`Choose ${variantGroupLabel}`}>
-                  <span className="pdp-variants-label">{variantGroupLabel}: <strong>{product.variant_label}</strong></span>
+                  <span className="pdp-variants-label">{variantGroupLabel}: <strong>{activeVariantLabel}</strong></span>
                   <div className="pdp-variant-options">
-                    {variants.map((variant, index) => (
-                      <button
-                        key={variant.id}
-                        type="button"
-                        className={`pdp-variant ${index === activeIdx ? "active" : ""}`}
-                        aria-pressed={index === activeIdx}
-                        onClick={() => selectVariant(index)}
-                      >
-                        {variant.variant_label || `Option ${index + 1}`}
-                      </button>
-                    ))}
+                    {variantOptions.map((option) => {
+                      const active = option.indices.includes(activeIdx);
+                      return (
+                        <button
+                          key={option.label}
+                          type="button"
+                          className={`pdp-variant ${active ? "active" : ""}`}
+                          aria-pressed={active}
+                          onClick={() => selectVariant(option.indices[0])}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
