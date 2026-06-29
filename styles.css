@@ -9592,6 +9592,14 @@ th {
 .pdp-variant { padding: 7px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 500; cursor: pointer; transition: border-color 0.12s, background 0.12s, color 0.12s; }
 .pdp-variant:hover { border-color: var(--blue); }
 .pdp-variant.active { border-color: var(--blue); background: var(--blue); color: #fff; }
+.pdp-pack { display: grid; gap: 8px; }
+.pdp-pack-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.pdp-pack-label strong { color: var(--ink); font-size: 13px; text-transform: none; letter-spacing: 0; }
+.pdp-pack-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.pdp-pack-option { padding: 7px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 500; cursor: pointer; transition: border-color 0.12s, background 0.12s, color 0.12s; }
+.pdp-pack-option:hover { border-color: var(--blue); }
+.pdp-pack-option.active { border-color: var(--blue); background: var(--blue); color: #fff; }
+.pdp-pack-best { font-size: 11.5px; color: var(--muted); }
 
 .pdp-spec-row { display: flex; flex-wrap: wrap; gap: 14px 38px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .pdp-spec-row > div { display: grid; gap: 3px; }
