@@ -90,7 +90,7 @@ reorder timing**, *not* perpetual inventory:
 | `evidence-upload` | `evidence-upload.png` | _greenfield_ | — | greenfield |
 | `evidence-match-review` | `evidence-match-review.png` | _greenfield_ | — | greenfield |
 | `evidence-redline` | `evidence-redline.png` | _greenfield_ | — | greenfield — compliance update review, single redline/diff approve |
-| `evidence-viewer` | `evidence-viewer.png` | _greenfield_ | — | greenfield — read-only on-site presentation mode (mobile) |
+| `evidence-viewer` | `evidence-viewer.png` | `app/evidenceviewer.jsx` | — | partial — read-only on-site presentation mode (mobile); context-filtered (location/item/lot/doc) with a type-grouped filing list of evidence cards. Drift: the shipped "Filed evidence" list is richer than the frame's flat "Open files" stub (per #345). |
 | `compliance-binder` | `compliance-binder.png` | `app/evidence.jsx` (export) | — | partial — Export = `window.print` |
 | `scan-report` | `scan-report.png` | _greenfield_ | — | greenfield — supply scan report |
 
