@@ -126,19 +126,32 @@ pr_branch="${revise_branch:-$reconcile_branch}"
 # --- 6. Else pick new work: labeled issue, else autonomous category ---------
 if [ -z "$pr_active" ]; then
   issue_num=""; issue_title=""; issue_body=""
+
+  # Issues already covered by an open loop PR. The loop NEVER merges, so an
+  # issue stays open until a human merges its PR; without this guard each tick
+  # re-picks the same open issue and clones the work into a fresh PR.
+  covered="$(gh pr list --repo "$LOOP_REPO" --state open --limit 100 \
+             --json closingIssuesReferences \
+             --jq '[.[].closingIssuesReferences[]?.number] | unique | .[]' \
+             2>/dev/null || true)"
+
   IFS=',' read -ra _labels <<< "$ISSUE_LABELS"
   for l in "${_labels[@]}"; do
     l="$(printf '%s' "$l" | xargs)"   # trim
     [ -n "$l" ] || continue
-    picked="$(gh issue list --repo "$LOOP_REPO" --label "$l" --state open \
-              --limit 1 --json number,title \
-              --jq '.[0] | select(.) | "\(.number)\t\(.title)"' 2>/dev/null || true)"
-    if [ -n "$picked" ]; then
-      issue_num="${picked%%$'\t'*}"
-      issue_title="${picked#*$'\t'}"
+    # Pull a page (not just the first) so we can skip issues an open PR covers.
+    while IFS=$'\t' read -r n t; do
+      [ -n "$n" ] || continue
+      if printf '%s\n' "$covered" | grep -qx "$n"; then
+        log "skip issue #$n: already covered by an open loop PR"; continue
+      fi
+      issue_num="$n"; issue_title="$t"
       issue_body="$(gh issue view "$issue_num" --repo "$LOOP_REPO" --json body --jq .body 2>/dev/null || true)"
       break
-    fi
+    done < <(gh issue list --repo "$LOOP_REPO" --label "$l" --state open \
+             --limit 20 --json number,title \
+             --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null || true)
+    [ -n "$issue_num" ] && break
   done
 
   if [ -n "$issue_num" ]; then
