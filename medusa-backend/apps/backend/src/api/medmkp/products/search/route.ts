@@ -135,6 +135,35 @@ async function resolveByGtinReference(scope: MedusaRequest["scope"], variants: s
 type CanonicalRow = Awaited<ReturnType<MedMKPModuleService["listCanonicalProducts"]>>[number]
 type SupplierProductHit = Awaited<ReturnType<MedMKPModuleService["listSupplierProducts"]>>[number]
 
+// Pull fuzzy candidates by a single token. listCanonicalProducts({ q }) ORs the
+// ILIKE across name/handle/category in one scan, which the planner can't satisfy
+// from the per-column trigram GIN indexes — so it seq-scans all ~224k canonical
+// rows (~5s cold, and it only gets worse as the table grows). Same trap the GTIN
+// path documents in resolveByGtinReference. As a UNION of one branch per column,
+// each branch hits its own trigram index (IDX_..._{name,handle,category}_trgm,
+// Migration20260617190000), turning ~5s into a few ms. Name matches are ranked
+// first so a tight `take` keeps the most relevant column's hits in the pool.
+async function listCanonicalCandidates(knex: any, q: string, take: number): Promise<CanonicalRow[]> {
+  const like = `%${q}%`
+  const { rows } = await knex.raw(
+    `with hits as (
+       (select id, 0 as pri from medmkp_canonical_product where deleted_at is null and name ilike ? limit ?)
+       union all
+       (select id, 1 as pri from medmkp_canonical_product where deleted_at is null and handle ilike ? limit ?)
+       union all
+       (select id, 2 as pri from medmkp_canonical_product where deleted_at is null and category ilike ? limit ?)
+     ),
+     ranked as (
+       select distinct on (id) id, pri from hits order by id, pri
+     )
+     select cp.* from medmkp_canonical_product cp join ranked on ranked.id = cp.id
+     order by ranked.pri
+     limit ?`,
+    [like, take, like, take, like, take, take]
+  )
+  return rows
+}
+
 async function enrichWithOffers(medmkp: MedMKPModuleService, canonicals: CanonicalRow[]) {
   if (!canonicals.length) return []
 
@@ -317,6 +346,7 @@ async function resolveHitsToProducts(
 // and the scan substitute fallback.
 async function fuzzyCanonicalSearch(
   medmkp: MedMKPModuleService,
+  knex: any,
   q: string,
   limit: number,
   // When given, retrieve candidates by EACH of these tokens (union) instead of
@@ -331,14 +361,15 @@ async function fuzzyCanonicalSearch(
     const pools = await Promise.all(
       retrievalTokens
         .slice(0, 6)
-        .map((token) => medmkp.listCanonicalProducts({ q: token }, { take: 400 }))
+        .map((token) => listCanonicalCandidates(knex, token, 400))
     )
     candidates = dedupeById(pools.flat())
   } else {
     const distinctive = [...queryTokens].sort((a, b) => b.length - a.length)[0] || q
-    candidates = await medmkp.listCanonicalProducts(
-      { q: distinctive.length >= 3 ? distinctive : q },
-      { take: 600 }
+    candidates = await listCanonicalCandidates(
+      knex,
+      distinctive.length >= 3 ? distinctive : q,
+      600
     )
   }
 
@@ -366,6 +397,7 @@ async function fuzzyCanonicalSearch(
 // offers, labeled so the UI can present them as alternatives.
 async function substitutesFor(
   medmkp: MedMKPModuleService,
+  knex: any,
   name: string,
   limit: number
 ): Promise<any[]> {
@@ -379,7 +411,7 @@ async function substitutesFor(
     .filter((token) => token.length >= 3 && /[a-z]/.test(token))
     .sort((a, b) => b.length - a.length)
     .slice(0, 3)
-  const results = await fuzzyCanonicalSearch(medmkp, name, limit, retrieval)
+  const results = await fuzzyCanonicalSearch(medmkp, knex, name, limit, retrieval)
   return results
     .filter((r) => r.product.offer_count > 0)
     .map((r) => ({ ...r.product, match: { kind: "substitute", score: r.score } }))
@@ -389,6 +421,7 @@ async function substitutesFor(
 // otherwise fall back to priced substitutes for the identified item.
 async function scanResponse(
   medmkp: MedMKPModuleService,
+  knex: any,
   query: string,
   kind: string,
   hits: SupplierProductHit[],
@@ -401,7 +434,7 @@ async function scanResponse(
   }
 
   const identifiedName = products[0]?.name || hits[0]?.name || ""
-  const substitutes = await substitutesFor(medmkp, identifiedName, limit)
+  const substitutes = await substitutesFor(medmkp, knex, identifiedName, limit)
   if (substitutes.length) {
     return {
       query,
@@ -420,6 +453,7 @@ async function scanResponse(
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
+  const knex = req.scope.resolve(ContainerRegistrationKeys.PG_CONNECTION) as any
   const url = new URL(req.url, "http://localhost")
   const barcode = url.searchParams.get("barcode")?.trim()
   const code = url.searchParams.get("code")?.trim()
@@ -440,7 +474,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       : []
 
     if (hits.length) {
-      res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "barcode", hits, "barcode", limit), scanned), gtin))
+      res.json(withGtin(withScanned(await scanResponse(medmkp, knex, barcode, "barcode", hits, "barcode", limit), scanned), gtin))
       return
     }
 
@@ -458,7 +492,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       ])
       const hibcHits = dedupeById([...bySku, ...byMfrSku])
       if (hibcHits.length) {
-        res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "hibc", hibcHits, "sku", limit), scanned), gtin))
+        res.json(withGtin(withScanned(await scanResponse(medmkp, knex, barcode, "hibc", hibcHits, "sku", limit), scanned), gtin))
         return
       }
     }
@@ -470,7 +504,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       if (refIds.length) {
         const refHits = dedupeById(await medmkp.listSupplierProducts({ id: refIds }))
         if (refHits.length) {
-          res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "barcode", refHits, "barcode", limit), scanned), gtin))
+          res.json(withGtin(withScanned(await scanResponse(medmkp, knex, barcode, "barcode", refHits, "barcode", limit), scanned), gtin))
           return
         }
       }
@@ -485,7 +519,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     if (packVariants.length) {
       const packHits = dedupeById(await medmkp.listSupplierProducts({ barcode: packVariants }))
       if (packHits.length) {
-        res.json(withGtin(withScanned(await scanResponse(medmkp, barcode, "barcode_pack", packHits, "barcode", limit), scanned), gtin))
+        res.json(withGtin(withScanned(await scanResponse(medmkp, knex, barcode, "barcode_pack", packHits, "barcode", limit), scanned), gtin))
         return
       }
     }
@@ -508,7 +542,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       return
     }
 
-    res.json(await scanResponse(medmkp, code, "sku", hits, "sku", limit))
+    res.json(await scanResponse(medmkp, knex, code, "sku", hits, "sku", limit))
     return
   }
 
@@ -527,7 +561,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     url.searchParams.get("retrieval") === "multi"
       ? [...new Set(tokenizeName(q))].filter((t) => t.length >= 3).sort((a, b) => b.length - a.length).slice(0, 6)
       : undefined
-  const results = await fuzzyCanonicalSearch(medmkp, q, limit, retrievalTokens)
+  const results = await fuzzyCanonicalSearch(medmkp, knex, q, limit, retrievalTokens)
   const products = results.map((r) => ({ ...r.product, match: { kind: "fuzzy", score: r.score } }))
   res.json({ query: q, kind: "fuzzy", count: products.length, products })
 }
