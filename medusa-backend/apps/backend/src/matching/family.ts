@@ -34,6 +34,13 @@ function familyKey(rep: NormalizedProduct, axis: string): string {
   return `${rep.brandKey ?? ""}|${tokens}|${axis}`
 }
 
+// Two brand keys can share a family when neither contradicts the other: an
+// absent brand (an identity-only supplier that never tagged one) is unknown, not
+// a conflict; two different stated brands are a hard conflict.
+function brandsCompatible(a: string | null, b: string | null): boolean {
+  return !a || !b || a === b
+}
+
 function stableId(prefix: string, key: string): string {
   const hash = createHash("sha1").update(key).digest("hex").slice(0, 10)
   return `${prefix}_${hash}`
@@ -229,6 +236,12 @@ type Member = { cluster: Cluster; variant: ClusterVariant; tokenCount: number }
  */
 export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
   const groups = new Map<string, Member[]>()
+  // Per-group identity (shared by every member, since the key encodes it): the
+  // brand, the family token set, and the variant axis. Drives the bridge pass.
+  const groupMeta = new Map<
+    string,
+    { brandKey: string | null; tokens: Set<string>; axis: string }
+  >()
 
   for (const cluster of clusters) {
     const variant = clusterVariant(cluster)
@@ -236,20 +249,81 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
       continue
     }
     const rep = cluster.representative
-    const tokenCount = new Set(familyTokens(rep.coreTokens)).size
-    if (tokenCount === 0) {
+    const tokens = new Set(familyTokens(rep.coreTokens))
+    if (tokens.size === 0) {
       continue
     }
-    if (!rep.brandKey && tokenCount < 3) {
+    if (!rep.brandKey && tokens.size < 3) {
       // No brand and a generic short name — too weak to group safely.
       continue
     }
     const key = familyKey(rep, variant.axis)
     const list = groups.get(key)
     if (list) {
-      list.push({ cluster, variant, tokenCount })
+      list.push({ cluster, variant, tokenCount: tokens.size })
     } else {
-      groups.set(key, [{ cluster, variant, tokenCount }])
+      groups.set(key, [{ cluster, variant, tokenCount: tokens.size }])
+      groupMeta.set(key, { brandKey: rep.brandKey ?? null, tokens, axis: variant.axis })
+    }
+  }
+
+  // Bridge: a verbose, single-supplier listing — marketing copy like "HALYARD
+  // Purple Nitrile MAX Exam Gloves, Textured Palm/Fingertips, …, Large, 44994
+  // (Case of 400)" — states every word of a clean variant family plus extra
+  // descriptors, and an identity-only supplier often tags no brand or SKU. Its
+  // exact token key therefore never equals the family's and it strands as a
+  // one-off card. Re-home such an orphan into an ESTABLISHED family (>=2 members)
+  // when that family's whole token set sits inside the orphan's name, the axes
+  // match, the brands don't conflict, and the orphan supplies a NEW variant
+  // value — the same precision signals the exact key encodes, minus word-for-word
+  // equality. Targeting established families only widens a real family rather
+  // than welding two lone listings into a speculative one.
+  const orphanKeys = [...groups.entries()]
+    .filter(([, members]) => members.length === 1)
+    .map(([key]) => key)
+  // Largest groups first (then key order) so the bridge is deterministic and an
+  // orphan lands in the most-established family it fits.
+  const targetKeys = [...groups.keys()].sort((a, b) => {
+    const sizeDiff = groups.get(b)!.length - groups.get(a)!.length
+    return sizeDiff !== 0 ? sizeDiff : a < b ? -1 : 1
+  })
+  for (const orphanKey of orphanKeys) {
+    const orphanList = groups.get(orphanKey)
+    if (!orphanList || orphanList.length !== 1) {
+      continue
+    }
+    const orphan = orphanList[0]
+    const orphanMeta = groupMeta.get(orphanKey)!
+    const orphanCore = new Set(orphan.cluster.representative.coreTokens)
+    for (const targetKey of targetKeys) {
+      if (targetKey === orphanKey) {
+        continue
+      }
+      const target = groups.get(targetKey)
+      if (!target || target.length < 2) {
+        continue
+      }
+      const targetMeta = groupMeta.get(targetKey)!
+      if (targetMeta.axis !== orphanMeta.axis) {
+        continue
+      }
+      if (!brandsCompatible(targetMeta.brandKey, orphanMeta.brandKey)) {
+        continue
+      }
+      // Anchor on a specific (>=3 token) family so a generic two-word name can't
+      // vacuum up unrelated listings, and require full containment.
+      if (targetMeta.tokens.size < 3) {
+        continue
+      }
+      if (![...targetMeta.tokens].every((token) => orphanCore.has(token))) {
+        continue
+      }
+      if (target.some((member) => member.variant.value === orphan.variant.value)) {
+        continue
+      }
+      target.push(orphan)
+      groups.delete(orphanKey)
+      break
     }
   }
 
