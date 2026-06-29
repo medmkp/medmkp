@@ -7,9 +7,10 @@ import {
 import { createNet32SidecarFetcher } from "../ingestion/marketplace/net32-fetch"
 import { buildMarketplaceIngestion } from "../ingestion/marketplace/persist"
 import {
-  reconcileSupplierCatalog,
-  type ReconcileInput,
+  beginSupplierCatalogReconcile,
+  type ReconcileResult,
   type ReconcileService,
+  type SupplierCatalogReconcileSession,
 } from "../ingestion/supplier-catalog-reconcile"
 import { getMarketplaceProvider } from "../ingestion/marketplace/providers"
 import {
@@ -31,6 +32,20 @@ import type { MarketplaceProvider } from "../ingestion/marketplace/types"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
 import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
+
+// Stream the catalog to the DB in batches of this many search items: each batch
+// is upserted as it completes, so a long sweep (the canonical catalog is ~50k
+// products) writes incrementally instead of holding every listing in memory for
+// one end-of-run commit. Bounds peak memory and lands rows progressively so a
+// crash mid-run keeps whatever already committed.
+const FETCH_BATCH_SIZE = 200
+const DB_CHUNK_SIZE = 500
+
+function* chunk<T>(items: T[], size: number): Generator<T[]> {
+  for (let offset = 0; offset < items.length; offset += size) {
+    yield items.slice(offset, offset + size)
+  }
+}
 
 type CliOptions = {
   provider: string
@@ -186,48 +201,6 @@ async function ensureSupplier(
   return supplierId
 }
 
-async function commitMarketplaceCatalog(
-  medmkp: MedMKPModuleService,
-  supplierId: string,
-  sourceCatalog: string,
-  provider: MarketplaceProvider,
-  rows: MarketplaceCatalogRow[]
-) {
-  const ingestion = buildMarketplaceIngestion({
-    supplier_id: supplierId,
-    source_catalog: sourceCatalog,
-    source_url: provider.supplier.website_url,
-    rows,
-  })
-
-  // Gap-free reconcile (upsert + soft-delete) instead of delete-all-then-create,
-  // so live reads never see this marketplace supplier's catalog disappear
-  // mid-refresh. Marketplace ingests are search-driven and intentionally narrow,
-  // so the shrink guard is relaxed here.
-  const result = await reconcileSupplierCatalog(
-    medmkp as unknown as ReconcileService,
-    {
-      supplier_id: supplierId,
-      source_catalog: sourceCatalog,
-      source: ingestion.source,
-      supplierProducts: ingestion.supplierProducts as ReconcileInput["supplierProducts"],
-      canonicalProductMatches:
-        ingestion.canonicalProductMatches as ReconcileInput["canonicalProductMatches"],
-      priceSnapshots: ingestion.priceSnapshots as ReconcileInput["priceSnapshots"],
-    },
-    { allowCatalogShrink: true, log: console.log }
-  )
-
-  return {
-    supplier_products:
-      result.supplier_products.created +
-      result.supplier_products.updated +
-      result.supplier_products.restored,
-    canonical_product_matches: ingestion.canonicalProductMatches.length,
-    price_snapshots: ingestion.priceSnapshots.length,
-  }
-}
-
 export default async function ingestMarketplaceCatalog({
   container,
 }: {
@@ -306,66 +279,122 @@ export default async function ingestMarketplaceCatalog({
     provider.id === "net32"
       ? createNet32SidecarFetcher()
       : createMarketplaceFetcher({ scraperUrlTemplate: scraperTemplate })
+
+  // Stream to the DB via the gap-free reconcile session: each batch of searches
+  // is upserted as it completes, so the full-catalog sweep writes incrementally
+  // instead of accumulating every listing for one end-of-run commit. Stale
+  // soft-delete is deferred to finalize(), where the full set of seen ids is
+  // known, so per-batch upserts never drop earlier batches. (One nuance vs the
+  // old all-at-once path: a listing matched by several canonical products across
+  // *different* batches only keeps the matches present in the batch that first
+  // created it — intra-batch multi-matches are preserved.)
+  let session: SupplierCatalogReconcileSession | null = null
+  let supplierId = ""
+  if (options.commit) {
+    assertDestructiveDbOperationAllowed(
+      "marketplace:ingest --commit (streams marketplace supplier catalog)"
+    )
+    supplierId = await ensureSupplier(medmkp, provider)
+    const { source } = buildMarketplaceIngestion({
+      supplier_id: supplierId,
+      source_catalog: sourceCatalog,
+      source_url: provider.supplier.website_url,
+      rows: [],
+    })
+    session = await beginSupplierCatalogReconcile(
+      medmkp as unknown as ReconcileService,
+      { supplier_id: supplierId, source_catalog: sourceCatalog, source },
+      { allowCatalogShrink: true, chunkSize: DB_CHUNK_SIZE, log: console.log }
+    )
+  }
+
   const startedAt = Date.now()
   const progress = { done: 0, listings: 0, blocked: 0, errored: 0, withResults: 0 }
-  const searches: SearchCanonicalResult[] = await mapWithConcurrency(
-    searchItems,
-    options.concurrency,
-    async (product) => {
-      const search = await searchCanonicalOnMarketplace(
-        provider,
-        fetcher,
-        {
-          id: product.id,
-          name: product.name,
-          category: product.category,
-          unit_of_measure: product.unit_of_measure,
-        },
-        {
-          maxResults: options.results,
-          queryPrefix: options.queryPrefix,
-          timeoutMs: options.timeoutMs,
-        }
-      )
+  let listingsTotal = 0
+  let listingsWithPrice = 0
+  let listingsWithImage = 0
+  const sampleRows: MarketplaceCatalogRow[] = []
 
-      // Live progress so a long run is observable via stdout / `tail -f` rather
-      // than only printing a summary at the very end.
-      progress.done += 1
-      progress.listings += search.results.length
-      if (search.blocked) progress.blocked += 1
-      if (search.error) progress.errored += 1
-      if (search.results.length) progress.withResults += 1
-      if (progress.done % options.progressEvery === 0 || progress.done === searchItems.length) {
-        const elapsed = Math.round((Date.now() - startedAt) / 1000)
-        console.log(
-          `[marketplace-ingestion] progress ${progress.done}/${searchItems.length}` +
-            ` | with_results ${progress.withResults} | listings ${progress.listings}` +
-            ` | blocked ${progress.blocked} | errored ${progress.errored} | ${elapsed}s`
+  // Fetch (and, when committing, upsert) one batch of search items at a time.
+  // Fetch concurrency stays within a batch; the batch's rows are written before
+  // the next batch starts, so only one batch of listings is held in memory.
+  for (const itemBatch of chunk(searchItems, FETCH_BATCH_SIZE)) {
+    const batchSearches: SearchCanonicalResult[] = await mapWithConcurrency(
+      itemBatch,
+      options.concurrency,
+      async (product) => {
+        const search = await searchCanonicalOnMarketplace(
+          provider,
+          fetcher,
+          {
+            id: product.id,
+            name: product.name,
+            category: product.category,
+            unit_of_measure: product.unit_of_measure,
+          },
+          {
+            maxResults: options.results,
+            queryPrefix: options.queryPrefix,
+            timeoutMs: options.timeoutMs,
+          }
         )
+
+        // Live progress so a long run is observable via stdout / `tail -f` rather
+        // than only printing a summary at the very end.
+        progress.done += 1
+        progress.listings += search.results.length
+        if (search.blocked) progress.blocked += 1
+        if (search.error) progress.errored += 1
+        if (search.results.length) progress.withResults += 1
+        if (progress.done % options.progressEvery === 0 || progress.done === searchItems.length) {
+          const elapsed = Math.round((Date.now() - startedAt) / 1000)
+          console.log(
+            `[marketplace-ingestion] progress ${progress.done}/${searchItems.length}` +
+              ` | with_results ${progress.withResults} | listings ${progress.listings}` +
+              ` | blocked ${progress.blocked} | errored ${progress.errored} | ${elapsed}s`
+          )
+        }
+
+        return search
       }
+    )
 
-      return search
+    const batchRows = batchSearches.flatMap((search) => search.rows)
+    for (const row of batchRows) {
+      listingsTotal += 1
+      if (typeof row.price_cents === "number") listingsWithPrice += 1
+      if (row.image_url) listingsWithImage += 1
+      if (sampleRows.length < options.sample) sampleRows.push(row)
     }
-  )
 
-  const rows = searches.flatMap((search) => search.rows)
-  const blockedCount = searches.filter((search) => search.blocked).length
-  const errorCount = searches.filter((search) => search.error).length
-  const withResults = searches.filter((search) => search.results.length > 0).length
+    if (session && batchRows.length) {
+      const ingestion = buildMarketplaceIngestion({
+        supplier_id: supplierId,
+        source_catalog: sourceCatalog,
+        source_url: provider.supplier.website_url,
+        rows: batchRows,
+      })
+      await session.upsertBatch({
+        supplierProducts: ingestion.supplierProducts as never,
+        canonicalProductMatches: ingestion.canonicalProductMatches as never,
+        priceSnapshots: ingestion.priceSnapshots as never,
+      })
+    }
+  }
 
   const summary = {
     provider: provider.id,
     source_catalog: sourceCatalog,
-    queries_searched: searchItems.length,
-    queries_with_results: withResults,
-    searches_blocked: blockedCount,
-    searches_errored: errorCount,
-    listings_found: rows.length,
-    listings_with_price: rows.filter((row) => typeof row.price_cents === "number").length,
-    listings_with_image: rows.filter((row) => Boolean(row.image_url)).length,
+    queries_searched: progress.done,
+    queries_with_results: progress.withResults,
+    searches_blocked: progress.blocked,
+    searches_errored: progress.errored,
+    listings_found: listingsTotal,
+    listings_with_price: listingsWithPrice,
+    listings_with_image: listingsWithImage,
   }
 
-  const sample = rows.slice(0, options.sample).map((row) => ({
+  const sample = sampleRows.map((row) => ({
     canonical_product_id: row.canonical_product_id,
     sku: row.sku,
     name: row.name,
@@ -375,25 +404,23 @@ export default async function ingestMarketplaceCatalog({
     match: `${row.canonical_match_status} (${row.canonical_match_confidence}%)`,
   }))
 
-  let importResult: Awaited<ReturnType<typeof commitMarketplaceCatalog>> | undefined
-  if (options.commit) {
-    assertDestructiveDbOperationAllowed(
-      "marketplace:ingest --commit (replaces marketplace supplier catalog)"
-    )
-    if (!rows.length) {
-      throw new Error(
-        "Commit aborted: 0 marketplace listings found (likely anti-bot blocked). " +
-          "Configure MARKETPLACE_SCRAPER_URL and re-run without --commit to inspect results first."
+  // Finalize once — this is where stale supplier products (no longer seen this
+  // run) are soft-deleted, now that every batch's ids are known. Skip that
+  // removal on a degraded run (zero listings, or a high blocked/errored rate from
+  // e.g. Cloudflare blocking the sidecar) so a bad sweep keeps its additive
+  // batches instead of wiping the existing catalog.
+  let importResult: ReconcileResult | undefined
+  if (session) {
+    const badRate = progress.done ? (progress.blocked + progress.errored) / progress.done : 1
+    const degraded = listingsTotal === 0 || badRate > 0.2
+    if (degraded) {
+      console.warn(
+        `[marketplace-ingestion] degraded run (listings ${listingsTotal}, ` +
+          `blocked+errored ${Math.round(badRate * 100)}%) — committing batches ` +
+          "additively and SKIPPING stale soft-delete to protect the catalog."
       )
     }
-    const supplierId = await ensureSupplier(medmkp, provider)
-    importResult = await commitMarketplaceCatalog(
-      medmkp,
-      supplierId,
-      sourceCatalog,
-      provider,
-      rows
-    )
+    importResult = await session.finalize({ softDeleteStale: !degraded })
   }
 
   const creditsAfter = scraperApiKey
