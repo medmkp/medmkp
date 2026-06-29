@@ -1204,24 +1204,16 @@ export function CurrentReorderList({
   const [tab, setTab] = useState("all");
   const [detail, setDetail] = useState(null);
   const [detailWide, setDetailWide] = useState(false);
-  const [reviewConfirm, setReviewConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
   const selectAllRef = useRef(null);
   const listNameRef = useRef(null);
 
-  // Advance to Review & optimize. If anything is unresolved, confirm first so the
-  // buyer knows those items won't be included; otherwise go straight in.
+  // Advance to Review & optimize. Unresolved items are surfaced (in red) at the
+  // bottom of the Review page itself, so no interstitial warning here — go
+  // straight in.
   function goToReview() {
-    // Already advanced — just continue into the plan (no need to re-warn).
-    if (listStage !== "review" && unresolvedRows.length > 0) { setReviewConfirm(true); return; }
-    onAdvanceStage?.("review");
-    onNavigate?.("/app/review");
-  }
-
-  function confirmReview() {
-    setReviewConfirm(false);
     onAdvanceStage?.("review");
     onNavigate?.("/app/review");
   }
@@ -1728,15 +1720,6 @@ export function CurrentReorderList({
         />
       )}
 
-      {reviewConfirm && (
-        <ReviewUnresolvedModal
-          unresolved={unresolvedRows}
-          includedCount={totalItems - unresolvedRows.length}
-          onContinue={confirmReview}
-          onClose={() => setReviewConfirm(false)}
-        />
-      )}
-
       {confirmingBulkDelete && (
         <ConfirmModal
           title="Remove selected items?"
@@ -1852,47 +1835,6 @@ export function SavingsView({ rows = [], archivedLists = [], onNavigate, onImpor
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-// Shown when a buyer advances to Review & optimize with items that won't make
-// it into any supplier order (no match, or out of stock everywhere). Warns
-// which items get excluded; Continue advances anyway, Cancel keeps them on the
-// Draft list to resolve.
-// Generic confirmation dialog for destructive whole-list actions (archive /
-// clear). Reuses the crl-modal shell so it matches the other modals.
-
-export function ReviewUnresolvedModal({ unresolved, includedCount, onContinue, onClose }) {
-  const n = unresolved.length;
-  return (
-    <div className="crl-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="reviewUnresolvedTitle" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="crl-modal">
-        <header className="crl-modal-head">
-          <div>
-            <h3 id="reviewUnresolvedTitle">{n} unresolved item{n === 1 ? "" : "s"} won&rsquo;t be included</h3>
-            <p>These items aren&rsquo;t matched to an in-stock supplier, so they won&rsquo;t be part of Review &amp; optimize. {includedCount} item{includedCount === 1 ? "" : "s"} will be included.</p>
-          </div>
-          <button className="crl-modal-close" type="button" aria-label="Close" onClick={onClose}><Icon name="icon-x" className="button-icon" /></button>
-        </header>
-        <div className="crl-modal-body">
-          <ul className="crl-unresolved-list">
-            {unresolved.map((row) => (
-              <li className="crl-unresolved-item" key={row.id}>
-                <ProductThumb image={row.image} alt={row.canonicalName || row.importedName} />
-                <span className="crl-unresolved-info">
-                  <strong>{stripPackFromName(row.canonicalName || row.importedName)}</strong>
-                  <small>{row.status === "Not found" ? "No match found" : "Out of stock at every supplier"}</small>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <footer className="crl-modal-foot">
-          <button className="crl-ghost-btn" type="button" onClick={onClose}>Back to draft list</button>
-          <button className="primary-action compact" type="button" onClick={onContinue}>Continue to review</button>
-        </footer>
-      </div>
     </div>
   );
 }

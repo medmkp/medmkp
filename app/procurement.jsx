@@ -425,20 +425,24 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
     if (next.has(supplier)) next.delete(supplier); else next.add(supplier);
     return next;
   });
-  // Active (non-submitted) supplier groups collapse on header click so the buyer
-  // can focus on one cart at a time. Default expanded; collapsed names live here.
-  const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
-  const toggleGroup = (supplier) => setCollapsedGroups((prev) => {
-    const next = new Set(prev);
-    if (next.has(supplier)) next.delete(supplier); else next.add(supplier);
-    return next;
-  });
   const rows = deriveMatchRows(items || [], buyingPrefs);
   const included = rows.filter(isPlanIncluded);
   // No-match lines plus "out of stock everywhere" lines both land here so the
   // buyer sees why they're not in any supplier order.
   const unresolved = rows.filter((row) => !isPlanIncluded(row) && (row.status === "Not found" || !row.supplier || row.supplier === "—" || isStrandedOutOfStock(row)));
   const groups = groupRowsBySupplier(included);
+  // Supplier carts render collapsed on load so the buyer first sees a clean
+  // per-supplier summary (name · count · subtotal) and expands the one cart they
+  // want to act on. A lone supplier auto-expands — collapsing a single cart is
+  // friction with no scanning benefit. Click a header to toggle.
+  const [collapsedGroups, setCollapsedGroups] = useState(
+    () => new Set(groups.length > 1 ? groups.map((g) => g.supplier) : [])
+  );
+  const toggleGroup = (supplier) => setCollapsedGroups((prev) => {
+    const next = new Set(prev);
+    if (next.has(supplier)) next.delete(supplier); else next.add(supplier);
+    return next;
+  });
   const total = included.reduce((sum, row) => sum + (row.lineTotal || 0), 0);
   const coverage = rows.length ? Math.round((included.length / rows.length) * 100) : 0;
   // Lines out of stock at their selected supplier that DO have an in-stock
@@ -610,7 +614,10 @@ export function ProcurementPlanView({ items, listName, listStatus = "draft", onB
           {unresolved.length > 0 && (
             <section className="crl-card pp-unresolved">
               <div className="crl-card-head">
-                <h3>Unresolved items ({unresolved.length})</h3>
+                <h3 className="pp-unresolved-title">
+                  <Icon name="icon-alert-triangle" className="button-icon" />
+                  Unresolved items ({unresolved.length})
+                </h3>
                 <button className="crl-edit-link" type="button" onClick={() => onNavigate("/app")}>Resolve on list</button>
               </div>
               <p className="pp-unresolved-note">These items aren&rsquo;t in any supplier order and won&rsquo;t be included in the supplier handoff.</p>

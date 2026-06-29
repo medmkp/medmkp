@@ -9185,12 +9185,6 @@ th {
 .crl-modal-summary .possible strong { color: var(--gold); }
 .crl-modal-summary .nomatch strong { color: var(--red); }
 
-.crl-unresolved-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 320px; overflow: auto; }
-.crl-unresolved-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
-.crl-unresolved-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.crl-unresolved-info strong { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crl-unresolved-info small { font-size: 12px; color: var(--red); }
-
 .crl-modal-results { display: grid; gap: 8px; }
 .crl-modal-result { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .crl-modal-result-from strong, .crl-modal-result-to strong { display: block; color: var(--ink); font-size: 13px; line-height: 1.3; }
@@ -10465,11 +10459,18 @@ th {
 .pp-empty p { color: var(--muted); font-size: 13px; max-width: 360px; }
 .pp-empty .secondary-action { margin-top: 6px; }
 
+/* Unresolved items get a red card so the buyer can't miss what's being left out
+   of the supplier handoff — warning icon, red border, tinted heading band. */
+.pp-unresolved { border-color: #f6c5c5; }
+.pp-unresolved { overflow: hidden; }
+.pp-unresolved .crl-card-head { background: #fdeaea; margin: -16px -16px 12px; padding: 12px 16px; }
+.pp-unresolved-title { display: inline-flex; align-items: center; gap: 7px; color: var(--red); }
+.pp-unresolved-title .button-icon { width: 16px; height: 16px; color: var(--red); }
 .pp-unresolved-note { color: var(--muted); font-size: 13px; margin-top: 8px; }
 .pp-unresolved-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
 .pp-unresolved-list li {
   display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px;
-  padding: 8px; border: 1px solid var(--line); border-radius: 9px;
+  padding: 8px; border: 1px solid #f6c5c5; border-radius: 9px;
 }
 .pp-unresolved-name { display: grid; gap: 2px; min-width: 0; }
 .pp-unresolved-name strong { color: var(--ink); font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
