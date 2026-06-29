@@ -1083,13 +1083,16 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
         setUom(cap(list[idx].unit_of_measure) || "Box");
         setStatus("ready");
 
-        // Comparable products: search by the product's family/type keyword so we
-        // surface same-type variants (the curated category is often too narrow).
+        // Comparable products: surface same-type substitutes from a different
+        // family. Scope strictly to the product's own category — a substitute is
+        // a same-category product, never a cross-category item. (The old query
+        // fed the family name's first word into a substring search, so a "Halo"
+        // glove matched "Halo"gen bulbs.) The client then drops the current
+        // product and its own family below.
         const base = list[idx];
-        const foundAttrs = parseAttributes(base.attributes_text);
-        const term = (familyInfo?.family_name || foundAttrs.family || base.name || "").split(/\s+/)[0];
-        if (term) {
-          fetch(`/api/canonical-products?q=${encodeURIComponent(term)}&limit=8`)
+        const ownFamilyId = familyInfo?.family_id || base.family_id || null;
+        if (base.category) {
+          fetch(`/api/canonical-products?category=${encodeURIComponent(base.category)}&limit=8`)
             .then((response) => response.json())
             .then(({ canonical_products: related }) => {
               if (!live) return;
@@ -1098,7 +1101,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                   .filter(
                     (entry) =>
                       entry.handle !== base.handle &&
-                      (!familyInfo || entry.family_id !== familyInfo.family_id)
+                      (!ownFamilyId || entry.family_id !== ownFamilyId)
                   )
                   .slice(0, 3)
               );
