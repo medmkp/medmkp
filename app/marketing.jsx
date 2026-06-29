@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { BrandMark, Icon } from "./icons";
-import { DEFAULT_BUYING_PREFS } from "./lib";
+import { DEFAULT_BUYING_PREFS, FREE_SCAN_LIMIT } from "./lib";
 import { CurrentReorderList } from "./reorder";
 import { ScanHandoffQr, ScanResultCard, useBarcodeScanner } from "./ui";
 
@@ -161,7 +161,7 @@ export function LoggedOutLanding({ onNavigate, authed = false }) {
           <div className="landing-actions">
             <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/scan")}>
               <Icon name="icon-scan" className="button-icon" />
-              Scan 3 items <em>FREE</em>
+              Scan {FREE_SCAN_LIMIT} items <em>FREE</em>
             </button>
             <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
               <Icon name="icon-play" className="button-icon" />
@@ -349,7 +349,7 @@ export function SampleReorderList({ onNavigate, authed = false }) {
   );
 }
 
-// The free, no-login scan funnel reached from the landing "Scan 3 items free"
+// The free, no-login scan funnel reached from the landing "Scan N items free"
 // CTA. Reuses the real camera/decoder hook and ScanResultCard so a public scan
 // looks exactly like the in-app one; the parent meters the free-scan budget and
 // passes it in. When the budget is gone the signup wall slides over the card —

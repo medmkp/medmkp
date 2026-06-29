@@ -160,9 +160,28 @@ export default function Home() {
     } catch {
       // ignore corrupt state
     }
+    // ?demo on any URL zeroes the free-scan budget so the no-login funnel can be
+    // re-run on the same device for a demo, without hand-clearing localStorage.
+    // The param is stripped afterward so a refresh doesn't keep resetting.
+    let demoReset = false;
     try {
-      const used = parseInt(window.localStorage.getItem(FREE_SCAN_KEY) || "0", 10);
-      if (Number.isFinite(used) && used > 0) setFreeScansUsed(used);
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("demo")) {
+        demoReset = true;
+        window.localStorage.removeItem(FREE_SCAN_KEY);
+        setFreeScansUsed(0);
+        params.delete("demo");
+        const qs = params.toString();
+        window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash);
+      }
+    } catch {
+      // ignore — demo reset is best-effort
+    }
+    try {
+      if (!demoReset) {
+        const used = parseInt(window.localStorage.getItem(FREE_SCAN_KEY) || "0", 10);
+        if (Number.isFinite(used) && used > 0) setFreeScansUsed(used);
+      }
     } catch {
       // ignore corrupt state
     }
