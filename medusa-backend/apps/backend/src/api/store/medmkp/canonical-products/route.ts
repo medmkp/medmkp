@@ -187,7 +187,10 @@ type CategoryListItem = {
 
 type CategoryListResult = { count: number; canonical_products: CategoryListItem[] }
 
-const CATEGORY_LIST_CACHE_TTL_MS = 60 * 1000
+// 15 min: the catalog only changes on ingestion, so a cold recompute of a large
+// category (~15s) should be paid rarely. The Vercel edge serves stale-while-
+// revalidate on top, so this is just the background-revalidation cost.
+const CATEGORY_LIST_CACHE_TTL_MS = 15 * 60 * 1000
 const categoryListCache = new Map<string, { loadedAt: number; result: CategoryListResult }>()
 const categoryListPromises = new Map<string, Promise<CategoryListResult>>()
 

@@ -852,7 +852,15 @@ export function CatalogCategoryView({ slug, onNavigate }) {
           merged.push(product);
         });
       });
-      merged.sort((a, b) => (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity));
+      // Bias the gallery toward products that have an image — a grid of
+      // placeholder icons reads as broken — with price as the tiebreaker. The
+      // "Best price" stat and badge below derive from the true cheapest offer,
+      // so they stay correct regardless of this display order.
+      merged.sort((a, b) => {
+        const imgDelta = (a.image_url ? 0 : 1) - (b.image_url ? 0 : 1);
+        if (imgDelta !== 0) return imgDelta;
+        return (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity);
+      });
       setProducts(merged.slice(0, 24));
       setProductCount(total);
       setStatus("ready");
@@ -880,7 +888,14 @@ export function CatalogCategoryView({ slug, onNavigate }) {
     requestAnimationFrame(scrollToProducts);
   };
   const visibleProducts = showAllProducts ? products : products.slice(0, 8);
-  const bestPrice = products[0]?.best_offer?.price_cents;
+  // The grid is image-biased, so the first card isn't necessarily the cheapest.
+  // Derive the lowest offer explicitly for the "Best price" stat + card badge.
+  const cheapest = products.reduce((acc, p) => {
+    const cents = p.best_offer?.price_cents;
+    if (typeof cents !== "number") return acc;
+    return !acc || cents < acc.price ? { id: p.id, price: cents } : acc;
+  }, null);
+  const bestPrice = cheapest?.price;
   const productsTitle = sub ? `Products in ${sub}` : `Popular products in ${category.name}`;
   const fmt = (value) => (typeof value === "number" ? value.toLocaleString() : "—");
   const viewAllBtn = !showAllProducts && products.length > 8 ? (
@@ -928,7 +943,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
             <h2>Subcategories</h2>
           </div>
 
-          <div className="cat-grid grid">
+          <div className="cat-grid cat-subgrid">
             {category.subcategories.map((option, index) => (
               <article className={`cat-card ${sub === option.name ? "active" : ""}`} key={option.name}>
                 <button type="button" className="cat-card-open" onClick={() => browseSub(option.name)}>
@@ -975,7 +990,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
             productLayout === "grid" ? (
             <div className="cat-pgrid-wrap">
               <div className="cat-pgrid">
-                {visibleProducts.map((product, index) => {
+                {visibleProducts.map((product) => {
                   const best = product.best_offer;
                   const open = () => onNavigate(`/app/product/${product.handle}`);
                   return (
@@ -993,7 +1008,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                           {category.name} <Icon name="icon-chevron-right" className="cat-pt-pathsep" /> {product.category}
                         </span>
                         <div className="cat-pcard-foot">
-                          <CatBestPrice best={best} showBadge={index === 0 && !sub} />
+                          <CatBestPrice best={best} showBadge={product.id === cheapest?.id && !sub} />
                           <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
                         </div>
                         <button type="button" className="cat-pt-view" onClick={open}>
@@ -1023,7 +1038,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleProducts.map((product, index) => {
+                  {visibleProducts.map((product) => {
                     const best = product.best_offer;
                     const open = () => onNavigate(`/app/product/${product.handle}`);
                     return (
@@ -1048,7 +1063,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                           <em>{best?.sku || "—"}</em>
                         </td>
                         <td>
-                          <CatBestPrice best={best} showBadge={index === 0 && !sub} />
+                          <CatBestPrice best={best} showBadge={product.id === cheapest?.id && !sub} />
                         </td>
                         <td className="cat-pt-num">{product.offer_count}</td>
                         <td className="cat-pt-act">

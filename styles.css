@@ -9926,6 +9926,9 @@ th {
 /* Category grid */
 .cat-grid { display: grid; gap: 16px; }
 .cat-grid.grid { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+/* Subcategory grid: every category has exactly four, so keep them on one line
+   (the shared auto-fill rule above only fits three at this width). */
+.cat-subgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .cat-grid.list { grid-template-columns: 1fr; }
 .cat-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease; }
 .cat-card:hover { transform: translateY(-2px); border-color: #cfd9ec; box-shadow: 0 22px 48px rgba(23, 44, 92, 0.12); }
@@ -10008,10 +10011,14 @@ th {
   .cat-rail > * { flex: 1 1 240px; }
   .cat-stats { grid-template-columns: repeat(2, 1fr); }
 }
+@media (max-width: 840px) {
+  .cat-subgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 700px) {
   .cat-title { font-size: 24px; }
   .cat-stats { grid-template-columns: 1fr 1fr; }
   .cat-grid.grid { grid-template-columns: 1fr; }
+  .cat-subgrid { grid-template-columns: 1fr; }
   .cat-pgrid { grid-template-columns: 1fr; }
   .cat-rail { flex-direction: column; }
   .cat { padding-bottom: 90px; }

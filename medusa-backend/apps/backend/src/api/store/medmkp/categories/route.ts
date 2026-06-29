@@ -6,7 +6,10 @@ const CATEGORY_LIMIT = 12
 // The drill-down catalog buckets every live category into a department, so it
 // needs the full set, not just the featured dozen. Cap defensively.
 const CATEGORY_LIMIT_MAX = 500
-const CATEGORY_CACHE_TTL_MS = 60 * 1000
+// 15 min: catalog changes only on ingestion. The cold recompute of the priced/
+// coverage aggregation is ~31s, so cache it well past the Vercel edge window;
+// the edge serves stale-while-revalidate so users never wait on it.
+const CATEGORY_CACHE_TTL_MS = 15 * 60 * 1000
 
 type CategoryRow = {
   category: string
