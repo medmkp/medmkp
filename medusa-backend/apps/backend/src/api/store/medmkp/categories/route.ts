@@ -7,8 +7,8 @@ const CATEGORY_LIMIT = 12
 // needs the full set, not just the featured dozen. Cap defensively.
 const CATEGORY_LIMIT_MAX = 500
 // 15 min: catalog changes only on ingestion. The cold recompute of the priced/
-// coverage aggregation is ~3-4s, so cache it well past the Vercel edge window;
-// the edge serves stale-while-revalidate so users never wait on it.
+// coverage aggregation is well under 1s (indexed), but cache it past the Vercel
+// edge window anyway; the edge serves stale-while-revalidate so users never wait.
 const CATEGORY_CACHE_TTL_MS = 15 * 60 * 1000
 
 type CategoryRow = {
@@ -93,23 +93,23 @@ async function loadCategories(limit: number): Promise<CategoriesResponse> {
     .sort((a, b) => b.product_count - a.product_count)
     .slice(0, limit)
 
-  // Pick each category's cheapest row from the read model FIRST (DISTINCT ON over
-  // the matview alone → one winner per category), THEN join supplier_product for
-  // just those ~21 winners. Joining all 64k supplier_catalog_listing rows to
-  // supplier_product before the DISTINCT ON did ~64k pkey lookups and took ~31s on
-  // the cold prod DB; deduping first drops it to ~2.4s.
+  // For each ranked category, fetch its single cheapest row via a LATERAL LIMIT 1,
+  // then join supplier_product for just that winner. The expression index
+  // IDX_medmkp_supplier_catalog_listing_anycat_price turns each lookup into an
+  // index scan (~21 of them), so this is ~80ms cold. A DISTINCT ON over the matview
+  // still had to scan all 64k rows by lower(btrim(any_category)) (~2.4s); the
+  // earlier join-before-dedup scanned and pkey-looked-up all 64k (~31s).
   const bestValue = await pool.query<BestValueRow>(
-    `WITH winners AS (
-       SELECT DISTINCT ON (lower(btrim(any_category)))
-              lower(btrim(any_category)) AS category, best_sp_id, price_cents
-       FROM medmkp_supplier_catalog_listing
-       WHERE lower(btrim(any_category)) = ANY($1)
-       ORDER BY lower(btrim(any_category)),
-                (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC
-     )
-     SELECT w.category, sp.name, sp.sku, sp.supplier_id, sup.name AS supplier_name, w.price_cents
-     FROM winners w
-     JOIN medmkp_supplier_product sp ON sp.id = w.best_sp_id AND sp.deleted_at IS NULL
+    `SELECT c.category, sp.name, sp.sku, sp.supplier_id, sup.name AS supplier_name, b.price_cents
+     FROM unnest($1::text[]) AS c(category)
+     CROSS JOIN LATERAL (
+       SELECT best_sp_id, price_cents
+       FROM medmkp_supplier_catalog_listing l
+       WHERE lower(btrim(l.any_category)) = c.category
+       ORDER BY (l.unit_price_cents IS NULL) ASC, l.unit_price_cents ASC, l.price_cents ASC
+       LIMIT 1
+     ) b
+     JOIN medmkp_supplier_product sp ON sp.id = b.best_sp_id AND sp.deleted_at IS NULL
      LEFT JOIN medmkp_supplier sup ON sup.id = sp.supplier_id AND sup.deleted_at IS NULL`,
     [ranked.map((row) => row.category)]
   )
