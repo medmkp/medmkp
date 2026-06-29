@@ -377,8 +377,261 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Sticky bottom action bar — the wireframe's "Open files" + "Export evidence". */
+.actionBar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.actionGhost,
+.actionPrimary {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.actionGhost svg,
+.actionPrimary svg {
+  width: 19px;
+  height: 19px;
+}
+
+.actionGhost {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.actionPrimary {
+  border: 1px solid var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.actionPrimary svg {
+  stroke-width: 2.1;
+}
+
+/* Share / export bottom sheet. */
+.sheetRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.sheetBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 21, 51, 0.32);
+  animation: sheetFade 0.18s ease;
+}
+
+.sheet {
+  position: relative;
+  width: min(430px, 100%);
+  margin: 0 auto;
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 28px rgba(11, 21, 51, 0.16);
+  animation: sheetRise 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sheetGrip {
+  display: block;
+  width: 38px;
+  height: 4px;
+  margin: 4px auto 12px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.sheetHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sheetHead h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.sheetHead p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.sheetClose {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sheetClose svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sheetActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sheetRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheetRow:disabled {
+  cursor: not-allowed;
+  background: var(--surface-2);
+}
+
+.sheetRow:disabled .sheetRowIcon {
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.sheetRow:disabled .sheetRowLabel {
+  color: var(--muted);
+}
+
+.sheetRowIcon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--blue);
+  background: var(--blue-2);
+}
+
+.sheetRowIcon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.sheetRowText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sheetRowLabel {
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.sheetRowHint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.sheetRow > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.sheetRowTag {
+  white-space: nowrap;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sheetRowDone .sheetRowIcon {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, var(--surface));
+}
+
+.sheetRowDone .sheetRowLabel {
+  color: var(--green);
+}
+
+@keyframes sheetFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sheetRise {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media print {
+  .topbar,
+  .actionBar,
+  .sheetRoot {
+    display: none !important;
+  }
+
+  .body {
+    overflow: visible;
+  }
+}
+
 @media (max-width: 430px) {
   .topbar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .actionBar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .sheet {
     padding-left: 16px;
     padding-right: 16px;
   }

@@ -102,6 +102,16 @@ export function IconSprite() {
         <path d="M5.5 9v9.5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5V9" />
         <path d="M12 11.5v5M9.5 14l2.5 2.5L14.5 14" />
       </symbol>
+      <symbol id="icon-share" viewBox="0 0 24 24">
+        <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
+        <path d="M16 6l-4-4-4 4" />
+        <path d="M12 2v14" />
+      </symbol>
+      <symbol id="icon-printer" viewBox="0 0 24 24">
+        <path d="M6.5 9.5V3.5h11v6" />
+        <path d="M6.5 17.5h-2A1.5 1.5 0 0 1 3 16v-4.5A1.5 1.5 0 0 1 4.5 10h15a1.5 1.5 0 0 1 1.5 1.5V16a1.5 1.5 0 0 1-1.5 1.5h-2" />
+        <path d="M6.5 14h11v6.5h-11Z" />
+      </symbol>
       <symbol id="icon-trash-ios" viewBox="0 0 24 24">
         <path d="M4 6.5h16" />
         <path d="M9 6.5V5.4A1.4 1.4 0 0 1 10.4 4h3.2A1.4 1.4 0 0 1 15 5.4V6.5" />
