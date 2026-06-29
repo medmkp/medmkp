@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useRef, useCallback } from "react";
 import { Icon } from "./icons";
-import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, supplierInitials, supplierLogoSrc } from "./lib";
+import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, supplierInitials, supplierLogoSrc } from "./lib";
 
 export function useBarcodeScanner({ active, onScan }) {
   const videoRef = useRef(null);
@@ -401,6 +401,16 @@ export function MatchSupplier({ name }) {
   const logo = supplierLogoSrc(name);
   if (logo) return (<span className="mr-supplier"><img className="mr-supplier-img" src={logo} alt="" /><span>{key.includes("schein") ? "Henry Schein" : name}</span></span>);
   return <span className="mr-supplier">{name}</span>;
+}
+
+// Manufacturer brand mark for the Matched product column. Shows the brand's logo
+// alone (no name) when we have one; falls back to a muted brand name so the
+// column still identifies the product, and renders nothing when no brand at all.
+export function MatchManufacturer({ name }) {
+  const logo = brandLogoSrc(name);
+  if (logo) return <span className="mr-mfr"><img className="mr-mfr-img" src={logo} alt={name || ""} title={name || ""} /></span>;
+  if (name) return <span className="mr-mfr-name">{name}</span>;
+  return null;
 }
 
 // Maps the barcodes on /test-barcodes.html to catalog products so a scan

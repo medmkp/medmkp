@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
-import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc } from "./lib";
-import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchSupplier, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
+import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, supplierLogoSrc, variantAxisLabel } from "./lib";
+import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchManufacturer, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
   const [captured, setCaptured] = useState(false);
@@ -271,13 +271,89 @@ function BestPriceStock({ candidate }) {
 export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate }) {
   const isResolve = mode === "resolve";
   const isView = mode === "view";
-  const candidates = isResolve ? [] : collapseOffersBySupplier(offerCandidates(row), row.selectedOfferKey);
-  // Start on the lowest priced orderable offer so the drawer leads with the
-  // buyer's best available price. If no price is known, fall back gracefully.
+
+  // A matched product may belong to a size/spec variant family (e.g. glove
+  // sizes). Fetch the family so the drawer can offer a variant selector;
+  // switching a variant swaps to a different canonical product — its own
+  // suppliers and offers — previewed locally until the buyer confirms.
+  const [variants, setVariants] = useState(null);
+  const [family, setFamily] = useState(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+  // Chosen pack quantity when the active product's offers span packs (null =
+  // default to the pack of the best per-unit offer).
+  const [packQty, setPackQty] = useState(null);
+  // Selected supplier offer, tracked by key so the choice survives (or cleanly
+  // falls back) when the candidate set changes under a variant/pack switch.
+  const [selectedKey, setSelectedKey] = useState(row.selectedOfferKey || null);
+
+  useEffect(() => {
+    if (isResolve || !row.canonicalHandle) { setVariants(null); setFamily(null); return undefined; }
+    let live = true;
+    fetch(`/api/canonical-products?handle=${encodeURIComponent(row.canonicalHandle)}`)
+      .then((response) => response.json())
+      .then(({ canonical_products: list, family: familyInfo }) => {
+        if (!live) return;
+        const vs = list || [];
+        if (vs.length <= 1) { setVariants(null); setFamily(null); return; }
+        const idx = Math.max(0, vs.findIndex((v) => (v.handle || "").toLowerCase() === (row.canonicalHandle || "").toLowerCase()));
+        setVariants(vs);
+        setFamily(familyInfo || null);
+        setActiveIdx(idx);
+        setPackQty(null);
+      })
+      .catch(() => { if (live) { setVariants(null); setFamily(null); } });
+    return () => { live = false; };
+  }, [row.canonicalHandle, isResolve]);
+
+  // The product whose offers drive the candidate list: the chosen variant when a
+  // family loaded, otherwise the row itself.
+  const activeVariant = variants ? variants[activeIdx] : null;
+  const variantOffers = activeVariant
+    ? (activeVariant.offers || []).map(mapSearchOffer).map((offer) => ({ ...offer, key: offerKey(offer), sub: offerSub(offer) }))
+    : null;
+  const offerRow = variantOffers
+    ? { ...row, offers: variantOffers, recommendedOfferKey: variantOffers[0]?.key ?? null, selectedOfferKey: null, matchName: activeVariant.name }
+    : row;
+  const variantGroupLabel = variants ? (family?.variant_axis_label || variantAxisLabel(variants)) : null;
+
+  // Pack options come from the active product's full offer set; scoping to a pack
+  // and then collapsing per supplier means the supplier list reflects who sells
+  // that pack — so changing the pack (or variant) changes the suppliers shown.
+  const rawCandidates = isResolve ? [] : offerCandidates(offerRow);
+  const packValues = [...new Set(rawCandidates.map((candidate) => candidate.packQty).filter((q) => q != null))].sort((a, b) => a - b);
+  const hasPackChoice = packValues.length > 1;
+  const defaultPack = (() => {
+    // Land on the buyer's saved offer's pack so an existing selection stays
+    // visible; otherwise the pack of the cheapest per-unit offer.
+    const saved = row.selectedOfferKey ? rawCandidates.find((candidate) => candidate.key === row.selectedOfferKey) : null;
+    if (saved?.packQty != null) return saved.packQty;
+    const priced = rawCandidates.filter((candidate) => candidate.packQty != null && isOrderable(candidate) && candidate.perEa != null);
+    if (priced.length) return priced.reduce((a, b) => (b.perEa < a.perEa ? b : a)).packQty;
+    return packValues[0] ?? null;
+  })();
+  const activePack = hasPackChoice ? (packQty ?? defaultPack) : null;
+  const packOptions = packValues.map((q) => ({ qty: q, label: rawCandidates.find((candidate) => candidate.packQty === q)?.packLabel || `${q}/pack` }));
+  const activePackLabel = packOptions.find((option) => option.qty === activePack)?.label || "";
+
+  const scoped = activePack != null ? rawCandidates.filter((candidate) => candidate.packQty === activePack) : rawCandidates;
+  const candidates = collapseOffersBySupplier(scoped, selectedKey);
+  // Land on the buyer's saved choice when it's still in the set, else the lowest
+  // priced orderable offer, else the recommendation.
   const bestPriceIndex = bestOrderableOfferIndex(candidates);
-  const selectedIndex = candidates.findIndex((candidate) => candidate.key === row.selectedOfferKey);
+  const keyedIndex = selectedKey ? candidates.findIndex((candidate) => candidate.key === selectedKey) : -1;
   const recommendedIndex = candidates.findIndex((candidate) => candidate.recommended);
-  const [selected, setSelected] = useState(bestPriceIndex >= 0 ? bestPriceIndex : selectedIndex >= 0 ? selectedIndex : Math.max(0, recommendedIndex));
+  const selected = keyedIndex >= 0 ? keyedIndex : bestPriceIndex >= 0 ? bestPriceIndex : Math.max(0, recommendedIndex);
+
+  function selectVariant(index) {
+    setActiveIdx(index);
+    setPackQty(null);
+    setSelectedKey(null);
+  }
+  function selectPack(qtyValue) {
+    setPackQty(qtyValue);
+    setSelectedKey(null);
+  }
+
   const [qty] = useState(row.qty || 1);
   const [notes, setNotes] = useState(row.note || "");
   // What the practice currently pays per pack — the savings anchor. Editable
@@ -301,15 +377,22 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
   // offer on price-per-each by a meaningful margin. Surfaced as an opt-in nudge —
   // bigger packs tie up cash/shelf and can expire, so it's never auto-applied.
   const sel = candidates[selected];
+  // "Buy bigger, pay less per unit": among the active product's larger packs,
+  // find one whose best per-each beats the selected offer by a meaningful margin.
+  // Acting on it just moves the pack selector — never auto-applied.
   const biggerPackDeal = (() => {
-    if (!sel || sel.perEa == null || sel.packQty == null) return null;
+    if (!hasPackChoice || !sel || sel.perEa == null || activePack == null) return null;
+    const packBestPerEa = (q) => {
+      const xs = rawCandidates.filter((candidate) => candidate.packQty === q && isOrderable(candidate) && candidate.perEa != null);
+      return xs.length ? Math.min(...xs.map((candidate) => candidate.perEa)) : null;
+    };
     let best = null;
-    candidates.forEach((candidate, index) => {
-      if (index === selected || !isOrderable(candidate)) return;
-      if (candidate.perEa == null || candidate.packQty == null) return;
-      if (candidate.packQty <= sel.packQty || candidate.perEa >= sel.perEa) return;
-      if (!best || candidate.perEa < best.perEa) best = { ...candidate, index };
-    });
+    for (const q of packValues) {
+      if (q <= activePack) continue;
+      const perEa = packBestPerEa(q);
+      if (perEa == null || perEa >= sel.perEa) continue;
+      if (!best || perEa < best.perEa) best = { packQty: q, perEa, packLabel: packOptions.find((option) => option.qty === q)?.label || "" };
+    }
     if (!best) return null;
     const pct = (sel.perEa - best.perEa) / sel.perEa;
     return pct >= 0.1 ? { ...best, pct } : null;
@@ -334,7 +417,16 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
 
   function confirm() {
     if (row.itemId) {
-      onConfirmMatch?.(row.itemId, { selectedOfferKey: candidates[selected]?.key ?? null, qty, note: notes, paidUnitPrice: paid });
+      const chosenKey = candidates[selected]?.key ?? null;
+      // A different variant is a different canonical product, so re-link the item
+      // to it (carrying the chosen supplier offer); same variant just updates the
+      // offer selection in place.
+      const switchedVariant = activeVariant && (activeVariant.handle || "").toLowerCase() !== (row.canonicalHandle || "").toLowerCase();
+      if (switchedVariant) {
+        onLinkProduct?.(row.itemId, activeVariant, { qty, note: notes, paidUnitPrice: paid, selectedOfferKey: chosenKey });
+      } else {
+        onConfirmMatch?.(row.itemId, { selectedOfferKey: chosenKey, qty, note: notes, paidUnitPrice: paid });
+      }
       onToast("Match updated");
     } else {
       onToast("Match updated");
@@ -415,8 +507,32 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
           <section className="crl-drawer-section">
             <strong className="crl-drawer-subhead">Choose the match</strong>
             <p className="crl-drawer-hint">We recommend one offer from your buying preferences — pick a different one any time.</p>
+            {variants && variants.length > 1 && (
+              <div className="pdp-variants crl-drawer-variants" role="group" aria-label={`Choose ${variantGroupLabel}`}>
+                <span className="pdp-variants-label">{variantGroupLabel}: <strong>{activeVariant?.variant_label || `Option ${activeIdx + 1}`}</strong></span>
+                <div className="pdp-variant-options">
+                  {variants.map((variant, index) => (
+                    <button key={variant.id ?? index} type="button" className={`pdp-variant ${index === activeIdx ? "active" : ""}`} aria-pressed={index === activeIdx} onClick={() => selectVariant(index)}>
+                      {variant.variant_label || `Option ${index + 1}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {hasPackChoice && (
+              <div className="pdp-pack crl-drawer-pack" role="group" aria-label="Choose packaging">
+                <span className="pdp-pack-label">Packaging: <strong>{activePackLabel}</strong></span>
+                <div className="pdp-pack-options">
+                  {packOptions.map((option) => (
+                    <button key={option.qty} type="button" className={`pdp-pack-option ${option.qty === activePack ? "active" : ""}`} aria-pressed={option.qty === activePack} onClick={() => selectPack(option.qty)}>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {biggerPackDeal && (
-              <button type="button" className="crl-packdeal" onClick={() => setSelected(biggerPackDeal.index)}>
+              <button type="button" className="crl-packdeal" onClick={() => selectPack(biggerPackDeal.packQty)}>
                 <Icon name="icon-tag" className="button-icon" />
                 <span className="crl-packdeal-text">
                   <strong>Buy bigger, save {Math.round(biggerPackDeal.pct * 100)}% per unit</strong>
@@ -431,7 +547,7 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
                 const oos = !isOrderable(candidate);
                 return (
                   <label key={`best-${candidate.key ?? bestPriceIndex}`} className={`crl-cand crl-cand-hero ${selected === bestPriceIndex ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos}>
-                    <input type="radio" name="crl-cand" checked={selected === bestPriceIndex} disabled={oos} onChange={() => setSelected(bestPriceIndex)} />
+                    <input type="radio" name="crl-cand" checked={selected === bestPriceIndex} disabled={oos} onChange={() => setSelectedKey(candidate.key ?? null)} />
                     <ProductThumb image={candidate.image} alt={candidate.name} />
                     <span className="crl-cand-info">
                       <span className="crl-cand-hero-kicker">Best price</span>
@@ -455,7 +571,7 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
                 const oos = !isOrderable(candidate);
                 return (
                 <label key={candidate.key ?? index} className={`crl-cand ${selected === index ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos}>
-                  <input type="radio" name="crl-cand" checked={selected === index} disabled={oos} onChange={() => setSelected(index)} />
+                  <input type="radio" name="crl-cand" checked={selected === index} disabled={oos} onChange={() => setSelectedKey(candidate.key ?? null)} />
                   <ProductThumb image={candidate.image} alt={candidate.name} />
                   <span className="crl-cand-info">
                     <CandidateName supplier={candidate.supplier} name={candidate.name} canonicalName={row.canonicalName} productUrl={candidate.productUrl} />
@@ -965,7 +1081,7 @@ export function ReorderRow({ row, active, selected, onToggleSelect, onOpen, onCo
           <>
             <strong>{row.matchName}</strong>
             {row.matchSub && <small>{row.matchSub}</small>}
-            <MatchSupplier name={row.supplier !== "—" ? row.supplier : row.matchBrand} />
+            <MatchManufacturer name={row.matchManufacturer} />
           </>
         )}
       </span>

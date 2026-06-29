@@ -1221,12 +1221,15 @@ export default function Home() {
         unit: product.base_unit || item.unit || "ea",
         offers,
         bestOffer: best,
-        selectedOfferKey: null,
+        // Carry the buyer's chosen supplier offer (e.g. a variant switch from the
+        // match drawer keeps the selected offer) instead of resetting to default.
+        selectedOfferKey: options.selectedOfferKey ?? null,
         matchStatus: "exact",
         confidence: product.match?.score ?? 0.95,
         linked: true,
         draftQty: options.qty ?? item.draftQty ?? item.qty ?? 1,
         note: options.note ?? item.note ?? "",
+        paidUnitPrice: options.paidUnitPrice ?? item.paidUnitPrice,
         updatedAt: Date.now(),
       };
     }));

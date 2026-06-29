@@ -504,7 +504,7 @@ export function supplierInitials(name) {
 export const matchReviewSample = [
   {
     id: 1, image: "/products/bibs.png", importedName: "BIBS, 2PLY, BLUE, 500/BX", importedSub: "SKU: 112-4521",
-    supplier: "Henry Schein", matchName: "Patient Bibs 2-Ply Blue", matchSub: "112-4521 · 500/Box",
+    supplier: "Henry Schein", matchManufacturer: "", matchName: "Patient Bibs 2-Ply Blue", matchSub: "112-4521 · 500/Box",
     confidence: 95, price: 35.20, perEa: 0.070, status: "Matched", qty: 500, uom: "Box", lineTotal: 35.20,
     others: [
       { name: "Patient Bibs 2-Ply Blue", sub: "112-4520 · 250/Box", supplier: "Henry Schein", price: 18.90, perEa: 0.076, confidence: 85 },
@@ -513,25 +513,25 @@ export const matchReviewSample = [
   },
   {
     id: 2, image: "/products/microbrush.png", importedName: "Microbrush Superfine", importedSub: "REGULAR, BLUE, 100/BAG",
-    supplier: "Henry Schein", matchName: "Microbrush Regular Superfine Blue (100/bag)", matchSub: "100-2604",
+    supplier: "Henry Schein", matchManufacturer: "Microbrush", matchName: "Microbrush Regular Superfine Blue (100/bag)", matchSub: "100-2604",
     confidence: 88, price: 12.45, perEa: 0.125, status: "Matched", qty: 100, uom: "Bag", lineTotal: 12.45,
     others: [{ name: "Microbrush Superfine Blue", sub: "100-2601 · 100/Bag", supplier: "Henry Schein", price: 11.90, perEa: 0.119, confidence: 71 }],
   },
   {
     id: 3, image: "/products/varnish.png", importedName: "3M Clinpro White", importedSub: "VARNISH 5% SOD FLUORIDE",
-    supplier: "3M", matchName: "Clinpro White Varnish", matchSub: "5% Sodium Fluoride, 50/Pack · 12125",
+    supplier: "3M", matchManufacturer: "3M", matchName: "Clinpro White Varnish", matchSub: "5% Sodium Fluoride, 50/Pack · 12125",
     confidence: 92, price: 64.99, perEa: 1.30, status: "Matched", qty: 50, uom: "Pack", lineTotal: 64.99,
     others: [{ name: "Clinpro 5% Sodium Fluoride Varnish", sub: "12126 · 100/Pack", supplier: "3M", price: 119.00, perEa: 1.19, confidence: 64 }],
   },
   {
     id: 4, image: "/products/adhesive.png", importedName: "Kerr OptiBond", importedSub: "ALL-IN-ONE ADHESIVE 5ML",
-    supplier: "Henry Schein", matchName: "OptiBond All-In-One Adhesive 5ml", matchSub: "36581",
+    supplier: "Henry Schein", matchManufacturer: "Kerr", matchName: "OptiBond All-In-One Adhesive 5ml", matchSub: "36581",
     confidence: 74, price: 123.10, perEa: 123.10, status: "Review", qty: 1, uom: "Each", lineTotal: 123.10,
     others: [{ name: "OptiBond Universal Adhesive 5ml", sub: "37210", supplier: "Henry Schein", price: 118.50, perEa: 118.50, confidence: 58 }],
   },
   {
     id: 5, image: "/products/wipes.png", importedName: "CaviWipes", importedSub: "DISINFECTING WIPES 160CT",
-    supplier: "Metrex", matchName: "CaviWipes Disinfecting Wipes 160 Count", matchSub: "13-1100",
+    supplier: "Metrex", matchManufacturer: "Metrex", matchName: "CaviWipes Disinfecting Wipes 160 Count", matchSub: "13-1100",
     confidence: 45, price: 11.75, perEa: 0.073, status: "Review", qty: 160, uom: "Count", lineTotal: 11.75,
     others: [{ name: "CaviWipes XL Disinfecting Wipes", sub: "13-1090 · 65 Count", supplier: "Metrex", price: 9.40, perEa: 0.145, confidence: 39 }],
   },
@@ -1387,6 +1387,10 @@ export function deriveMatchRows(items, prefs) {
       // Brand for an offer-less match (e.g. Henry Schein), so the row can show
       // the supplier logo even though there's no purchasable offer.
       matchBrand: notFound ? null : (best?.supplier || item.matchBrand || null),
+      // Manufacturer brand of the matched product (e.g. 3M, Crosstex) — distinct
+      // from the supplier/vendor. Drives the brand mark in the Matched product
+      // column. Empty when the offer carries no brand.
+      matchManufacturer: notFound ? null : (best?.brand || ""),
       status,
       linked: Boolean(item.linked),
       note: item.note || "",
