@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { BrandLogoMark, Icon } from "./icons";
 import { DOC_TYPES, EVIDENCE_MOCK } from "./evidence";
 import s from "./evidenceviewer.module.css";
@@ -45,6 +46,13 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, onBack }) {
   const docs = data.documents
     .filter((doc) => doc.location === LOCATION_NAME || ["doc_1", "doc_2", "doc_4", "doc_6"].includes(doc.id))
     .slice(0, 4);
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const filesRef = useRef(null);
+
+  function scrollToFiles() {
+    filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   return (
     <section className={s.screen} aria-label={`${LOCATION_NAME} evidence viewer`}>
@@ -99,7 +107,7 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, onBack }) {
           </div>
         </EvidenceSection>
 
-        <EvidenceSection title="Open files">
+        <EvidenceSection title="Open files" anchorRef={filesRef}>
           <div className={s.listCard}>
             {docs.map((doc) => {
               const meta = DOC_TYPES[doc.type];
@@ -126,15 +134,147 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, onBack }) {
           </ol>
         </EvidenceSection>
       </main>
+
+      <footer className={s.footer}>
+        <button type="button" className={s.footerGhost} onClick={scrollToFiles}>
+          <Icon name="icon-folder" />Open files
+        </button>
+        <button
+          type="button"
+          className={s.footerPrimary}
+          onClick={() => setSheetOpen(true)}
+          aria-haspopup="dialog"
+        >
+          <Icon name="icon-archive-down" />Export evidence
+        </button>
+      </footer>
+
+      {sheetOpen && <ShareSheet location={LOCATION_NAME} onClose={() => setSheetOpen(false)} />}
     </section>
   );
 }
 
-function EvidenceSection({ title, children }) {
+function EvidenceSection({ title, children, anchorRef }) {
   return (
-    <section className={s.section}>
+    <section className={s.section} ref={anchorRef}>
       <h2>{title}</h2>
       {children}
     </section>
+  );
+}
+
+// Read-only share/export sheet. Every action is non-mutating — copy the
+// presentation URL, hand off to the OS share sheet, or print/save as PDF.
+// Capabilities are feature-detected after mount (SSR-safe) so unsupported
+// browsers show a clear disabled "Unavailable" state instead of a dead button.
+function ShareSheet({ location, onClose }) {
+  const [caps, setCaps] = useState({ clipboard: false, share: false, print: false });
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setCaps({
+      clipboard: typeof navigator !== "undefined" && !!navigator.clipboard?.writeText,
+      share: typeof navigator !== "undefined" && typeof navigator.share === "function",
+      print: typeof window !== "undefined" && typeof window.print === "function",
+    });
+  }, []);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+
+  async function copyLink() {
+    if (!caps.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  async function share() {
+    if (!caps.share) return;
+    try {
+      await navigator.share({ title: `${location} Evidence`, url: shareUrl });
+    } catch {
+      /* user cancelled or share failed — read-only, nothing to undo */
+    }
+  }
+
+  function print() {
+    if (caps.print) window.print();
+  }
+
+  return (
+    <div className={s.sheetRoot} role="dialog" aria-modal="true" aria-label="Share or export evidence">
+      <div className={s.sheetBackdrop} onClick={onClose} />
+      <div className={s.sheet}>
+        <span className={s.sheetGrip} aria-hidden="true" />
+        <div className={s.sheetHead}>
+          <strong>Share &amp; export</strong>
+          <button type="button" className={s.sheetClose} onClick={onClose} aria-label="Close">
+            <Icon name="icon-x" />
+          </button>
+        </div>
+        <p className={s.sheetNote}>Read-only — nothing here changes the evidence record.</p>
+
+        <div className={s.sheetActions}>
+          <ShareRow
+            icon={copied ? "icon-check-circle" : "icon-copy"}
+            label={copied ? "Link copied" : "Copy link"}
+            sub="Direct link to this presentation view"
+            enabled={caps.clipboard}
+            done={copied}
+            onClick={copyLink}
+          />
+          <ShareRow
+            icon="icon-share"
+            label="Share…"
+            sub="Open your device share options"
+            enabled={caps.share}
+            unavailableLabel="Not on this browser"
+            onClick={share}
+          />
+          <ShareRow
+            icon="icon-printer"
+            label="Print / Save as PDF"
+            sub="Print this evidence summary"
+            enabled={caps.print}
+            onClick={print}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShareRow({ icon, label, sub, enabled, done, unavailableLabel = "Unavailable", onClick }) {
+  return (
+    <button
+      type="button"
+      className={s.shareRow}
+      onClick={onClick}
+      disabled={!enabled}
+      data-done={done ? "true" : undefined}
+    >
+      <span className={s.shareIcon}><Icon name={icon} /></span>
+      <span className={s.shareText}>
+        <span className={s.shareLabel}>{label}</span>
+        <span className={s.shareSub}>{sub}</span>
+      </span>
+      {enabled ? (
+        <span className={s.shareChevron}><Icon name="icon-chevron-right" /></span>
+      ) : (
+        <span className={s.shareTag}>{unavailableLabel}</span>
+      )}
+    </button>
   );
 }

@@ -377,8 +377,254 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Sticky action footer ─────────────────────────────────────────── */
+.footer {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 12px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.footerGhost,
+.footerPrimary {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.footerGhost {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.footerGhost:active {
+  background: var(--surface-2);
+}
+
+.footerPrimary {
+  border: 0;
+  background: var(--blue);
+  color: #fff;
+}
+
+.footerPrimary:active {
+  background: color-mix(in srgb, var(--blue) 88%, var(--ink));
+}
+
+.footerGhost svg,
+.footerPrimary svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* Keep the action chrome out of Print / Save as PDF output. */
+@media print {
+  .footer,
+  .sheetRoot {
+    display: none !important;
+  }
+}
+
+/* ── Share / export bottom sheet ──────────────────────────────────── */
+.sheetRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.sheetBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 21, 51, 0.46);
+}
+
+.sheet {
+  position: relative;
+  width: min(430px, 100%);
+  margin: 0 auto;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 -8px 28px rgba(11, 21, 51, 0.16);
+  animation: sheetRise 0.24s ease;
+}
+
+@keyframes sheetRise {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.sheetGrip {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  margin: 6px auto 2px;
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sheetHead strong {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sheetClose {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sheetClose svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sheetNote {
+  margin: -2px 0 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.sheetActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shareRow {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shareRow:active:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.shareRow:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.shareIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--blue-2);
+  color: var(--blue);
+}
+
+.shareIcon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.shareRow:disabled .shareIcon {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.shareRow[data-done="true"] .shareIcon {
+  background: color-mix(in srgb, var(--green) 12%, var(--surface));
+  color: var(--green);
+}
+
+.shareText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shareLabel {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.shareRow[data-done="true"] .shareLabel {
+  color: var(--green);
+}
+
+.shareSub {
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shareChevron {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.shareChevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+.shareTag {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 @media (max-width: 430px) {
   .topbar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .footer {
     padding-left: 16px;
     padding-right: 16px;
   }
