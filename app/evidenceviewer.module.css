@@ -225,23 +225,18 @@
   box-shadow: none;
 }
 
-.statusRow,
-.fileRow {
+.statusRow {
   min-height: 58px;
   display: grid;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
-}
-
-.statusRow:last-child,
-.fileRow:last-child {
-  border-bottom: 0;
-}
-
-.statusRow {
   grid-template-columns: 26px minmax(0, 1fr) auto;
+}
+
+.statusRow:last-child {
+  border-bottom: 0;
 }
 
 .rowIcon {
@@ -362,10 +357,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.fileRow {
-  grid-template-columns: 26px minmax(0, 1fr) auto;
-}
-
 .fileIcon {
   color: var(--blue);
 }
@@ -379,6 +370,188 @@
 .fileType {
   font-weight: 500;
   text-transform: uppercase;
+}
+
+/* ── Filed evidence — grouped filing list of evidence cards ────────── */
+.fileGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fileGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 2px;
+}
+
+.groupBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--blue-2);
+  color: var(--blue);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.groupLabel {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.groupCount {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fileCard {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fileCard:last-child {
+  border-bottom: 0;
+}
+
+.fileCard .fileIcon {
+  margin-top: 1px;
+}
+
+.fileMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.fileTop {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.fileTop .fileName {
+  flex: 1;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 500;
+}
+
+.fileTop .fileType {
+  flex-shrink: 0;
+}
+
+.fileSub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cardPill svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pOk {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.pWarn {
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+}
+
+.pInfo {
+  color: var(--blue);
+  background: var(--blue-2);
+}
+
+.pBad {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 11%, transparent);
+}
+
+.fileLink {
+  min-width: 0;
+  flex: 1 1 60%;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.fileMetaLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.metaSep {
+  color: var(--line);
+}
+
+.reviewBad {
+  color: var(--red);
+  font-weight: 500;
+}
+
+.fileNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.fileNote svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--gold);
 }
 
 .activityCard {
