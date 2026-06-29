@@ -26,6 +26,7 @@
     "supplier:ingest": "ts-node ./src/scripts/run-supplier-ingestion.ts",
     "supplier:ingest:db": "medusa exec ./src/scripts/ingest-supplier-catalogs.ts --",
     "marketplace:ingest": "medusa exec ./src/scripts/ingest-marketplace-catalog.ts --",
+    "net32:refresh-prices": "medusa exec ./src/scripts/refresh-net32-prices.ts --",
     "henryschein:ingest": "medusa exec ./src/scripts/ingest-henryschein-catalog.ts --",
     "patterson:ingest": "medusa exec ./src/scripts/ingest-patterson-catalog.ts --",
     "darby:ingest": "medusa exec ./src/scripts/ingest-darby-catalog.ts --",

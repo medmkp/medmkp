@@ -141,9 +141,19 @@ async function doSearch(query, { max = 10, postal = POSTAL } = {}) {
   }, max)
 
   const mpIds = products.map((p) => p.mpId)
+  const bestPriceMap = await fetchBestPrices(page, mpIds, postal)
+
+  return { query, blocked: false, products, bestPriceMap }
+}
+
+// Drive Net32's price API for a set of mpIds from the already-cleared page,
+// batched (the endpoint only answers a handful of ids per call). Shared by
+// search() (to price its hits) and prices() (to refresh known products).
+async function fetchBestPrices(page, mpIds, postal) {
+  const ids = [...new Set(mpIds.map(Number).filter((n) => Number.isFinite(n) && n > 0))]
   const bestPriceMap = {}
-  for (let i = 0; i < mpIds.length; i += BEST_PRICE_BATCH) {
-    const chunk = mpIds.slice(i, i + BEST_PRICE_BATCH)
+  for (let i = 0; i < ids.length; i += BEST_PRICE_BATCH) {
+    const chunk = ids.slice(i, i + BEST_PRICE_BATCH)
     const map = await page.evaluate(
       async ({ chunk, postal }) => {
         try {
@@ -171,8 +181,37 @@ async function doSearch(query, { max = 10, postal = POSTAL } = {}) {
     )
     Object.assign(bestPriceMap, map)
   }
+  return bestPriceMap
+}
 
-  return { query, blocked: false, products, bestPriceMap }
+// Refresh prices for already-known mpIds WITHOUT a search navigation. The
+// expensive part of a search is the page nav + Cloudflare/render wait; the price
+// API itself is a same-origin in-page fetch. So a recurring price refresh that
+// reuses stored mpIds (every product URL carries its mpId) skips navigation
+// entirely. Serialized through the same chain as search() so it shares the one
+// cleared page.
+export function prices(mpIds, opts = {}) {
+  const run = () => doPrices(mpIds, opts)
+  chain = chain.then(run, run)
+  return chain
+}
+
+async function doPrices(mpIds, { postal = POSTAL } = {}) {
+  const page = await getPage()
+  // getBestPrice is same-origin; make sure the shared page is on net32.com and
+  // past the challenge. After any prior search it already is; a cold page needs
+  // one cheap nav to establish the cleared origin.
+  if (!/net32\.com/.test(page.url())) {
+    await page.goto(`${SEARCH_BASE}?query=`, {
+      waitUntil: "domcontentloaded",
+      timeout: 60000,
+    })
+    if (!(await waitCleared(page))) {
+      return { blocked: true, bestPriceMap: {} }
+    }
+  }
+  const bestPriceMap = await fetchBestPrices(page, mpIds, postal)
+  return { blocked: false, bestPriceMap }
 }
 
 export async function health() {
