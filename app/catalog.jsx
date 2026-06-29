@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "./icons";
-import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, cap, catMoney, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
+import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, cap, catMoney, compactSizeLabel, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
 import { CatalogSupplierAvatar, QtyStepper, UomSelect } from "./ui";
 import { CATALOG_CATEGORIES, CATALOG_TINTS, bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
 
@@ -1477,7 +1477,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                           aria-pressed={active}
                           onClick={() => selectVariant(option.indices[0])}
                         >
-                          {option.label}
+                          {compactSizeLabel(option.label)}
                         </button>
                       );
                     })}

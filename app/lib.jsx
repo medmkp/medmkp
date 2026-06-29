@@ -174,6 +174,27 @@ export function variantAxisLabel(variants) {
 }
 
 
+// Compact a clothing/glove size label into its short form (X-Small → XS) so
+// the pills read as a tight XS·S·M·L·XL row instead of full words. Anything
+// that isn't a recognized size (shades, gauges, lengths) passes through
+// unchanged, so this is safe to apply to any variant pill.
+const SIZE_ABBR = {
+  "xx-small": "XXS", "2x-small": "XXS",
+  "x-small": "XS", "xsmall": "XS", "extra small": "XS", "extra-small": "XS",
+  small: "S",
+  medium: "M", med: "M",
+  large: "L",
+  "x-large": "XL", "xlarge": "XL", "extra large": "XL", "extra-large": "XL",
+  "xx-large": "XXL", "2x-large": "XXL",
+  "xxx-large": "XXXL", "3x-large": "XXXL",
+};
+
+export function compactSizeLabel(label) {
+  const key = String(label || "").trim().toLowerCase();
+  return SIZE_ABBR[key] || label;
+}
+
+
 export function cap(value) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }
