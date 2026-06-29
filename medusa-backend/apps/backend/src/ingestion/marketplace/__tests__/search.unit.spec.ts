@@ -1,6 +1,6 @@
 import { alibabaProvider } from "../providers/alibaba"
 import { amazonProvider } from "../providers/amazon"
-import { resultToRow, searchCanonicalOnMarketplace } from "../search"
+import { conflictsOnProductAxis, resultToRow, searchCanonicalOnMarketplace } from "../search"
 import type { MarketplaceFetcher } from "../types"
 
 const ALIBABA_HTML = `
@@ -107,5 +107,129 @@ describe("resultToRow", () => {
     })
     expect(row.canonical_match_status).toBe("needs_review")
     expect(row.canonical_product_id).toBe("mcp_composite_resin")
+  })
+})
+
+// The substitute tier was promoted on title-token overlap alone, which lets a
+// listing that shares a brand + a few generic words through even when it is a
+// different size or shade. `conflictsOnProductAxis` is the structural veto: it
+// fires when the canonical name and listing title disagree on a product-defining
+// numeric axis (size / shade / gauge / measure / catalog #). Cosmetic color is
+// ignored. Each conflicting pair below is a real over-promotion from the #286
+// audit; the accepted ones are still-valid substitutes.
+describe("conflictsOnProductAxis", () => {
+  it("flags wrong glove size (Large vs XX-Large)", () => {
+    expect(
+      conflictsOnProductAxis(
+        "Purple MAX Nitrile Exam Gloves Large",
+        "Aurelia Ignite Nitrile Exam Glove, Orange, XX-Large"
+      )
+    ).toBe(true)
+  })
+
+  it("flags wrong glove size (X-Small vs Extra Large)", () => {
+    expect(
+      conflictsOnProductAxis(
+        "Cranberry Inspire Nitrile Exam Gloves X-Small",
+        "Inspire, Extra Large, Nitrile Exam Gloves"
+      )
+    ).toBe(true)
+  })
+
+  it("flags wrong glove size (Small vs X-Large)", () => {
+    expect(
+      conflictsOnProductAxis(
+        "Ultra One Latex Exam Gloves - Small",
+        "Ultra One Latex glove: X-Large"
+      )
+    ).toBe(true)
+  })
+
+  it("flags a wrong composite/ionomer shade (A1 vs B1)", () => {
+    expect(
+      conflictsOnProductAxis(
+        "Riva Light Cure HV Glass Ionomer Capsule A1",
+        "Riva LC HV B1 Caps"
+      )
+    ).toBe(true)
+  })
+
+  it("flags a wrong measured length (Peeso Reamer 28mm vs 32mm)", () => {
+    expect(
+      conflictsOnProductAxis(
+        "Peeso Reamers, #1-6, 6/Pkg, 28 mm",
+        "SUPPRA Stainless Steel Peeso Reamer, #1 - 6, 32mm, Asst, 6/Pk"
+      )
+    ).toBe(true)
+  })
+
+  it("flags a wrong catalog/mold number (Crown Refill #69 vs #50)", () => {
+    expect(
+      conflictsOnProductAxis(
+        "Polycarbonate Crown Refill #69 Pkg. 5",
+        "Directa Temporary Crowns Refill, Polycarbonate, #50"
+      )
+    ).toBe(true)
+  })
+
+  it("ignores a cosmetic color-only difference (same size gloves)", () => {
+    // A different glove color is still a usable substitute, so it must NOT be
+    // vetoed (color is the only cosmetic axis we exclude).
+    expect(
+      conflictsOnProductAxis(
+        "Nitrile Exam Gloves Blue Large",
+        "Nitrile Exam Gloves Purple Large"
+      )
+    ).toBe(false)
+  })
+
+  it("does not flag a matching size (genuine cross-brand substitute)", () => {
+    expect(
+      conflictsOnProductAxis(
+        "Purple MAX Nitrile Exam Gloves Large",
+        "Aurelia Nitrile Exam Gloves Large"
+      )
+    ).toBe(false)
+  })
+
+  it("does not flag when neither side specifies the axis", () => {
+    expect(
+      conflictsOnProductAxis("Composite Polishing Disc Kit", "Generic Polishing Discs Assorted")
+    ).toBe(false)
+  })
+})
+
+describe("resultToRow substitute gate wiring", () => {
+  it("downgrades a substitute-tier listing with a conflicting size", () => {
+    const row = resultToRow(
+      alibabaProvider,
+      { id: "mcp_glove_l", name: "Purple MAX Nitrile Exam Gloves Large" },
+      {
+        title: "Aurelia Ignite Nitrile Exam Glove, Orange, XX-Large",
+        product_url: "https://www.alibaba.com/product-detail/glove_100001.html",
+        image_url: "",
+      }
+    )
+    // Title overlap alone would grade this a substitute...
+    expect(row.canonical_match_confidence).toBeGreaterThanOrEqual(30)
+    expect(row.canonical_match_confidence).toBeLessThan(55)
+    // ...but the size conflict downgrades it short of the reorder drawer.
+    expect(row.canonical_match_status).toBe("needs_review")
+    expect(row.canonical_match_reason).toMatch(/downgraded/)
+  })
+
+  it("keeps a substitute-tier listing with no axis conflict", () => {
+    const row = resultToRow(
+      alibabaProvider,
+      { id: "mcp_glove_l", name: "Purple MAX Nitrile Exam Gloves Large" },
+      {
+        title: "Nitrile Gloves Large",
+        product_url: "https://www.alibaba.com/product-detail/glove_100002.html",
+        image_url: "",
+      }
+    )
+    expect(row.canonical_match_confidence).toBeGreaterThanOrEqual(30)
+    expect(row.canonical_match_confidence).toBeLessThan(55)
+    expect(row.canonical_match_status).toBe("substitute")
   })
 })
