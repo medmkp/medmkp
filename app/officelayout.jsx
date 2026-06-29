@@ -41,10 +41,18 @@ function formatLastScanned(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const today = new Date();
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (sameDay(date, today)) return `Today, ${time}`;
+  if (sameDay(date, yesterday)) return `Yesterday, ${time}`;
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function MarkerDetail({ location, onOpenLocation, onStartScan }) {
+function MarkerDetail({ location, onOpenLocation, onStartScan, onClose }) {
   if (!location) {
     return (
       <section className="ol-detail empty" aria-label="Selected location">
@@ -63,26 +71,28 @@ function MarkerDetail({ location, onOpenLocation, onStartScan }) {
   return (
     <section className="ol-detail" aria-label={`${location.name} details`}>
       <div className="ol-detail-head">
-        <span className={`ol-detail-icon tint-${meta.tint}`}>
-          <Icon name={meta.icon} className="nav-icon" />
-        </span>
-        <div>
+        <div className="ol-detail-titles">
           <h2>{location.name}</h2>
           <p>{meta.label}</p>
         </div>
+        {onClose ? (
+          <button type="button" className="ol-detail-close" onClick={onClose} aria-label="Close location details">
+            <Icon name="icon-x" className="button-icon" />
+          </button>
+        ) : null}
       </div>
 
-      <dl className="ol-detail-stats">
-        <div>
+      <dl className="ol-detail-rows">
+        <div className="ol-detail-row">
           <dt>Items</dt>
           <dd>{itemCount}</dd>
         </div>
-        <div>
+        <div className="ol-detail-row">
           <dt>Needs attention</dt>
           <dd className={attentionCount ? "attention" : ""}>{attentionCount}</dd>
         </div>
         {lastScanned ? (
-          <div className="wide">
+          <div className="ol-detail-row">
             <dt>Last scanned</dt>
             <dd>{lastScanned}</dd>
           </div>
@@ -90,13 +100,13 @@ function MarkerDetail({ location, onOpenLocation, onStartScan }) {
       </dl>
 
       <div className="ol-detail-actions">
-        <button type="button" className="primary-action compact" onClick={() => onOpenLocation?.(location.id)}>
-          Open location
+        <button type="button" className="ol-detail-action" onClick={() => onOpenLocation?.(location.id)}>
+          <span>Open location</span>
           <Icon name="icon-chevron-right" className="button-icon" />
         </button>
-        <button type="button" className="secondary-action compact" onClick={() => onStartScan?.(location.id)}>
-          <Icon name="icon-scan" className="button-icon" />
-          Start scan
+        <button type="button" className="ol-detail-action" onClick={() => onStartScan?.(location.id)}>
+          <span>Start scan</span>
+          <Icon name="icon-chevron-right" className="button-icon" />
         </button>
       </div>
     </section>
@@ -134,21 +144,45 @@ function GlanceBar({ summary }) {
 }
 
 // A single placeable location tile. Draggable everywhere (grid + tray); clicking
-// it reports a selection. The status dot is amber when the location needs
-// attention, green otherwise.
-function LocationTile({ location, selected, onSelect, onDragStart, onDragEnd }) {
+// it reports a selection. Two variants: "grid" is a centered glyph-over-name
+// marker (amber dot only when the location needs attention), "tray" is a compact
+// horizontal row (amber dot on attention, green otherwise).
+function LocationTile({ location, selected, onSelect, onDragStart, onDragEnd, variant = "tray" }) {
   const meta = typeMeta(location.type);
   const needsAttention = (location.needs_attention_count || 0) > 0;
+  const common = {
+    type: "button",
+    draggable: true,
+    onClick: () => onSelect?.(location.id),
+    onDragStart: (event) => onDragStart(event, location.id),
+    onDragEnd,
+    "aria-pressed": selected,
+  };
+
+  // Grid markers mirror the wireframe: a centered glyph above the name, with a
+  // small amber dot only when the location needs attention.
+  if (variant === "grid") {
+    return (
+      <button {...common} className={`ol-tile ol-tile-grid ${selected ? "selected" : ""}`}>
+        <span className="ol-tile-glyph">
+          <Icon name={meta.icon} className="nav-icon" />
+        </span>
+        <strong className="ol-tile-name">{location.name}</strong>
+        {needsAttention ? (
+          <span
+            className="ol-tile-dot attention"
+            title={`${location.needs_attention_count} need attention`}
+            aria-label={`${location.needs_attention_count} items need attention`}
+          />
+        ) : null}
+      </button>
+    );
+  }
+
+  // Tray tiles stay as a compact horizontal row, where the type + item count read
+  // better than a centered card.
   return (
-    <button
-      type="button"
-      className={`ol-tile ${selected ? "selected" : ""}`}
-      draggable
-      onClick={() => onSelect?.(location.id)}
-      onDragStart={(event) => onDragStart(event, location.id)}
-      onDragEnd={onDragEnd}
-      aria-pressed={selected}
-    >
+    <button {...common} className={`ol-tile ${selected ? "selected" : ""}`}>
       <span className={`ol-tile-icon tint-${meta.tint}`}>
         <Icon name={meta.icon} className="nav-icon" />
       </span>
@@ -368,6 +402,7 @@ export function OfficeLayoutView({
                   {tile ? (
                     <LocationTile
                       location={tile}
+                      variant="grid"
                       selected={selectedId === tile.id}
                       onSelect={selectLocation}
                       onDragStart={handleDragStart}
@@ -382,7 +417,12 @@ export function OfficeLayoutView({
           </div>
 
           <div className="ol-rail">
-            <MarkerDetail location={selectedLocation} onOpenLocation={onOpenLocation} onStartScan={onStartScan} />
+            <MarkerDetail
+              location={selectedLocation}
+              onOpenLocation={onOpenLocation}
+              onStartScan={onStartScan}
+              onClose={() => setSelectedId(null)}
+            />
 
             <aside
               className={`ol-tray ${dropTarget === "tray" ? "drop-target" : ""}`}

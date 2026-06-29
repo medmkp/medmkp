@@ -78,7 +78,7 @@ reorder timing**, *not* perpetual inventory:
 | `location-detail` | `location-detail.png` | `app/locations.jsx` | — | shipped |
 | `location-edit` | `location-edit.png` | `app/locations.jsx` | — | shipped |
 | `lot-detail` | `lot-detail.png` | `app/locations.jsx` (drawer) | — | greenfield — the "source of truth" frame: one record per lot per location (not per package); shows product, lot, last-verified, expiry, lifecycle, evidence, recall/expiry issues |
-| `office-layout` | `office-layout.png` | `app/officelayout.jsx` | — | partial |
+| `office-layout` | `office-layout.png` | `app/officelayout.jsx` | — | shipped — markers (centered glyph + name on a dotted snap-grid) and the right detail rail (close, stat rows, chevron action list) match the frame in tokens (#329), with a bottom "Your office at a glance" summary bar. Intentional divergence: no left type-palette, no zoom control; placement uses an Unplaced tray + header Add/Save/Reset, and the rail exposes the two shipped actions (Open location, Start scan) |
 | `qr-labels` | `qr-labels.png` | `app/qrlabels.jsx` | — | partial |
 
 ## Evidence / compliance

@@ -11071,17 +11071,18 @@ th {
   gap: 14px;
 }
 
-/* Snap-to-grid canvas */
+/* Snap-to-grid canvas — a calm dotted field, like the wireframe, rather than
+   heavy ruled lines. Empty cells stay invisible so only placed markers read. */
 .ol-grid {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background:
-    repeating-linear-gradient(0deg, transparent 0 119px, var(--line) 119px 120px),
-    repeating-linear-gradient(90deg, transparent 0 119px, var(--line) 119px 120px),
-    var(--surface-2);
+  border-radius: 16px;
+  background-color: var(--surface-2);
+  background-image: radial-gradient(var(--line) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+  background-position: 8px 8px;
   box-shadow: var(--shadow);
 }
 .ol-cell {
@@ -11100,9 +11101,6 @@ th {
   width: 100%;
   height: 100%;
   min-height: 104px;
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.55);
 }
 
 /* A placeable location tile */
@@ -11128,6 +11126,31 @@ th {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px var(--blue-2), 0 4px 14px rgba(23, 44, 92, 0.08);
 }
+
+/* Grid variant: centered glyph above the name, matching the wireframe markers. */
+.ol-tile-grid {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 10px;
+  text-align: center;
+}
+.ol-tile-glyph {
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+}
+.ol-tile-glyph .nav-icon { width: 28px; height: 28px; }
+.ol-tile-grid .ol-tile-name {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  line-height: 1.3;
+}
+
 .ol-tile-icon {
   display: grid;
   place-items: center;
@@ -11140,7 +11163,7 @@ th {
 .ol-tile-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ol-tile-name {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11156,8 +11179,8 @@ th {
   border-radius: 999px;
   flex: 0 0 auto;
 }
-.ol-tile-dot.ok { background: var(--green); box-shadow: 0 0 0 3px #e5f6ec; }
-.ol-tile-dot.attention { background: var(--gold); box-shadow: 0 0 0 3px #fff3db; }
+.ol-tile-dot.ok { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, var(--surface)); }
+.ol-tile-dot.attention { background: var(--gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 18%, var(--surface)); }
 
 /* Unplaced tray */
 .ol-tray {
@@ -11219,7 +11242,7 @@ th {
 .ol-detail-empty-icon .nav-icon { width: 21px; height: 21px; }
 .ol-detail h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--ink);
 }
@@ -11231,58 +11254,81 @@ th {
 }
 .ol-detail-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
   min-width: 0;
 }
-.ol-detail-icon {
+.ol-detail-titles { min-width: 0; }
+.ol-detail-close {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
-}
-.ol-detail-icon .nav-icon { width: 22px; height: 22px; }
-.ol-detail-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-.ol-detail-stats div {
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-2);
-}
-.ol-detail-stats .wide { grid-column: 1 / -1; }
-.ol-detail-stats dt {
-  margin: 0 0 4px;
+  margin: -2px -2px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
 }
-.ol-detail-stats dd {
+.ol-detail-close:hover { background: var(--surface-2); color: var(--ink); }
+.ol-detail-close .button-icon { width: 16px; height: 16px; }
+
+/* Stat rows: label left, value right, divided — the wireframe's quiet summary. */
+.ol-detail-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.ol-detail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ol-detail-row dt { margin: 0; color: var(--muted); font-size: 13px; }
+.ol-detail-row dd {
   margin: 0;
   color: var(--ink);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
-.ol-detail-stats dd.attention { color: var(--gold); }
+.ol-detail-row dd.attention { color: var(--gold); }
+
+/* Action list: full-width rows with a trailing chevron, like the wireframe. */
 .ol-detail-actions {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+}
+.ol-detail-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-}
-.ol-detail-actions .primary-action,
-.ol-detail-actions .secondary-action {
   width: 100%;
-  justify-content: center;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s ease;
 }
+.ol-detail-action:hover { background: var(--surface-2); }
+.ol-detail-action .button-icon { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
+
 /* "Your office at a glance" — honest summary bar below the board */
 .ol-glance {
   padding: 16px 18px;
