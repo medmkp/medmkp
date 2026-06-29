@@ -301,26 +301,39 @@ async function queryCategoryListing(
   offset: number
 ): Promise<CategoryListResult> {
   const pool = getPostgresPool()
+  // Page the read model FIRST (the (category_key, unit_price, price) index serves
+  // the ORDER BY + LIMIT as a top-N), then join supplier rows for just that page.
+  // Joining before the LIMIT — and computing the total with COUNT(*) OVER() over
+  // the joined set — forced a per-family pkey lookup into supplier_product for the
+  // whole category (~17k loops, ~5.5s on the biggest one) just to return 24 rows.
+  // The total now comes from a cheap index count over the read model alone.
   const { rows } = await pool.query(
     `
+    WITH page AS (
+      SELECT grp, variant_count, family_id, family_handle, family_name,
+             any_handle, any_name, any_category, offer_count,
+             price_cents, unit_price_cents, best_sp_id
+      FROM medmkp_category_catalog_listing
+      WHERE category_key = $1
+      ORDER BY (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC, any_name ASC
+      LIMIT $2 OFFSET $3
+    )
     SELECT
-      l.grp AS id, l.variant_count, l.family_id, l.family_handle, l.family_name,
-      l.any_handle, l.any_name, l.any_category,
-      l.offer_count,
-      l.price_cents AS best_price, l.unit_price_cents AS best_unit_price,
-      l.best_sp_id,
+      page.grp AS id, page.variant_count, page.family_id, page.family_handle, page.family_name,
+      page.any_handle, page.any_name, page.any_category,
+      page.offer_count,
+      page.price_cents AS best_price, page.unit_price_cents AS best_unit_price,
+      page.best_sp_id,
       sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
       sp.image_url AS best_image, sp.product_url AS best_url,
       sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty,
       sp.base_unit AS best_base_unit, sp.pack_basis AS best_pack_basis,
       sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
-      COUNT(*) OVER() AS total_count
-    FROM medmkp_category_catalog_listing l
-    JOIN medmkp_supplier_product sp ON sp.id = l.best_sp_id AND sp.deleted_at IS NULL
+      (SELECT count(*) FROM medmkp_category_catalog_listing WHERE category_key = $1) AS total_count
+    FROM page
+    JOIN medmkp_supplier_product sp ON sp.id = page.best_sp_id AND sp.deleted_at IS NULL
     LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
-    WHERE l.category_key = $1
-    ORDER BY (l.unit_price_cents IS NULL) ASC, l.unit_price_cents ASC, l.price_cents ASC, l.any_name ASC
-    LIMIT $2 OFFSET $3
+    ORDER BY (page.unit_price_cents IS NULL) ASC, page.unit_price_cents ASC, page.price_cents ASC, page.any_name ASC
     `,
     [category, limit, offset]
   )
