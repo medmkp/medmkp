@@ -98,7 +98,7 @@ echo "###rotation###"; cat "$H/.rotation" 2>/dev/null
 echo "###health###"; bash "$H/checkout/scripts/eng-loop/health.sh" json 2>/dev/null
 echo "###cronlog_mtime###"; stat -c %Y "$H/logs/cron.log" 2>/dev/null
 echo "###worktrees###"; ls -1 "$H/worktrees/" 2>/dev/null
-echo "###usage###"; tail -n 800 "$(ls -1t "$H"/logs/[0-9]*.log 2>/dev/null | head -1)" 2>/dev/null | grep -E "usage-gate|usage-codex" | tail -4
+echo "###usage###"; _ulogs="$(ls -1t "$H"/logs/[0-9]*.log 2>/dev/null | head -3)"; for _uf in $_ulogs; do _um="$(grep -E "usage-gate.*claude: window=" "$_uf" 2>/dev/null | tail -1)"; [ -n "$_um" ] && { echo "$_um"; break; }; done; for _uf in $_ulogs; do _um="$(grep -E "usage-codex.*codex remaining:" "$_uf" 2>/dev/null | tail -1)"; [ -n "$_um" ] && { echo "$_um"; break; }; done
 echo "###crontail###"; tail -n '"$TAIL_HIST"' "$H/logs/cron.log" 2>/dev/null
 echo "###eof###"
 '
@@ -116,6 +116,7 @@ section() { awk -v s="###$1###" '$0==s{f=1;next} /^###[a-z_]+###$/{f=0} f' <<<"$
 # --- 2. Liveness vars -------------------------------------------------------
 host=""; now_epoch=""; now_human=""; sched=""; pause="no"; rotation=""
 mtime=""; ago=""; worktrees=0; hv=""; hd=""; cl=""; cx=""
+cl_week_used=""; cl_sess_used=""; cx_week_rem=""; cx_5h_rem=""
 uptime_h=""; platform=""; version=""; tz=""
 if [ "$NUC_OK" = "1" ]; then
   host="$(section hostname)"
@@ -132,9 +133,18 @@ if [ "$NUC_OK" = "1" ]; then
   hv="$(printf '%s' "$health_json" | grep -oE '"verdict":[[:space:]]*"[A-Z]+"' | grep -oE '[A-Z]+' | head -1)"
   hd="$(printf '%s' "$health_json" | sed -nE 's/.*"detail":[[:space:]]*"([^"]*)".*/\1/p' | head -1)"
 
+  # Real usage budgets — parse the MOST RECENT line of each kind from a wide
+  # window (the gate skips logging a codex line whenever Claude has budget, so a
+  # short tail loses it). Claude bracket = % USED; Codex parens = % REMAINING.
   usage="$(section usage)"
-  cl="$(printf '%s' "$usage" | grep -oE 'claude: window=[^ ]+ remaining=[0-9]+%' | grep -oE '[0-9]+%' | head -1)"
-  cx="$(printf '%s' "$usage" | grep -oE 'codex remaining:.*rem=[0-9]+%' | grep -oE 'rem=[0-9]+%' | grep -oE '[0-9]+%' | head -1)"
+  cl_line="$(printf '%s' "$usage" | grep -E 'usage-gate.*claude: window=' | tail -1)"
+  cx_line="$(printf '%s' "$usage" | grep -E 'usage-codex.*codex remaining:' | tail -1)"
+  cl="$(printf '%s' "$cl_line" | grep -oE 'remaining=[0-9]+%' | grep -oE '[0-9]+%' | head -1)"
+  cx="$(printf '%s' "$cx_line" | grep -oE 'rem=[0-9]+%'       | grep -oE '[0-9]+%' | head -1)"
+  cl_week_used="$(printf '%s' "$cl_line" | grep -oE 'week=[0-9]+'    | grep -oE '[0-9]+' | head -1)"
+  cl_sess_used="$(printf '%s' "$cl_line" | grep -oE 'session=[0-9]+' | grep -oE '[0-9]+' | head -1)"
+  cx_week_rem="$(printf '%s' "$cx_line"  | grep -oE 'weekly=[0-9]+'  | grep -oE '[0-9]+' | head -1)"
+  cx_5h_rem="$(printf '%s' "$cx_line"    | grep -oE '5h=[0-9]+'      | grep -oE '[0-9]+' | head -1)"
 fi
 
 # --- 3. Tick history parse (current run + recent ticks) ---------------------
@@ -194,13 +204,17 @@ fi
 
 # --- 4. PRs created recently (local gh; merged/open/closed) -----------------
 recent_prs="$(gh pr list --repo "$LOOP_REPO" --state all --limit 80 \
-        --json number,title,state,createdAt,mergedAt,headRefName,url 2>/dev/null)"
+        --json number,title,state,createdAt,mergedAt,headRefName,url,closingIssuesReferences 2>/dev/null)"
 RECENT_PR_ROWS="$(printf '%s' "$recent_prs" | jq -r '
   [ .[] | select(.headRefName|startswith("eng-loop-")) ]
   | sort_by(.createdAt) | reverse | .[:8][]
   | (.headRefName | sub("^eng-loop-";"") | sub("-[0-9]{8}-[0-9]{6}$";"")) as $cat
   | ((now - (.createdAt|fromdateiso8601)) | floor) as $age
   | [ .number, (if .mergedAt then "MERGED" else .state end), $cat, $age, .title ] | @tsv' 2>/dev/null)"
+# PR → closing-issue number (for the "↳ #issue" link in the unified PR list)
+RECENT_PR_ISSUE="$(printf '%s' "$recent_prs" | jq -r '
+  .[] | select(.headRefName|startswith("eng-loop-"))
+  | [ .number, (.closingIssuesReferences[0].number // "") ] | @tsv' 2>/dev/null)"
 
 # --- 5. Open loop PRs (local gh) --------------------------------------------
 prs="$(gh pr list --repo "$LOOP_REPO" --state open --limit 100 \
@@ -264,14 +278,15 @@ if [ "$HTML" = "1" ]; then
     local h; h=$(printf '%s' "$L" | od -An -tu1 2>/dev/null | awk '{for(i=1;i<=NF;i++)s+=$i} END{print (s%360)}')
     printf '<span class="lane" style="--h:%s">%s</span>' "${h:-210}" "$(e "$L")"
   }
-  donut() {  # $1=used% $2=hue $3=engine-name ; centre shows N% / used
-    local pct="${1:-0}" hue="$2" name="$3"
-    [ -z "$pct" ] && pct=0
+  donut() {  # $1=used% $2=hue $3=engine-name $4=caption ; centre shows N% / used
+    local pct="$1" hue="$2" name="$3" cap="$4" mid
+    if [ -z "$pct" ]; then mid='<b style="color:#8a93a2">—</b>'; pct=0
+    else mid="$(printf '<b style="color:hsl(%s,70%%,42%%)">%s</b><span>used</span>' "$hue" "${pct}%")"; fi
     local circ off
     circ=$(awk 'BEGIN{printf "%.2f", 2*3.14159265*42}')
     off=$(awk -v c="$circ" -v p="$pct" 'BEGIN{printf "%.2f", c*(1-p/100)}')
-    printf '<div class="donut"><svg viewBox="0 0 108 108"><circle class="dt" cx="54" cy="54" r="42"/><circle class="dv" cx="54" cy="54" r="42" style="--hue:%s;stroke-dasharray:%s;stroke-dashoffset:%s"/></svg><div class="dc"><b style="color:hsl(%s,70%%,42%%)">%s</b><span>used</span></div><div class="dl">%s</div></div>' \
-      "$hue" "$circ" "$off" "$hue" "${pct}%" "$(e "$name")"
+    printf '<div class="donut"><svg viewBox="0 0 108 108"><circle class="dt" cx="54" cy="54" r="42"/><circle class="dv" cx="54" cy="54" r="42" style="--hue:%s;stroke-dasharray:%s;stroke-dashoffset:%s"/></svg><div class="dc">%s</div><div class="dl">%s</div><div class="dcap">%s</div></div>' \
+      "$hue" "$circ" "$off" "$mid" "$(e "$name")" "$(e "$cap")"
   }
   clock() { printf '%s' "$1" | awk -F: '{h=$1+0; ap=(h<12?"AM":"PM"); hh=h%12; if(hh==0)hh=12; printf "%d:%s:%s %s", hh, $2, $3, ap}'; }
 
@@ -297,9 +312,15 @@ if [ "$HTML" = "1" ]; then
   ready_hours=""; [ "${qn:-0}" -gt 0 ] && ready_hours="$(awk -v q="$qn" -v i="$ivh" 'BEGIN{printf "%.0f", q*i/60}')"
 
   cl_rem="${cl%\%}"; cx_rem="${cx%\%}"
-  claude_used=""; codex_used=""
-  [ -n "$cl_rem" ] && claude_used=$(( 100 - cl_rem ))
-  [ -n "$cx_rem" ] && codex_used=$(( 100 - cx_rem ))
+  # Usage donuts: weekly % USED is the headline budget; the short window (Claude
+  # session / Codex 5h) is the caption. Each falls back to the gate's remaining=.
+  claude_used="${cl_week_used}"
+  [ -z "$claude_used" ] && [ -n "$cl_rem" ] && claude_used=$(( 100 - cl_rem ))
+  codex_used=""
+  [ -n "$cx_week_rem" ] && codex_used=$(( 100 - cx_week_rem ))
+  [ -z "$codex_used" ] && [ -n "$cx_rem" ] && codex_used=$(( 100 - cx_rem ))
+  claude_cap=""; [ -n "$cl_sess_used" ] && claude_cap="session ${cl_sess_used}% used"
+  codex_cap="";  [ -n "$cx_5h_rem" ] && codex_cap="5h $(( 100 - cx_5h_rem ))% used"
   eng_next="Claude"; { [ -n "$cl_rem" ] && [ "$cl_rem" -le "$GATE_THRESHOLD" ]; } && eng_next="Codex"
 
   # pipeline health verdict
@@ -311,7 +332,12 @@ if [ "$HTML" = "1" ]; then
   # ---- recent ticks → cycles table + failure tally + sparkline ----------
   fail_n=0
   # lane for a cycle's PR — look it up in RECENT_PR_ROWS (portable; no assoc arrays)
-  pr_lane() { printf '%s\n' "$RECENT_PR_ROWS" | awk -F'\t' -v n="$1" '$1==n{print $3; exit}'; }
+  pr_lane()  { printf '%s\n' "$RECENT_PR_ROWS"  | awk -F'\t' -v n="$1" '$1==n{print $3; exit}'; }
+  pr_issue() { printf '%s\n' "$RECENT_PR_ISSUE" | awk -F'\t' -v n="$1" '$1==n{print $2; exit}'; }
+  # merge/review/ci detail for an open PR (empty when the PR is not open)
+  pr_open_detail() { printf '%s\n' "$PR_ROWS" | awk -F'\t' -v n="$1" '$1==n{print $2"\t"$3"\t"$4; exit}'; }
+  # linkify every "#N" in an already-escaped string to issues/ or pull/ on GitHub
+  link_refs() { printf '%s' "$1" | sed -E "s|#([0-9]+)|<a href='https://github.com/$LOOP_REPO/$2/\1' target='_blank'>#\1</a>|g"; }
   spark_bars=""
   if [ -n "$TICKS" ]; then
     while IFS=$'\t' read -r t eng work result flag; do
@@ -351,37 +377,44 @@ if [ "$HTML" = "1" ]; then
       [ -n "$prn" ] && lane="$(pr_lane "$prn")"
       [ -z "$lane" ] && case "$work" in auto:\ *) lane="${work#auto: }" ;; esac
       engc=cla; [ "$eng" = "codex" ] && engc=cod
-      cycles_html+="<tr><td class='mut'>$(e "$t")</td><td><span class='eng $engc'>$(e "$(printf '%s' "$eng" | tr a-z A-Z)")</span></td><td>$(lane_pill "$lane")</td><td class='wi'>$(e "$work")</td><td class='$oc'><span class='oi'>$oicon</span>$(e "$result")</td></tr>"
+      # work item: link an "issue #N" to the issue, a "PR #N" to the pull request
+      wpath=pull; case "$work" in *"issue #"*) wpath=issues ;; esac
+      work_html="$(link_refs "$(e "$work")" "$wpath")"
+      result_html="$(link_refs "$(e "$result")" "pull")"
+      cycles_html+="<tr><td class='mut'>$(e "$t")</td><td><span class='eng $engc'>$(e "$(printf '%s' "$eng" | tr a-z A-Z)")</span></td><td>$(lane_pill "$lane")</td><td class='wi'>$work_html</td><td class='$oc'><span class='oi'>$oicon</span>$result_html</td></tr>"
     done < <(printf '%s\n' "$TICKS" | tail -10)
   else cycles_html="<tr><td class='mut' colspan='5'>no cycles in the last $TAIL_HIST log lines</td></tr>"; fi
 
-  # ---- recently created PRs table ---------------------------------------
-  recent_html=""
-  if [ -n "$RECENT_PR_ROWS" ]; then
+  # ---- open-PR failure tally (drives the Pipeline-status banner) ---------
+  pr_fail="$(printf '%s' "$PR_ROWS" | awk -F'\t' '$2=="CONFLICTING" || $4=="FAIL"{n++} END{print n+0}')"
+
+  # ---- unified PR list (recent PRs; open ones show review/CI as status) --
+  # Collapses "recently created" + "open awaiting review" into one table. For an
+  # OPEN PR the Status cell reflects the actionable state (conflict > CI > review);
+  # MERGED/CLOSED show as-is. Each PR links its closing issue (↳ #N) when known.
+  prlist_html=""
+  if [ "$GH_OK" = "0" ]; then prlist_html="<tr><td class='bad' colspan='4'>could not query GitHub (is gh authed?)</td></tr>"
+  elif [ -n "$RECENT_PR_ROWS" ]; then
     while IFS=$'\t' read -r num state cat age title; do
       [ -z "$num" ] && continue
-      case "$state" in MERGED) sc=ok ;; OPEN) sc=blu ;; *) sc=mut ;; esac
-      recent_html+="<tr><td><a href='https://github.com/$LOOP_REPO/pull/$num' target='_blank'>#$num</a></td><td><span class='pill $sc'>$(e "$state")</span></td><td>$(lane_pill "$cat")</td><td class='wi'>$(e "$title")</td><td class='mut'>$(rel "${age:-0}")</td></tr>"
+      if [ "$state" = "OPEN" ]; then
+        IFS=$'\t' read -r merge review ci < <(pr_open_detail "$num")
+        if   [ "$merge" = "CONFLICTING" ]; then sc=bad;  sw="Conflicting"
+        elif [ "$ci" = "FAIL" ];           then sc=bad;  sw="CI failing"
+        elif [ "$ci" = "pending" ];        then sc=warn; sw="CI pending"
+        elif [ "$review" = "APPROVED" ];   then sc=ok;   sw="Approved"
+        elif [ "$review" = "CHANGES_REQUESTED" ]; then sc=warn; sw="Changes req"
+        else sc=blu; sw="Review req"; fi
+      else
+        case "$state" in MERGED) sc=ok; sw="Merged" ;; *) sc=mut; sw="Closed" ;; esac
+      fi
+      iss="$(pr_issue "$num")"; isslink=""
+      [ -n "$iss" ] && isslink=" <a class='iss' href='https://github.com/$LOOP_REPO/issues/$iss' target='_blank'>↳ #$iss</a>"
+      prlist_html+="<tr><td class='prc'><a href='https://github.com/$LOOP_REPO/pull/$num' target='_blank'>#$num</a>$isslink</td><td><span class='pill $sc'>$(e "$sw")</span></td><td>$(lane_pill "$cat")</td><td class='wi'>$(e "$title") <span class='age'>$(rel "${age:-0}")</span></td></tr>"
     done <<EOF
 $RECENT_PR_ROWS
 EOF
-  else recent_html="<tr><td class='mut' colspan='5'>no loop PRs found</td></tr>"; fi
-
-  # ---- open PRs awaiting review table -----------------------------------
-  open_html=""; pr_fail=0
-  if [ "$GH_OK" = "0" ]; then open_html="<tr><td class='bad' colspan='6'>could not query GitHub (is gh authed?)</td></tr>"
-  elif [ -n "$PR_ROWS" ]; then
-    while IFS=$'\t' read -r num merge review ci cat title; do
-      [ -z "$num" ] && continue
-      case "$merge" in CONFLICTING) mc=bad; mw="Conflicting"; mi="$xk" ;; UNKNOWN) mc=mut; mw="Unknown"; mi="<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg>" ;; *) mc=ok; mw="Ready"; mi="$ck" ;; esac
-      case "$review" in CHANGES_REQUESTED) rv="Changes requested"; rvc=warn ;; APPROVED) rv="Approved"; rvc=ok ;; *) rv="Review required"; rvc=mut ;; esac
-      case "$ci" in FAIL) cic=bad; cw="Fail" ;; pending) cic=warn; cw="Pending" ;; none) cic=mut; cw="—" ;; *) cic=ok; cw="Pass" ;; esac
-      { [ "$merge" = "CONFLICTING" ] || [ "$ci" = "FAIL" ]; } && pr_fail=$((pr_fail+1))
-      open_html+="<tr><td><a href='https://github.com/$LOOP_REPO/pull/$num' target='_blank'>#$num</a></td><td class='$mc'><span class='si'>$mi</span>$mw</td><td class='$rvc'>$(e "$rv")</td><td class='$cic'>$cw</td><td>$(lane_pill "$cat")</td><td class='wi'>$(e "$title")</td></tr>"
-    done <<EOF
-$PR_ROWS
-EOF
-  else open_html="<tr><td class='mut' colspan='6'>none open — all created PRs merged or closed</td></tr>"; fi
+  else prlist_html="<tr><td class='mut' colspan='4'>no loop PRs found</td></tr>"; fi
 
   # ---- queued-next list --------------------------------------------------
   queued_html=""
@@ -496,6 +529,7 @@ EOF
   .donut .dc{position:absolute;top:34px;left:0;right:0;text-align:center;line-height:1.1}
   .donut .dc b{font-size:17px;font-weight:680;display:block} .donut .dc span{font-size:10px;color:var(--mut)}
   .donut .dl{margin-top:4px;color:var(--ink2);font-size:12px;font-weight:540}
+  .donut .dcap{color:var(--mut);font-size:10.5px;margin-top:1px}
   /* failures card */
   .fail{display:flex;gap:13px;align-items:center}
   .fic{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:23px;flex-shrink:0}
@@ -543,6 +577,9 @@ EOF
   tbody td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line2);vertical-align:middle}
   tbody tr:last-child td{border-bottom:0}
   td.wi{color:var(--ink);max-width:1px;width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  td.prc{white-space:nowrap}
+  .iss{color:var(--mut);font-size:11px;font-weight:500} .iss:hover{color:var(--blu)}
+  .age{color:var(--mut);font-size:10.5px;margin-left:4px}
   .si,.oi{display:inline-flex;margin-right:5px;vertical-align:-.12em}
   /* chips / pills */
   .lane{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:540;white-space:nowrap;
@@ -600,8 +637,8 @@ EOF
       <div class="card">
         <div class="ct"><h2>Usage budget <span class="mut" style="text-transform:none;letter-spacing:0">(used)</span></h2></div>
         <div class="donuts">
-          $(donut "${claude_used:-0}" 145 "Claude")
-          $(donut "${codex_used:-0}" 35 "Codex")
+          $(donut "$claude_used" 145 "Claude" "$claude_cap")
+          $(donut "$codex_used" 35 "Codex" "$codex_cap")
         </div>
       </div>
       <div class="card">
@@ -668,21 +705,17 @@ EOF
 
     <div class="grid r3" id="prs">
       <div class="card">
-        <div class="ct"><h2>Recently created pull requests</h2><a href="https://github.com/$LOOP_REPO/pulls" target="_blank">View all →</a></div>
-        <table><thead><tr><th>PR</th><th>Status</th><th>Lane</th><th>Title</th><th>Created</th></tr></thead><tbody>$recent_html</tbody></table>
+        <div class="ct"><h2>Pull requests</h2><a href="https://github.com/$LOOP_REPO/pulls" target="_blank">View all →</a></div>
+        <table><thead><tr><th>PR</th><th>Status</th><th>Lane</th><th>Title</th></tr></thead><tbody>$prlist_html</tbody></table>
       </div>
-      <div class="card">
-        <div class="ct"><h2>Open PRs awaiting review</h2><a href="https://github.com/$LOOP_REPO/pulls" target="_blank">View all →</a></div>
-        <table><thead><tr><th>PR</th><th>Merge</th><th>Review</th><th>CI</th><th>Lane</th><th>Title</th></tr></thead><tbody>$open_html</tbody></table>
-      </div>
-    </div>
-
-    <div class="grid r3">
       <div class="card" id="cycles">
         <div class="ct"><h2>Recent cycles <span class="mut" style="text-transform:none;letter-spacing:0">(last 10)</span></h2></div>
         <table><thead><tr><th>Time</th><th>Engine</th><th>Lane</th><th>Work item</th><th>Outcome</th></tr></thead><tbody>$cycles_html</tbody></table>
       </div>
-      <div class="card" id="logs">
+    </div>
+
+    <div class="grid" id="logs" style="margin-top:14px">
+      <div class="card">
         <div class="ct"><h2>Log tail <span class="mut" style="text-transform:none;letter-spacing:0">($(e "${host:-$NUC_HOST}"))</span></h2><span class="mut" style="font-size:12px">last $TAIL_N</span></div>
         <div class="logwrap">$logtail_html</div>
       </div>
