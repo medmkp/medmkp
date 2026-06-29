@@ -1073,13 +1073,6 @@ main:has(.upload-view) {
   font-weight: 600;
 }
 
-.search-suggest-icon {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
-  color: var(--muted);
-}
-
 .search-suggest-text {
   min-width: 0;
   overflow: hidden;
@@ -10059,6 +10052,8 @@ th {
 .cat-pt-path span { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: #46536d; }
 .cat-pt-pathsep { width: 13px; height: 13px; color: #b3bccd; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
 .cat-pt-path em { display: block; margin-top: 3px; font-style: normal; font-size: 12px; color: var(--muted); }
+.cat-pt-packcol { white-space: nowrap; font-size: 12.5px; color: var(--ink); }
+.cat-pt-packcol em { font-style: normal; color: var(--muted); }
 
 .cat-pt-price { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .cat-pt-price strong { font-size: 14px; font-weight: 600; }
