@@ -89,7 +89,7 @@ reorder timing**, *not* perpetual inventory:
 | `evidence-detail` | `evidence-detail.png` | `app/evidence.jsx` (drawer) | — | partial |
 | `evidence-upload` | `evidence-upload.png` | _greenfield_ | — | greenfield |
 | `evidence-match-review` | `evidence-match-review.png` | _greenfield_ | — | greenfield |
-| `evidence-redline` | `evidence-redline.png` | _greenfield_ | — | greenfield — compliance update review, single redline/diff approve |
+| `evidence-redline` | `evidence-redline.png` | `app/evidence.jsx` (`RedlineView`) | — | built (frame-26) — compliance update review: before/after identity, field-level change list (changed/added/removed), section redline, reviewer comment + action footer. FE-first fixture (`REDLINE_MOCK`); actions are honest stubs. Reached via the Evidence Library "newer version" banner → `/app/evidence/redline` |
 | `evidence-viewer` | `evidence-viewer.png` | _greenfield_ | — | greenfield — read-only on-site presentation mode (mobile) |
 | `compliance-binder` | `compliance-binder.png` | `app/evidence.jsx` (export) | — | partial — Export = `window.print` |
 | `scan-report` | `scan-report.png` | _greenfield_ | — | greenfield — supply scan report |

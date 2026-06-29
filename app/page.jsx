@@ -11,7 +11,7 @@ import { QrLabelView } from "./qrlabels";
 import { ScannerView } from "./scansessions";
 import { MobileReorderScan } from "./scanmobile";
 import { getScanAudioCtx, loadMatchChime, playMatchChime, vibrateNoMatch } from "./scanSound";
-import { EvidenceView, EvidenceBinderView } from "./evidence";
+import { EvidenceView, EvidenceBinderView, RedlineView } from "./evidence";
 import { EvidenceMobileViewer } from "./evidenceviewer";
 import { ReportsView } from "./reports";
 import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
@@ -1736,7 +1736,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon, count]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels" || view === "officeLayout")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels" || view === "officeLayout")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer" || view === "evidenceRedline")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1835,8 +1835,13 @@ export default function Home() {
           {view === "evidence" && (
             <EvidenceView
               onBuildPacket={() => navigate("/app/evidence/binder")}
+              onReviewUpdate={() => navigate("/app/evidence/redline")}
               onToast={showToast}
             />
+          )}
+
+          {view === "evidenceRedline" && (
+            <RedlineView onBack={() => navigate("/app/evidence")} onToast={showToast} />
           )}
 
           {view === "evidenceBinder" && (

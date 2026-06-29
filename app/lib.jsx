@@ -58,6 +58,7 @@ export const routeByView = {
   scanner: "/app/scan-session",
   evidence: "/app/evidence",
   evidenceViewer: "/app/evidence/viewer",
+  evidenceRedline: "/app/evidence/redline",
   evidenceBinder: "/app/evidence/binder",
   reports: "/app/reports",
   plan: "/app/review",
@@ -112,6 +113,7 @@ export function viewFromPath(pathname = "/") {
         doc: query.get("doc") || "",
       },
     };
+  if (path === "/app/evidence/redline") return { view: "evidenceRedline", isLoggedIn: true };
   if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
   if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
   if (path === "/app/reports") return { view: "reports", isLoggedIn: true };
