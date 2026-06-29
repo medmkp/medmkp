@@ -1,0 +1,16 @@
+[Unit]
+Description=eng-loop status dashboard (HTTP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=STATUS_PORT=8799
+Environment=STATUS_LIB=%h/eng-loop/status-server/lib
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+ExecStart=/usr/bin/python3 %h/eng-loop/status-server/serve.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
