@@ -135,8 +135,8 @@ else
   # Health verdict (from health.sh on the NUC) — lead with it so DOWN/STALLED is
   # the first thing on screen. Absent (empty) until health.sh is deployed.
   health_json="$(section health)"
-  hv="$(printf '%s' "$health_json" | grep -oE '"verdict":"[A-Z]+"' | grep -oE '[A-Z]+' | head -1)"
-  hd="$(printf '%s' "$health_json" | sed -nE 's/.*"detail":"([^"]*)".*/\1/p' | head -1)"
+  hv="$(printf '%s' "$health_json" | grep -oE '"verdict":[[:space:]]*"[A-Z]+"' | grep -oE '[A-Z]+' | head -1)"
+  hd="$(printf '%s' "$health_json" | sed -nE 's/.*"detail":[[:space:]]*"([^"]*)".*/\1/p' | head -1)"
   if [ -n "$hv" ]; then
     case "$hv" in OK) hc="$GRN" ;; DEGRADED) hc="$YEL" ;; STALLED|DOWN) hc="$RED" ;; *) hc="$DIM" ;; esac
     printf '  %-14s %s%s%s  %s%s%s\n' "Health:" "$hc" "$hv" "$R" "$DIM" "$hd" "$R"
