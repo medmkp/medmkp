@@ -1580,11 +1580,16 @@
 .table tbody tr { cursor: pointer; }
 .table tbody tr:hover { background: #f6f9ff; }
 .table tbody tr.rowSelected { background: #eef5ff; }
-.table tbody tr.rowSelected:hover { background: #e8f1ff; }
-/* Open-row highlight — mirrors the reorder list's active row so clicking a row to
-   open its detail drawer reads the same on both surfaces. */
-.table tbody tr.rowActive { background: #eef4ff; }
-.table tbody tr.rowActive td:nth-child(2) { box-shadow: inset 3px 0 0 var(--blue); }
+.table tbody tr.rowSelected:hover { background: #e6f0ff; }
+/* Open-row highlight — mirrors the reorder list's active row (.crl-row.active): a
+   full 1.5px blue ring over a --blue-2 fill so clicking a row to open its detail
+   drawer reads the same on both surfaces. The ring is composited from per-cell
+   insets because box-shadow doesn't paint on a <tr> under border-collapse. */
+.table tbody tr.rowActive { background: var(--blue-2); }
+.table tbody tr.rowActive:hover { background: var(--blue-2); }
+.table tbody tr.rowActive td { box-shadow: inset 0 1.5px 0 var(--blue), inset 0 -1.5px 0 var(--blue); }
+.table tbody tr.rowActive td:first-child { box-shadow: inset 1.5px 0 0 var(--blue), inset 0 1.5px 0 var(--blue), inset 0 -1.5px 0 var(--blue); }
+.table tbody tr.rowActive td:last-child { box-shadow: inset -1.5px 0 0 var(--blue), inset 0 1.5px 0 var(--blue), inset 0 -1.5px 0 var(--blue); }
 
 /* Fixed column widths so the 9 columns always fit the panel — no horizontal scroll. */
 .table th:nth-child(1), .table td:nth-child(1) { width: 4%; }    /* Select */
