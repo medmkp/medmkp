@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchSuggestions } from "./catalog";
 import { suggestSearchTerms } from "./searchSuggestions";
 import { BrandMark, Icon, IconSprite } from "./icons";
-import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
+import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, FREE_SCAN_LIMIT, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, canonicalIdentityFields, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { OfficeLayoutRoute } from "./officelayout";
 import { QrLabelView } from "./qrlabels";
@@ -1012,13 +1012,20 @@ export default function Home() {
     // should bring it back, not be treated as a duplicate.
     const existing = code ? draftItems.find((item) => item.barcode === code && item.included !== false) : null;
     if (existing) {
-      let item = existing;
+      // Re-scanning an item already on the list refreshes its catalog identity
+      // when a re-match has since re-handled the product (new canonicalHandle), so
+      // the stored handle can't go stale and 404 — while keeping the buyer's
+      // quantity/note/price. Lot/expiry are still only backfilled when missing.
+      const fresh = product ? canonicalIdentityFields(makeScanDraftItem(code, product, scanned)) : null;
+      const reHandled = !!(fresh && fresh.canonicalHandle && fresh.canonicalHandle !== existing.canonicalHandle);
       const filled = {
         ...existing,
+        ...(reHandled ? fresh : null),
         lot: existing.lot || decoded.lot || "",
         expirationDate: existing.expirationDate || decoded.expirationDate || null,
       };
-      if (filled.lot !== existing.lot || filled.expirationDate !== existing.expirationDate) {
+      let item = existing;
+      if (reHandled || filled.lot !== existing.lot || filled.expirationDate !== existing.expirationDate) {
         filled.updatedAt = Date.now();
         item = filled;
         setListTouched(true);
@@ -1046,7 +1053,10 @@ export default function Home() {
     // any qty/notes/price it carried) and refreshes lot/expiry off this scan.
     const tombstone = code ? draftItems.find((it) => it.barcode === code && it.included === false) : null;
     if (tombstone) {
-      const revived = { ...tombstone, ...decoded, included: true, updatedAt: Date.now() };
+      // Refresh the catalog identity from this scan so a product re-handled while
+      // the item sat removed comes back with the current handle/offers, not the
+      // stale ones the tombstone carried. Buyer qty/note/price are preserved.
+      const revived = { ...tombstone, ...canonicalIdentityFields(item), ...decoded, included: true, updatedAt: Date.now() };
       markScanSource();
       setDraftItems((items) => items.map((it) => (it.id === tombstone.id ? revived : it)));
       setScanCount((n) => n + 1);

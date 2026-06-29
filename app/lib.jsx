@@ -1070,6 +1070,27 @@ export function makeScanDraftItem(code, product, scanned) {
   };
 }
 
+// The catalog-identity fields a scan resolves. Re-scanning an item already on the
+// list overlays these onto the existing line so a product re-handled by a catalog
+// re-match (new canonicalHandle/offers) updates in place instead of keeping a
+// stale handle that 404s on the product page. Buyer-owned fields — quantity,
+// note, paidUnitPrice, selectedOfferKey, lot/expiry — are deliberately excluded.
+export function canonicalIdentityFields(scanItem) {
+  return {
+    product: scanItem.product,
+    canonicalName: scanItem.canonicalName,
+    canonicalHandle: scanItem.canonicalHandle,
+    sku: scanItem.sku,
+    unit: scanItem.unit,
+    matchStatus: scanItem.matchStatus,
+    confidence: scanItem.confidence,
+    imageUrl: scanItem.imageUrl,
+    matchBrand: scanItem.matchBrand,
+    bestOffer: scanItem.bestOffer,
+    offers: scanItem.offers,
+  };
+}
+
 
 export function statusFromItem(item) {
   if (item.matchStatus) {
