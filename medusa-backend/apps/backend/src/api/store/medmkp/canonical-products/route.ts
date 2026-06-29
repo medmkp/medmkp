@@ -283,6 +283,50 @@ async function queryCategoryProducts(
   return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
 }
 
+// Fast plain-category listing: read the precomputed medmkp_category_catalog_listing
+// read model (one row per category × product family, holding the family's best
+// current offer + counts) and join the supplier product for display fields of
+// just this page. The live CTE query above ranked the whole category's offer
+// graph on every cache miss (~13s for Gloves on prod); this is a single indexed
+// page read (~60ms), the category-keyed twin of querySupplierProducts. Used only
+// when there's no text/subcategory filter — the (category, unit_price, price)
+// index serves the ORDER BY + LIMIT/OFFSET directly. The category key is
+// lower(btrim(category)); the route already normalizes the param the same way.
+async function queryCategoryListing(
+  category: string,
+  limit: number,
+  offset: number
+): Promise<CategoryListResult> {
+  const pool = getPostgresPool()
+  const { rows } = await pool.query(
+    `
+    SELECT
+      l.grp AS id, l.variant_count, l.family_id, l.family_handle, l.family_name,
+      l.any_handle, l.any_name, l.any_category,
+      l.offer_count,
+      l.price_cents AS best_price, l.unit_price_cents AS best_unit_price,
+      l.best_sp_id,
+      sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
+      sp.image_url AS best_image, sp.product_url AS best_url,
+      sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty,
+      sp.base_unit AS best_base_unit, sp.pack_basis AS best_pack_basis,
+      sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
+      COUNT(*) OVER() AS total_count
+    FROM medmkp_category_catalog_listing l
+    JOIN medmkp_supplier_product sp ON sp.id = l.best_sp_id AND sp.deleted_at IS NULL
+    LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
+    WHERE l.category_key = $1
+    ORDER BY (l.unit_price_cents IS NULL) ASC, l.unit_price_cents ASC, l.price_cents ASC, l.any_name ASC
+    LIMIT $2 OFFSET $3
+    `,
+    [category, limit, offset]
+  )
+
+  const canonical_products = rows.map(listRowToItem)
+
+  return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
+}
+
 // Shared row → card mapper for the DB-ranked listing queries (category +
 // supplier browse), which select the same column aliases.
 function listRowToItem(row: any): CategoryListItem {
@@ -337,7 +381,16 @@ async function listCategoryProducts(
   // firing one fetch per source category) onto one database query.
   let promise = categoryListPromises.get(key)
   if (!promise) {
-    promise = queryCategoryProducts(category, q, pattern, limit, offset)
+    // Plain category browse reads the precomputed read model; the text/
+    // subcategory variants run the live CTE query over the category-scoped set.
+    // If the read model is unavailable (migration not yet applied), fall back to
+    // the live query so the listing still renders.
+    promise =
+      !q && !pattern
+        ? queryCategoryListing(category, limit, offset).catch(() =>
+            queryCategoryProducts(category, q, pattern, limit, offset)
+          )
+        : queryCategoryProducts(category, q, pattern, limit, offset)
     categoryListPromises.set(key, promise)
   }
 
