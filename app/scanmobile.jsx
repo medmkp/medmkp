@@ -197,7 +197,7 @@ export function MobileScanStart({
         </div>
 
         {attnItems > 0 && (
-          <button type="button" className={s.attnCard} onClick={() => onNavigate?.("/app/locations")}>
+          <button type="button" className={s.attnCard} onClick={() => onNavigate?.("/app/needs-attention")}>
             <span className={s.attnIcon}><Icon name="icon-alert-triangle" /></span>
             <span className={s.attnBody}>
               <span className={s.attnTitle}>{attnItems} item{attnItems === 1 ? "" : "s"} need{attnItems === 1 ? "s" : ""} attention</span>
@@ -225,6 +225,45 @@ export function MobileScanStart({
             <div className={s.assurance}>
               <Icon name="icon-shield-check" />
               Exact matches land straight on the location; anything else waits in Needs Attention.
+            </div>
+
+            {/* On-site hub: the surfaces that matter while scanning. Full
+                management (catalog, reports, savings, evidence editing) lives
+                on desktop, so it's deliberately not listed here. */}
+            <div className={s.sectionLabel}>On-site</div>
+            <div className={s.actionList}>
+              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/locations")}>
+                <span className={s.actionIcon}><Icon name="icon-map-pin" /></span>
+                <span className={s.actionText}>
+                  <span className={s.actionTitle}>Locations</span>
+                  <span className={s.actionSub}>Browse and scan any location</span>
+                </span>
+                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
+              </button>
+              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/needs-attention")}>
+                <span className={s.actionIcon}><Icon name="icon-alert-triangle" /></span>
+                <span className={s.actionText}>
+                  <span className={s.actionTitle}>Needs attention</span>
+                  <span className={s.actionSub}>Expiring, low, or missing lot/expiry</span>
+                </span>
+                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
+              </button>
+              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/reorder-list")}>
+                <span className={s.actionIcon}><Icon name="icon-cart" /></span>
+                <span className={s.actionText}>
+                  <span className={s.actionTitle}>Reorder list</span>
+                  <span className={s.actionSub}>What you&rsquo;re restocking</span>
+                </span>
+                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
+              </button>
+              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/evidence/viewer")}>
+                <span className={s.actionIcon}><Icon name="icon-shield-check" /></span>
+                <span className={s.actionText}>
+                  <span className={s.actionTitle}>On-site evidence</span>
+                  <span className={s.actionSub}>Show filed evidence to an auditor</span>
+                </span>
+                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
+              </button>
             </div>
           </>
         )}

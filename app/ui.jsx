@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState, useEffect, useRef, useCallback } from "react";
-import { Icon } from "./icons";
+import { BrandLogoMark, Icon } from "./icons";
 import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
 
 export function useBarcodeScanner({ active, onScan }) {
@@ -730,6 +730,46 @@ export function BuyingPreferencesCard({ prefs, supplierOptions, onSave, onToast,
         </div>
       )}
     </section>
+  );
+}
+
+
+// Mobile is a scanner appliance for on-site work; full management (catalog,
+// reports, savings, evidence editing, history) is a desktop experience. When one
+// of those surfaces is opened on a phone it still works, but this banner sets the
+// expectation rather than pretending the phone is the place to do it.
+// Shared mobile app header: a back affordance + the centered TraceDDS brand,
+// with an optional right slot for per-screen actions. On a phone the app topbar
+// is hidden, so every on-site screen renders this (matching the scanner and the
+// evidence viewer) instead of an ad-hoc per-screen header. The screen's own
+// title lives as an H1 below the bar, per the wireframe frames.
+export function MobileHeader({ onBack, backLabel = "Back to scanning", actions = null }) {
+  return (
+    <header className="m-appbar">
+      <button type="button" className="m-appbar-back" onClick={onBack} aria-label={backLabel}>
+        <Icon name="icon-chevron-left" />
+      </button>
+      <span className="m-appbar-brand" aria-label="TraceDDS">
+        <BrandLogoMark className="m-appbar-mark" />
+        <span className="m-appbar-word"><span className="m-appbar-trace">Trace</span><span className="m-appbar-dds">DDS</span></span>
+      </span>
+      <span className="m-appbar-right">{actions}</span>
+    </header>
+  );
+}
+
+export function DesktopOnlyHint({ label = "full management", onBack }) {
+  return (
+    <div className="desktop-only-hint" role="note">
+      <Icon name="icon-info" className="button-icon" />
+      <span>Best viewed on desktop for {label}.</span>
+      {onBack && (
+        <button type="button" className="desktop-only-hint-back" onClick={onBack}>
+          <Icon name="icon-chevron-left" className="button-icon" />
+          Back to scanning
+        </button>
+      )}
+    </div>
   );
 }
 

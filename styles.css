@@ -8631,6 +8631,39 @@ th {
   padding: 26px 30px 40px;
 }
 
+/* Shown only on phones, above a desktop-management surface reached on mobile. */
+.desktop-only-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--blue-2);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.desktop-only-hint svg { width: 16px; height: 16px; color: var(--blue); flex-shrink: 0; }
+.desktop-only-hint-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--blue);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.desktop-only-hint-back svg { color: var(--blue); }
+
 /* Savings surface */
 .sv { display: grid; gap: 22px; max-width: 880px; }
 .sv-head h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; color: var(--ink); }
@@ -9428,6 +9461,22 @@ th {
 
 /* Mobile list */
 .m-list { display: flex; flex-direction: column; gap: 16px; }
+/* Shared on-site mobile header (ui.jsx MobileHeader): back · centered TraceDDS
+   brand · optional right actions. 3-col grid keeps the brand centered no matter
+   how wide the right slot is. */
+.m-appbar { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; margin: -18px -16px 0; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.m-appbar-back { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--ink); flex-shrink: 0; }
+.m-appbar-back svg { width: 20px; height: 20px; }
+.m-appbar-brand { position: absolute; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 7px; pointer-events: none; }
+.m-appbar-mark { width: 20px; height: 20px; }
+.m-appbar-word { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.m-appbar-trace { color: var(--ink); }
+.m-appbar-dds { color: var(--blue); }
+.m-appbar-right { display: inline-flex; align-items: center; gap: 6px; min-width: 38px; justify-content: flex-end; }
+
+.m-list-titlebar { margin: 0 0 12px; }
+.m-list-titlebar h1 { font-size: 24px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .m-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .m-topbar-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .m-topbar-lead h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

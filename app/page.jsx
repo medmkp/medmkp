@@ -20,12 +20,23 @@ import { CartBuilderModal, ProcurementPlanView, ReorderHistoryDetail, ReorderHis
 import { CurrentReorderList, SavingsView } from "./reorder";
 import { SettingsView } from "./settings";
 import StyleGuide from "./styleguide";
-import { ConfirmModal } from "./ui";
+import { ConfirmModal, DesktopOnlyHint } from "./ui";
 
 // Scan feedback (audio + haptic) lives in ./scanSound so the reorder scanner
 // here and the receiving/shelf-audit scanner in scansessions.jsx share one
 // unlocked AudioContext + decoded chime. This component primes both on mount /
 // first gesture below.
+
+// Surfaces that are a desktop management experience. On a phone they still
+// render (reached via a direct link or the bell), but show a "best on desktop"
+// hint and are never promoted in the mobile scanner hub. The on-site set
+// (scanner, locations, needs-attention dashboard, reorder list, evidence
+// VIEWER) is deliberately excluded.
+const MANAGEMENT_VIEWS = new Set([
+  "evidence", "evidenceBinder", "evidenceRedline", "evidenceReview",
+  "reports", "savings", "history", "historyDetail", "plan", "handoff",
+  "catalog", "catalogCategory", "catalogSupplier", "catalogSearch", "productDetail",
+]);
 
 export default function Home() {
   const uploadFormRef = useRef(null);
@@ -1468,7 +1479,7 @@ export default function Home() {
     setListTouched(true);
     setLastUpload(null);
     setHasUploadedInvoice(false);
-    navigate("/app");
+    navigate("/app/reorder-list");
   }
 
   // Reopen a saved list as the editable current list and remove it from Saved
@@ -1724,7 +1735,7 @@ export default function Home() {
                       <button
                         className="topbar-alerts-cta"
                         type="button"
-                        onClick={() => { setAlertsOpen(false); setView("home"); }}
+                        onClick={() => { setAlertsOpen(false); navigate("/app/needs-attention"); }}
                       >
                         {alerts.length > 6 ? `View all ${alerts.length} on dashboard` : "Open dashboard"}
                         <Icon name="icon-arrow-right" className="button-icon" />
@@ -1771,7 +1782,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon, count]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels" || view === "officeLayout")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer" || view === "evidenceReview" || view === "evidenceRedline")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "home" && view === "dashboard") || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels" || view === "officeLayout")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer" || view === "evidenceReview" || view === "evidenceRedline")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1798,6 +1809,7 @@ export default function Home() {
         </aside>
 
         <main className="app-main">
+          {isMobile && MANAGEMENT_VIEWS.has(view) && <DesktopOnlyHint onBack={() => navigate("/app")} />}
           {view === "home" && (
             mobileAddItemRoute ? (
               <MobileReorderScan
@@ -1818,9 +1830,11 @@ export default function Home() {
               // the center Scan FAB returns here.
               scanStartEl
             ) : (
-              <NeedsAttentionView onToast={showToast} />
+              <NeedsAttentionView onToast={showToast} onNavigate={navigate} />
             )
           )}
+
+          {view === "dashboard" && <NeedsAttentionView onToast={showToast} onNavigate={navigate} />}
 
           {view === "reorderList" && reorderListEl}
 
@@ -1893,7 +1907,7 @@ export default function Home() {
           )}
 
           {view === "evidenceViewer" && (
-            <EvidenceMobileViewer context={evidenceContext} onBack={() => navigate("/app/evidence")} />
+            <EvidenceMobileViewer context={evidenceContext} onBack={() => navigate(isMobile ? "/app" : "/app/evidence")} />
           )}
 
           {view === "reports" && (
@@ -1905,7 +1919,7 @@ export default function Home() {
               items={activePlanItems}
               listName={listName}
               listStatus={liveListStatus}
-              onBackToDraft={() => { backToDraft(); navigate("/app"); }}
+              onBackToDraft={() => { backToDraft(); navigate("/app/reorder-list"); }}
               buyingPrefs={buyingPrefs}
               supplierShipping={supplierShipping}
               shipToState={me?.practice?.ship_state || ""}
@@ -1961,7 +1975,7 @@ export default function Home() {
               rows={deriveMatchRows(activePlanItems, buyingPrefs)}
               archivedLists={archivedLists}
               onNavigate={navigate}
-              onImportInvoice={() => { setAddMode("upload"); navigate("/app"); }}
+              onImportInvoice={() => { setAddMode("upload"); navigate("/app/reorder-list"); }}
             />
           )}
 

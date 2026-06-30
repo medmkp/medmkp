@@ -247,7 +247,7 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, context = null, onB
   return (
     <section className={s.screen} aria-label={`${vm.title} evidence viewer`}>
       <header className={s.topbar}>
-        <button type="button" className={s.backBtn} onClick={onBack} aria-label="Back to Evidence Library">
+        <button type="button" className={s.backBtn} onClick={onBack} aria-label="Back">
           <Icon name="icon-chevron-left" />
         </button>
         <div className={s.brand} aria-label="TraceDDS">
@@ -404,7 +404,7 @@ export function EvidenceMobileViewer({ data = EVIDENCE_MOCK, context = null, onB
       ) : (
         <footer className={s.footer}>
           <button type="button" className={`${s.footerPrimary} ${s.footerWide}`} onClick={onBack}>
-            <Icon name="icon-chevron-left" />Back to evidence library
+            <Icon name="icon-chevron-left" />Back
           </button>
         </footer>
       )}
