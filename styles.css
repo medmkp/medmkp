@@ -9533,6 +9533,11 @@ th {
 
 /* Mobile detail (full-screen) */
 .m-detail { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: var(--surface); }
+/* When the match drawer is opened over the public full-screen scanner
+   (`.camera`, z-index 60 with sheets up to 70), this wrapper lifts the whole
+   drawer above it. In the authed reorder list the app shell tops out below 50,
+   so the bare `.m-detail` z-40 is fine there and stays untouched. */
+.scan-match-fs { position: fixed; inset: 0; z-index: 80; }
 .m-detail-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: calc(12px + env(safe-area-inset-top)) 14px 12px; border-bottom: 1px solid var(--line); }
 .m-pager { display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 600; color: var(--ink); }
 .m-pager button { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
