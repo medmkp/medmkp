@@ -63,9 +63,15 @@ export function normalizeExpiry(raw) {
   m = t.match(/\b(20\d{2})\s*[-/.]\s*(\d{1,2})\b/);
   if (m) return isoFrom(+m[1], +m[2], 0);
 
-  // MM-DD-YYYY / MM/DD/YYYY
+  // MM-DD-YYYY / MM/DD/YYYY (US order). When the first group can't be a month
+  // (>12) the US reading is impossible, so it's the European DD-MM-YYYY order —
+  // most non-US cartons print "31.12.2026" / "13/04/2023", and dropping it loses
+  // the expiry entirely. Fall back to the day-month swap only when the US reading
+  // fails isoFrom's range check: a genuine "03/15/2026" still parses US-first and
+  // a still-ambiguous "04/05/2026" stays US order (lot/expiry are assistive — we
+  // don't guess a date order we can't prove from the digits themselves).
   m = t.match(/\b(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(20\d{2})\b/);
-  if (m) return isoFrom(+m[3], +m[1], +m[2]);
+  if (m) return isoFrom(+m[3], +m[1], +m[2]) || isoFrom(+m[3], +m[2], +m[1]);
 
   // MM-YYYY / MM/YYYY  (month precision → end of month)
   m = t.match(/\b(\d{1,2})\s*[-/.]\s*(20\d{2})\b/);

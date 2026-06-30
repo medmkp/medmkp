@@ -25,5 +25,8 @@
   { "name": "full-month-bestbefore", "text": "BEST BEFORE JANUARY 2027  LOT 5567", "expectLot": "5567", "expectExpiry": "2027-01-31" },
   { "name": "comma-us-date-disinfectant", "text": "CaviCide Surface Disinfectant\n\nREF 13-1000 24 fl 0z (710 mL)\n\nLOT 7A2208\n\nEXP JAN 15, 2027\n\nKeep out of reach of children. For professional use.\n", "expectLot": "7A2208", "expectExpiry": "2027-01-15" },
   { "name": "biosis-charcoal-mfg-then-exp", "text": "Batch No.: 170294.\nMfg. Date: 12. 2017.\nExp. Date: 11. 2021.", "expectLot": "170294", "expectExpiry": "2021-11-30" },
-  { "name": "beacons-atenolol-combined-header", "text": "Lot No./ Mfg. Date/ Exp Date:\n05057 05/2017 01/2021", "expectLot": "05057", "expectExpiry": "2021-01-31" }
+  { "name": "beacons-atenolol-combined-header", "text": "Lot No./ Mfg. Date/ Exp Date:\n05057 05/2017 01/2021", "expectLot": "05057", "expectExpiry": "2021-01-31" },
+  { "name": "eu-ddmmyyyy-slash-expiry", "text": "LOT C4419  EXP 31/12/2026",       "expectLot": "C4419", "expectExpiry": "2026-12-31" },
+  { "name": "eu-ddmmyyyy-dot-useby",   "text": "LOT 7781  USE BY 28.02.2027",     "expectLot": "7781", "expectExpiry": "2027-02-28" },
+  { "name": "aastramed-suture-mm-yyyy-real-ocr", "text": "*.\n\n7\n\n2/0 (3METRIC) |\n\nPOLYDIOXANONE o4pcs\nAbsorbable Suture\nSTERILE 75cm\n\n3/8 circle\nC €292 reverse cutting\n\n221071 Fag\n10.2022\n\ng 10.2025\nAastraMed\n\n", "expectLot": "221071", "expectExpiry": "2025-10-31" }
 ]
