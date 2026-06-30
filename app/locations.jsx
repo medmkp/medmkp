@@ -5,7 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Icon } from "./icons";
 import { daysUntil, formatExpiryDate, formatTraceDate, money, SWIPE_REVEAL, traceApi, traceErrorMessage } from "./lib";
 import { OfficeLayoutView } from "./officelayout";
-import { ConfirmModal, DetailDrawer, ProductSearchResults, ProductThumb, useProductSearch } from "./ui";
+import { ConfirmModal, DetailDrawer, MobileHeader, ProductSearchResults, ProductThumb, useProductSearch } from "./ui";
 import s from "./locations.module.css";
 import rs from "./scanmobile.module.css";
 
@@ -387,22 +387,13 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
 
   return (
     <div className={s.board}>
-      {isMobile ? (
-        <header className={s.mHead}>
-          <button type="button" className={s.mBackBtn} onClick={() => onNavigate?.("/app")} aria-label="Back to start scan">
-            <Icon name="icon-chevron-left" />
-          </button>
-          <span className={s.mHeadTitle}>Location Board</span>
-          <span className={s.mHeadSpacer} />
-        </header>
-      ) : (
-        <header className={s.head}>
-          <h1 className={s.title}>Location Board</h1>
-          <p className={s.subtitle}>
-            Track rooms, cabinets, and scan coverage across the office. Start scanning, resolve issues, and monitor location health.
-          </p>
-        </header>
-      )}
+      {isMobile && <MobileHeader onBack={() => onNavigate?.("/app")} />}
+      <header className={s.head}>
+        <h1 className={s.title}>Location Board</h1>
+        <p className={s.subtitle}>
+          Track rooms, cabinets, and scan coverage across the office. Start scanning, resolve issues, and monitor location health.
+        </p>
+      </header>
 
       <div className={isMobile ? s.statsMini : s.stats}>
         <Stat compact={isMobile} icon="icon-map-pin" tint={s.tBlue} tone={s.txBlue} label="Total locations" value={stats.total} />

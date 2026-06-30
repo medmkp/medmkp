@@ -466,3 +466,9 @@
 @media (max-width: 620px) {
   .stats { grid-template-columns: 1fr; }
 }
+
+/* Phone: the shared MobileHeader (back + TraceDDS brand) sits above; the title
+   block stays as the H1 below it. */
+@media (max-width: 767px) {
+  .title { font-size: 22px; }
+}

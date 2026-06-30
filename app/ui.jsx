@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState, useEffect, useRef, useCallback } from "react";
-import { Icon } from "./icons";
+import { BrandLogoMark, Icon } from "./icons";
 import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
 
 export function useBarcodeScanner({ active, onScan }) {
@@ -284,7 +284,7 @@ export function ScanHandoffQr({ url }) {
 // cards auto-dismiss so they don't block the next scan; a no-match card sticks
 // around and offers a way to key the code in by hand.
 
-export function ScanResultCard({ result, className = "", onClear, onEnterManually }) {
+export function ScanResultCard({ result, className = "", onClear, onEnterManually, showCompare = false }) {
   useEffect(() => {
     if (!result || result.status === "Not found") return undefined;
     const timer = window.setTimeout(() => onClear?.(), 3500);
@@ -294,6 +294,11 @@ export function ScanResultCard({ result, className = "", onClear, onEnterManuall
   if (!result) return null;
   const { item, status, isDuplicate, qty } = result;
   const notFound = status === "Not found";
+  // How many suppliers we have a price from for this item — the honest breadth
+  // behind the "best price" shown. Only surfaced on the public price-benchmark
+  // card (showCompare), and only when there's a real comparison to claim (≥2).
+  const supplierCount = new Set((item.offers || []).map((o) => o?.supplier).filter(Boolean)).size;
+  const compareLabel = showCompare && supplierCount >= 2 ? `Compared across ${supplierCount} suppliers` : "";
   const offer = item.bestOffer;
   const rawPrice = offer?.price ?? (item.oldUnitPrice || null);
   const priceMissing = !notFound && (rawPrice == null || rawPrice <= 0);
@@ -329,6 +334,7 @@ export function ScanResultCard({ result, className = "", onClear, onEnterManuall
               ? "Already on your list — adjust the quantity there"
               : `${offer?.supplier || item.oldVendor || item.matchBrand || "Supplier pending"}${item.unit ? ` · ${item.unit}` : ""}`}
         </small>
+        {!notFound && !isDuplicate && compareLabel && <small className="src-compare">{compareLabel}</small>}
       </div>
       <div className="src-right">
         {!notFound && !isDuplicate && priceMissing && <small className="src-noprice">Price not listed</small>}
@@ -724,6 +730,46 @@ export function BuyingPreferencesCard({ prefs, supplierOptions, onSave, onToast,
         </div>
       )}
     </section>
+  );
+}
+
+
+// Mobile is a scanner appliance for on-site work; full management (catalog,
+// reports, savings, evidence editing, history) is a desktop experience. When one
+// of those surfaces is opened on a phone it still works, but this banner sets the
+// expectation rather than pretending the phone is the place to do it.
+// Shared mobile app header: a back affordance + the centered TraceDDS brand,
+// with an optional right slot for per-screen actions. On a phone the app topbar
+// is hidden, so every on-site screen renders this (matching the scanner and the
+// evidence viewer) instead of an ad-hoc per-screen header. The screen's own
+// title lives as an H1 below the bar, per the wireframe frames.
+export function MobileHeader({ onBack, backLabel = "Back to scanning", actions = null }) {
+  return (
+    <header className="m-appbar">
+      <button type="button" className="m-appbar-back" onClick={onBack} aria-label={backLabel}>
+        <Icon name="icon-chevron-left" />
+      </button>
+      <span className="m-appbar-brand" aria-label="TraceDDS">
+        <BrandLogoMark className="m-appbar-mark" />
+        <span className="m-appbar-word"><span className="m-appbar-trace">Trace</span><span className="m-appbar-dds">DDS</span></span>
+      </span>
+      <span className="m-appbar-right">{actions}</span>
+    </header>
+  );
+}
+
+export function DesktopOnlyHint({ label = "full management", onBack }) {
+  return (
+    <div className="desktop-only-hint" role="note">
+      <Icon name="icon-info" className="button-icon" />
+      <span>Best viewed on desktop for {label}.</span>
+      {onBack && (
+        <button type="button" className="desktop-only-hint-back" onClick={onBack}>
+          <Icon name="icon-chevron-left" className="button-icon" />
+          Back to scanning
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -22,13 +22,11 @@ export const SHOPIFY_STOCK_MAX_ITEMS = 60;
 
 export const NAV_COLLAPSED_KEY = "medmkp_nav_collapsed_v1";
 
-// Unauthenticated visitors get a taste of the scanner before the signup wall:
-// FREE_SCAN_LIMIT distinct lookups, counted in localStorage so the budget
-// survives a refresh. This is a soft marketing gate, not a security control.
-// Loading any page with ?demo zeroes the counter (see page.jsx) so the funnel
-// can be re-run on the same device without clearing browser storage by hand.
-
-export const FREE_SCAN_LIMIT = 10;
+// Unauthenticated scanning is unlimited — the scan-to-price spot-check is the
+// lure, so we never cap it. We keep a running "items checked" tally in
+// localStorage purely to drive the conversion teaser (and it survives a
+// refresh); it gates nothing. Loading any page with ?demo zeroes the tally (see
+// page.jsx) so the demo funnel starts fresh on the same device.
 
 export const FREE_SCAN_KEY = "medmkp_free_scans_v1";
 
@@ -51,7 +49,7 @@ export const routeByView = {
   resetPassword: "/reset-password",
   styleguide: "/styleguide",
   home: "/app",
-  needsAttention: "/app",
+  dashboard: "/app/needs-attention",
   reorderList: "/app/reorder-list",
   locations: "/app/locations",
   officeLayout: "/app/locations/office-layout",
@@ -91,9 +89,10 @@ export function viewFromPath(pathname = "/") {
 
   // Authenticated app
   if (path === "/app") return { view: "home", isLoggedIn: true };
-  // Needs Attention is now the dashboard; keep the old URL as a compatibility
-  // alias for bookmarks and older issue links.
-  if (path === "/app/needs-attention") return { view: "home", isLoggedIn: true };
+  // The Needs Attention dashboard is its own destination, reachable on every
+  // device (the mobile scanner hub and the bell CTA link here). Desktop /app
+  // also renders this content via the "home" view.
+  if (path === "/app/needs-attention") return { view: "dashboard", isLoggedIn: true };
   if (path === "/app/reorder-list") return { view: "reorderList", isLoggedIn: true };
   if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
   // The session-less scanner. /app/scan-session is canonical; /app/scan-sessions

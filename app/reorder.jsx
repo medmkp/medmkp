@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
 import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, compactSizeLabel, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel, variantOptionList } from "./lib";
-import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchManufacturer, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
+import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchManufacturer, MobileHeader, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
   const [captured, setCaptured] = useState(false);
@@ -737,50 +737,43 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="m-list">
-      <header className="m-topbar">
-        <div className="m-topbar-lead">
-          <button
-            className="m-iconbtn"
-            type="button"
-            aria-label="Back to start scan"
-            onClick={() => onNavigate?.("/app")}
-          >
-            <Icon name="icon-chevron-left" className="button-icon" />
-          </button>
-          <h1>{title}</h1>
-        </div>
-        <div className="m-topbar-actions">
-          <button
-            className="m-scan-btn"
-            type="button"
-            aria-label="Scan items"
-            onClick={() => onNavigate?.("/app/scan")}
-          >
-            <Icon name="icon-scan" className="button-icon" />
-            Scan
-          </button>
-          <div className="m-menu-wrap">
-            <button className="m-iconbtn" type="button" aria-label="List actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
-              <svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
+      <MobileHeader
+        onBack={() => onNavigate?.("/app")}
+        actions={
+          <>
+            <button
+              className="m-scan-btn"
+              type="button"
+              aria-label="Scan items"
+              onClick={() => onNavigate?.("/app/scan")}
+            >
+              <Icon name="icon-scan" className="button-icon" />
+              Scan
             </button>
-            {menuOpen && (
-              <>
-                <div className="crl-add-menu-backdrop" onClick={() => setMenuOpen(false)} />
-                <div className="crl-add-menu m-actions-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onArchiveList?.(); }}>
-                    <Icon name="icon-clipboard" className="button-icon" />
-                    <span><strong>Save list</strong><small>Save a copy to reorder history</small></span>
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onClearList?.(); }}>
-                    <Icon name="icon-trash" className="button-icon crl-menu-danger" />
-                    <span><strong>Clear list</strong><small>Remove all items</small></span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+            <div className="m-menu-wrap">
+              <button className="m-iconbtn" type="button" aria-label="List actions" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+                <svg className="crl-kebab-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" /></svg>
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="crl-add-menu-backdrop" onClick={() => setMenuOpen(false)} />
+                  <div className="crl-add-menu m-actions-menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onArchiveList?.(); }}>
+                      <Icon name="icon-clipboard" className="button-icon" />
+                      <span><strong>Save list</strong><small>Save a copy to reorder history</small></span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onClearList?.(); }}>
+                      <Icon name="icon-trash" className="button-icon crl-menu-danger" />
+                      <span><strong>Clear list</strong><small>Remove all items</small></span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        }
+      />
+      <div className="m-list-titlebar"><h1>{title}</h1></div>
 
       <nav className="m-tabs" aria-label="Item list filters">
         {[["all", `All ${totalItems}`], ["confirmed", `Matched ${stats.matched}`], ["possible", `Needs Review ${stats.review}`], ["nomatch", `No match ${stats.notFound}`]].map(([id, label]) => (
@@ -1676,13 +1669,17 @@ export function CurrentReorderList({
                   </p>
                 )}
               </>
-            ) : (
+            ) : showSample ? (
               <div className="crl-plan">
                 <div><span>Estimated total</span><strong>$5,842.16</strong></div>
                 <div><span>Suppliers</span><strong>5</strong></div>
                 <div><span>Coverage</span><strong>92%</strong></div>
                 <div><span>Potential savings</span><strong className="green">$842.15</strong></div>
               </div>
+            ) : (
+              <p className="crl-plan-note">
+                Scan a barcode or upload an invoice to start your list — your supplier plan and savings show up here.
+              </p>
             )}
           </section>
         </aside>

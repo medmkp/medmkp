@@ -13,5 +13,6 @@
   { "name": "gs1-ai-ultradent",   "text": "(01)00883205106100\n(17)230622\n(10)BG7ZP\nREF-UP 1204", "expectLot": "BG7ZP", "expectExpiry": "2023-06-22" },
   { "name": "patterson-suture-ocr-semicolon-expiry", "text": "Su? Us\nPATTERN N SESS\n\n“cpss\nAAMT I 1 i li\nclei by ans ical Sumy\n: St. Pau, MN 55120\nPLAIN.\nees SER\n\n089-9534 Ds-24\n\n[ET M607840 % 2016 - 0;\n\n", "expectLot": "M607840", "expectExpiry": "2016-01-31" },
   { "name": "biosis-charcoal-mfg-then-exp", "text": "Batch No.: 170294.\nMfg. Date: 12. 2017.\nExp. Date: 11. 2021.", "expectLot": "170294", "expectExpiry": "2021-11-30" },
-  { "name": "beacons-atenolol-combined-header", "text": "Lot No./ Mfg. Date/ Exp Date:\n05057 05/2017 01/2021", "expectLot": "05057", "expectExpiry": "2021-01-31" }
+  { "name": "beacons-atenolol-combined-header", "text": "Lot No./ Mfg. Date/ Exp Date:\n05057 05/2017 01/2021", "expectLot": "05057", "expectExpiry": "2021-01-31" },
+  { "name": "iso-symbol-exp-year-garble", "text": "a Rm\n\nLot |\n\n0710709\n\n07.20n1\n", "expectLot": "0710709", "expectExpiry": "2011-07-31" }
 ]
