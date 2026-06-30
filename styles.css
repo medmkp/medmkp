@@ -9454,6 +9454,22 @@ th {
 
 /* Mobile list */
 .m-list { display: flex; flex-direction: column; gap: 16px; }
+/* Shared on-site mobile header (ui.jsx MobileHeader): back · centered TraceDDS
+   brand · optional right actions. 3-col grid keeps the brand centered no matter
+   how wide the right slot is. */
+.m-appbar { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; margin: 0 0 14px; }
+.m-appbar-back { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--ink); flex-shrink: 0; }
+.m-appbar-back svg { width: 20px; height: 20px; }
+.m-appbar-brand { position: absolute; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 7px; pointer-events: none; }
+.m-appbar-mark { width: 20px; height: 20px; }
+.m-appbar-word { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.m-appbar-trace { color: var(--ink); }
+.m-appbar-dds { color: var(--blue); }
+.m-appbar-right { display: inline-flex; align-items: center; gap: 6px; min-width: 38px; justify-content: flex-end; }
+
+.m-list-titlebar { margin: 0 0 12px; }
+.m-list-titlebar h1 { font-size: 24px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .m-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .m-topbar-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .m-topbar-lead h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

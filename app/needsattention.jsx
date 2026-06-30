@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
+import { MobileHeader } from "./ui";
 import { initials } from "./lib";
 import s from "./needsattention.module.css";
 import { sortNeedsAttentionIssues } from "./needsAttentionSort";
@@ -213,15 +214,7 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
 
   return (
     <div className={s.page}>
-      {isMobile && (
-        <header className={s.mHead}>
-          <button type="button" className={s.mBackBtn} onClick={() => onNavigate?.("/app")} aria-label="Back to start scan">
-            <Icon name="icon-chevron-left" />
-          </button>
-          <span className={s.mHeadTitle}>Dashboard</span>
-          <span className={s.mHeadSpacer} />
-        </header>
-      )}
+      {isMobile && <MobileHeader onBack={() => onNavigate?.("/app")} />}
       <header className={s.head}>
         <h1 className={s.title}>Dashboard</h1>
         <p className={s.subtitle}>Items and issues that require your review and action to keep operations running smoothly.</p>
