@@ -445,6 +445,13 @@ p {
   gap: 10px;
 }
 
+/* Header CTAs must stay on one line — when space is tight on mobile the flex
+   container would otherwise break "Sign up" across two lines. */
+.landing-nav-actions .primary-action,
+.landing-nav-actions .secondary-action {
+  white-space: nowrap;
+}
+
 .landing-main {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(380px, 1fr);
