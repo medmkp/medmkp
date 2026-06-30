@@ -260,10 +260,17 @@
 .stepChevron { width: 15px; height: 15px; color: #b6c1cf; flex-shrink: 0; }
 
 /* Responsive */
-@media (max-width: 1180px) {
+/* The Action required table needs ~770px of min-content width; beside the
+   344px rail it only clears that around 1480px, so on common laptop widths
+   (1280/1366/1440) the right columns (Source) clipped behind the card edge.
+   Drop the rail under the table below 1480px (the same pattern used at the
+   narrower breakpoints) so the table gets full width. */
+@media (max-width: 1480px) {
   .main { grid-template-columns: 1fr; }
   .rail { flex-direction: row; flex-wrap: wrap; }
   .rail .railCard { flex: 1 1 280px; }
+}
+@media (max-width: 1180px) {
   .stats { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 720px) {
