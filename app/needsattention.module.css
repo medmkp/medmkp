@@ -455,7 +455,12 @@
 .railFootLink:hover { text-decoration: underline; }
 
 /* Responsive */
-@media (max-width: 1180px) {
+/* The 8-column worklist needs ~820px of min-content width. Beside the 278px
+   rail it only clears that at ~1480px viewport, so below that we drop the rail
+   under the worklist and give the table the full width — otherwise the two
+   rightmost columns (Assignee, Actions) get clipped behind the card edge with
+   no scroll affordance, hiding the per-row CTAs. */
+@media (max-width: 1480px) {
   .main { grid-template-columns: 1fr; }
   .rail { flex-direction: row; flex-wrap: wrap; }
   .rail .railCard { flex: 1 1 280px; }
