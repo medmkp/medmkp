@@ -5,6 +5,25 @@
 // Every count here derives from real location fields (layout_x/y, item_count,
 // needs_attention_count) — no fabricated scan-status states.
 
+// layout_x/layout_y are Postgres `numeric` columns, which the pg driver returns
+// as strings ("0", "1", …). The grid matches tiles to cells with strict ===
+// against integer indices, so a string coord never matches and the tile vanishes
+// even though isPlaced (a `!= null` check) still counts it. Coerce to a real
+// number once on the way in so the whole editor works in numbers.
+export function coordOrNull(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function normalizeLocations(items) {
+  return items.map((location) => ({
+    ...location,
+    layout_x: coordOrNull(location.layout_x),
+    layout_y: coordOrNull(location.layout_y),
+  }));
+}
+
 export function positionOf(location) {
   return {
     id: location.id,

@@ -5,6 +5,8 @@ import {
   samePosition,
   isPlaced,
   changedPositions,
+  coordOrNull,
+  normalizeLocations,
   splitLocations,
   summarizeLayout,
 } from "./officeLayoutData.js";
@@ -80,6 +82,38 @@ test("summarizeLayout reports honest counts derived from real fields", () => {
     itemCount: 65,
     needsAttention: 2,
   });
+});
+
+test("coordOrNull coerces string numeric coords and rejects junk", () => {
+  assert.strictEqual(coordOrNull("0"), 0);
+  assert.strictEqual(coordOrNull("2"), 2);
+  assert.strictEqual(coordOrNull(2), 2);
+  assert.strictEqual(coordOrNull(null), null);
+  assert.strictEqual(coordOrNull(undefined), null);
+  assert.strictEqual(coordOrNull(""), null);
+  assert.strictEqual(coordOrNull("nope"), null);
+});
+
+// Regression: layout_x/layout_y arrive from the `numeric` columns as strings.
+// Before normalizing, the grid's strict `layout_x === x` never matched, so every
+// tile vanished even though the "On the map" count (a `!= null` check) showed
+// them as placed. After normalizing, a placed tile's coords are real numbers that
+// match the integer cell indices.
+test("normalizeLocations coerces string coords so tiles match grid cells", () => {
+  const normalized = normalizeLocations([
+    loc("a", "2", "0"),
+    loc("b", null, null),
+    loc("c", "", "1"), // one coord missing -> stays unplaced
+  ]);
+  assert.strictEqual(normalized[0].layout_x, 2);
+  assert.strictEqual(normalized[0].layout_y, 0);
+  assert.strictEqual(normalized[2].layout_x, null);
+
+  const { placed, unplaced } = splitLocations(normalized);
+  assert.deepEqual(placed.map((l) => l.id), ["a"]);
+  assert.deepEqual(unplaced.map((l) => l.id), ["b", "c"]);
+  // The exact lookup the grid does for each cell now resolves the tile.
+  assert.ok(placed.find((l) => l.layout_x === 2 && l.layout_y === 0));
 });
 
 test("summarizeLayout tolerates missing count fields", () => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./icons";
 import { traceApi, traceErrorMessage } from "./lib";
-import { changedPositions, splitLocations, summarizeLayout } from "./officeLayoutData";
+import { changedPositions, normalizeLocations, splitLocations, summarizeLayout } from "./officeLayoutData";
 
 // Mock locations for the standalone demo. The real page passes its own
 // `locations` from the parent; this is only the default so the component
@@ -214,8 +214,8 @@ export function OfficeLayoutView({
   onOpenLocation,
   onStartScan,
 }) {
-  const [items, setItems] = useState(locations);
-  const [savedItems, setSavedItems] = useState(locations);
+  const [items, setItems] = useState(() => normalizeLocations(locations));
+  const [savedItems, setSavedItems] = useState(() => normalizeLocations(locations));
   const [selectedId, setSelectedId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // `${x},${y}` | "tray" | null
@@ -223,8 +223,9 @@ export function OfficeLayoutView({
   const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
-    setItems(locations);
-    setSavedItems(locations);
+    const normalized = normalizeLocations(locations);
+    setItems(normalized);
+    setSavedItems(normalized);
     setSelectedId(null);
     setDraggingId(null);
     setDropTarget(null);
