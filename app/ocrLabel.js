@@ -66,6 +66,18 @@ export function normalizeExpiry(raw) {
   m = t.match(/\b(\d{1,2})\s*[-/.]\s*(20\d{2})\b/);
   if (m) return isoFrom(+m[2], +m[1], 0);
 
+  // DD MON YYYY / MON DD YYYY  (3-letter month name *with* a day — the format
+  // suture and anesthetic cartons print, "15 JAN 2027" / "15-JAN-2027" / "JAN 15
+  // 2027"). Day precision, so this must run before the month-only MON paths below:
+  // those drop the printed day and resolve to month-end, pushing a mid-month
+  // expiry up to ~four weeks late (a "15 JAN" item would read as good through the
+  // 31st). The separators allow the usual OCR spacings; the month name is checked
+  // against MONTHS so a non-month triple just falls through.
+  m = t.match(/\b(\d{1,2})\s*[-/. ]\s*([A-Z]{3})\s*[-/. ]\s*(20\d{2})\b/);
+  if (m && MONTHS[m[2]]) return isoFrom(+m[3], MONTHS[m[2]], +m[1]);
+  m = t.match(/\b([A-Z]{3})\s*[-/. ]\s*(\d{1,2})\s*[-/. ]\s*(20\d{2})\b/);
+  if (m && MONTHS[m[1]]) return isoFrom(+m[3], MONTHS[m[1]], +m[2]);
+
   // MON YYYY / YYYY MON  (3-letter month name, month precision)
   m = t.match(/\b([A-Z]{3})\s*[-/. ]\s*(20\d{2})\b/) || t.match(/\b(20\d{2})\s*[-/. ]\s*([A-Z]{3})\b/);
   if (m) {

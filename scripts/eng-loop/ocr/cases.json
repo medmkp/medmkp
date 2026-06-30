@@ -12,5 +12,6 @@
   { "name": "gore-lot-code",      "text": "LOT CODE 20756526A Use By 2024-06-30 Date of Manufacture 2019-07-02", "expectLot": "20756526A", "expectExpiry": "2024-06-30" },
   { "name": "gs1-ai-ultradent",   "text": "(01)00883205106100\n(17)230622\n(10)BG7ZP\nREF-UP 1204", "expectLot": "BG7ZP", "expectExpiry": "2023-06-22" },
   { "name": "patterson-suture-ocr-semicolon-expiry", "text": "Su? Us\nPATTERN N SESS\n\n“cpss\nAAMT I 1 i li\nclei by ans ical Sumy\n: St. Pau, MN 55120\nPLAIN.\nees SER\n\n089-9534 Ds-24\n\n[ET M607840 % 2016 - 0;\n\n", "expectLot": "M607840", "expectExpiry": "2016-01-31" },
-  { "name": "iso-symbol-exp-year-garble", "text": "a Rm\n\nLot |\n\n0710709\n\n07.20n1\n", "expectLot": "0710709", "expectExpiry": "2011-07-31" }
+  { "name": "iso-symbol-exp-year-garble", "text": "a Rm\n\nLot |\n\n0710709\n\n07.20n1\n", "expectLot": "0710709", "expectExpiry": "2011-07-31" },
+  { "name": "dd-mon-yyyy-suture-carton", "text": "COVIDIEN\n\nPolysorb™ Braided Absorbable Suture 3-0\n\nREF GL-123 18 mm 1/2c\n\nLOT S2210V\n\nEXP 15 JAN 2027\n\nSTERILE R. Do not resterilize. Single use only. Distributed by Medtronic.\n\nMinneapolis, MN 55432 USA.\n", "expectLot": "S2210V", "expectExpiry": "2027-01-15" }
 ]
