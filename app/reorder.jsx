@@ -870,7 +870,7 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
 // Full-screen mobile detail page. Layout follows the mobile mockup; the footer
 // actions mirror the desktop MatchPanel (Cancel / Confirm by mode).
 
-export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate, supplierShipping = {}, shipToState = "" }) {
+export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate, supplierShipping = {}, shipToState = "", publicView = false }) {
   const idx = rows.findIndex((r) => r.id === row.id);
   const total = rows.length;
   const isResolve = mode === "resolve";
@@ -954,11 +954,13 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
     <div className="m-detail">
       <header className="m-detail-top">
         <button className="m-iconbtn" type="button" aria-label="Back to list" onClick={onClose}><Icon name="icon-chevron-left" className="button-icon" /></button>
-        <div className="m-pager">
-          <button type="button" aria-label="Previous item" disabled={idx <= 0} onClick={() => idx > 0 && onOpenRow(rows[idx - 1])}><Icon name="icon-chevron-left" className="button-icon" /></button>
-          <span>{idx + 1} of {total}</span>
-          <button type="button" aria-label="Next item" disabled={idx >= total - 1} onClick={() => idx < total - 1 && onOpenRow(rows[idx + 1])}><Icon name="icon-chevron-right" className="button-icon" /></button>
-        </div>
+        {total > 1 && (
+          <div className="m-pager">
+            <button type="button" aria-label="Previous item" disabled={idx <= 0} onClick={() => idx > 0 && onOpenRow(rows[idx - 1])}><Icon name="icon-chevron-left" className="button-icon" /></button>
+            <span>{idx + 1} of {total}</span>
+            <button type="button" aria-label="Next item" disabled={idx >= total - 1} onClick={() => idx < total - 1 && onOpenRow(rows[idx + 1])}><Icon name="icon-chevron-right" className="button-icon" /></button>
+          </div>
+        )}
         <button className="m-iconbtn" type="button" aria-label="More"><span aria-hidden="true">⋯</span></button>
       </header>
 
@@ -1048,7 +1050,7 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
             </>
           )}
           <textarea className="m-notes" placeholder="Add a note…" maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} />
-          {row.itemId && (
+          {row.itemId && !publicView && (
             <button className="crl-drawer-remove m-detail-remove" type="button" onClick={removeItem}><Icon name="icon-trash" className="button-icon" />Remove item from list</button>
           )}
         </section>
@@ -1056,7 +1058,7 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
 
       <footer className="m-detail-foot">
         <button className="crl-ghost-btn" type="button" onClick={onClose}>{isView ? "Close" : "Cancel"}</button>
-        {!searching && (
+        {!searching && !publicView && (
           <button className="primary-action compact" type="button" onClick={confirm}>{isView ? "Update Match" : "Confirm Selected Match"}</button>
         )}
       </footer>
