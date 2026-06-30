@@ -1,4 +1,6 @@
 import type { SupplierCatalogRow } from "../supplier-catalog"
+import { normalizeProduct } from "../../matching/normalize"
+import type { NormalizedProduct, SupplierProductRow } from "../../matching/types"
 import { marketplaceProductId, titleOverlapConfidence } from "./parse"
 import type {
   MarketplaceFetcher,
@@ -56,6 +58,76 @@ function matchStatusForConfidence(confidence: number): MatchStatus {
   return "needs_review"
 }
 
+// Unit-qualified axes where a difference still leaves an acceptable substitute:
+// a buyer reordering gloves will take a different color. Every other extracted
+// axis (size, shade, gauge, mm/ml/oz measures, suture/crown sizes, bur grit,
+// taper, catalog #) is product-defining — a disagreement means a different
+// product, not a substitute.
+const SUBSTITUTE_COSMETIC_AXES = new Set(["color"])
+
+/**
+ * Normalize a bare product name into the matcher's representation so we can reuse
+ * its unit-qualified numeric-attribute extraction. Only the name matters here;
+ * the other row fields are left empty.
+ */
+function normalizedFromName(name: string): NormalizedProduct {
+  const row: SupplierProductRow = {
+    id: "",
+    supplier_id: "",
+    sku: "",
+    manufacturer_sku: "",
+    brand: "",
+    name,
+    category: "",
+    pack_size: "",
+    unit_of_measure: "",
+    product_url: "",
+    image_url: "",
+    price_cents: null,
+    price_basis: null,
+  }
+  return normalizeProduct(row)
+}
+
+/**
+ * True when the canonical name and the listing title disagree on a
+ * product-defining numeric axis (size / shade / gauge / measure / catalog #),
+ * i.e. both specify that axis but share no value. This is the structural veto
+ * the asymmetric title-token-overlap score misses: a listing that shares a brand
+ * + a few generic words clears the 30% bar even when it is a different size or
+ * shade (the #286 audit measured ~57% of glove substitutes as the wrong size
+ * class). Cosmetic axes (color) are ignored — a different color is still a usable
+ * substitute. Mirrors the offline engine's `compareNumericAttrs` hard-conflict
+ * check, which scored ~100% precision.
+ */
+export function conflictsOnProductAxis(
+  canonicalName: string,
+  listingTitle: string
+): boolean {
+  const canonical = normalizedFromName(canonicalName)
+  const listing = normalizedFromName(listingTitle)
+  for (const [axis, canonicalValues] of canonical.numericAttrs) {
+    if (SUBSTITUTE_COSMETIC_AXES.has(axis)) {
+      continue
+    }
+    const listingValues = listing.numericAttrs.get(axis)
+    if (!listingValues) {
+      continue
+    }
+    let overlap = false
+    for (const value of canonicalValues) {
+      if (listingValues.has(value)) {
+        overlap = true
+        break
+      }
+    }
+    if (!overlap) {
+      return true
+    }
+  }
+  return false
+}
+
 export function resultToRow(
   provider: MarketplaceProvider,
   canonical: CanonicalProductInput,
@@ -63,6 +135,19 @@ export function resultToRow(
 ): MarketplaceCatalogRow {
   const sku = `${provider.id}:${marketplaceProductId(result.product_url)}`
   const confidence = titleOverlapConfidence(result.title, canonical.name)
+
+  // Title overlap alone over-promotes: a listing that shares a brand + a few
+  // generic words clears the 30% bar even when it is a different size or shade.
+  // Veto the `substitute` tier on a product-defining numeric-axis conflict,
+  // downgrading to `needs_review` so it stops short of the reorder drawer.
+  // (`exact`/`variant` need much higher overlap and are left unchanged — this
+  // only narrows what becomes a substitute.)
+  let status = matchStatusForConfidence(confidence)
+  let reason = `Sourced via ${provider.id} search for canonical product name; ${confidence}% title overlap`
+  if (status === "substitute" && conflictsOnProductAxis(canonical.name, result.title)) {
+    status = "needs_review"
+    reason += "; downgraded: conflicting size/shade/spec"
+  }
 
   return {
     sku,
@@ -84,9 +169,9 @@ export function resultToRow(
       ...result.raw,
     },
     canonical_product_id: canonical.id,
-    canonical_match_status: matchStatusForConfidence(confidence),
+    canonical_match_status: status,
     canonical_match_confidence: confidence,
-    canonical_match_reason: `Sourced via ${provider.id} search for canonical product name; ${confidence}% title overlap`,
+    canonical_match_reason: reason,
   }
 }
 
