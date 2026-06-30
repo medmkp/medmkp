@@ -9226,8 +9226,10 @@ th {
   .app-body > .sidebar { display: none; }
   .app-main { height: auto; padding: 18px 16px 96px; }
   .crl-rail { grid-template-columns: minmax(0, 1fr); }
-  .crl-list { overflow-x: auto; }
-  .crl-row { min-width: 860px; }
+  /* No sidebar/topbar here, so the table fits the viewport: let the flexible
+     columns compress (as they already do at 901–1080px) instead of forcing an
+     860px min-width that pushes the Price column off-screen behind a scroll with
+     no affordance. The product title's line-clamp absorbs the squeeze. */
 }
 
 /* Upload modal */
