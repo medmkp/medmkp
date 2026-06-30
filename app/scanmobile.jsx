@@ -290,7 +290,7 @@ function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage,
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
           <span className={s.camWordmark}>
-            <span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span>
+            <span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span>
           </span>
         </span>
         <span className={s.camRight} />
@@ -425,7 +425,7 @@ export function MobileScanSession({
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
           <span className={s.camWordmark}>
-            <span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span>
+            <span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span>
           </span>
         </span>
         <span className={s.camRight}>
@@ -567,7 +567,7 @@ export function MobileReorderScan({
         </button>
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
-          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span></span>
         </span>
         <span className={s.camRight}>
           <button
@@ -722,7 +722,7 @@ export function MobilePublicScan({
         </button>
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
-          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span></span>
         </span>
         <span className={s.camRight}>
           <button type="button" className={s.camTextBtn} onClick={onLogin}>Log in</button>
