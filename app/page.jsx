@@ -1650,18 +1650,20 @@ export default function Home() {
                   onHome={() => navigate("/")}
                 />
                 {scanMatchRow && (
-                  <MobileItemDetail
-                    rows={[scanMatchRow]}
-                    row={scanMatchRow}
-                    mode="view"
-                    onClose={() => setScanMatchRow(null)}
-                    onOpenRow={() => {}}
-                    onToast={showToast}
-                    onConfirmMatch={applyMatchDecision}
-                    onLinkProduct={linkProductToItem}
-                    onRemoveItem={removeDraftItem}
-                    onNavigate={(to) => navigate(to.startsWith("/app/product/") ? to.replace("/app/product/", "/product/") : to)}
-                  />
+                  <div className="scan-match-fs">
+                    <MobileItemDetail
+                      rows={[scanMatchRow]}
+                      row={scanMatchRow}
+                      mode="view"
+                      onClose={() => setScanMatchRow(null)}
+                      onOpenRow={() => {}}
+                      onToast={showToast}
+                      onConfirmMatch={applyMatchDecision}
+                      onLinkProduct={linkProductToItem}
+                      onRemoveItem={removeDraftItem}
+                      onNavigate={(to) => navigate(to.startsWith("/app/product/") ? to.replace("/app/product/", "/product/") : to)}
+                    />
+                  </div>
                 )}
               </>
             ) : (
