@@ -74,6 +74,20 @@ export function normalizeExpiry(raw) {
     if (mon) return isoFrom(yr, mon, 0);
   }
 
+  // OCR misreads a digit inside a numeric date as a look-alike letter, which
+  // defeats the four layouts above (they all demand a clean 20\d{2}). A real
+  // medical label's "07.2011" came back "07.20N1" — the joined "11" strokes read
+  // as "N" — and the same slip gives "2O11", "20I1", "20S5". Coerce the common
+  // letter→digit homoglyphs and retry once. This runs only after the month-name
+  // paths, so a genuine "JAN 2026" never reaches it, and isoFrom still range-
+  // checks the result, so a coerced non-date just falls through to null.
+  if (/20/.test(t) && /[A-Z]/.test(t)) {
+    const fixed = t
+      .replace(/[OQ]/g, "0").replace(/[ILN|]/g, "1").replace(/S/g, "5")
+      .replace(/B/g, "8").replace(/Z/g, "2").replace(/G/g, "6");
+    if (fixed !== t) return normalizeExpiry(fixed);
+  }
+
   return null;
 }
 
@@ -208,10 +222,19 @@ export function parseLotExpiry(text, { barcode } = {}) {
     const candidates = [];
     let prevEnd = 0; // end of the last date seen — the marker window never crosses
     // it, so an earlier date's "MFG" tag can't leak onto the next date.
-    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d[\d\-/. ;!]{4,11}[\d;!])(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
-      const iso = normalizeExpiry(m[1] || m[2] || m[3]);
+    // A date run is a digit group followed by 1–2 separator-joined groups. The
+    // separator ([-/.]) is REQUIRED between groups so a bare space can't bridge
+    // two adjacent numbers — without that, a lot printed just before the date
+    // ("0710709 07.2011") swallows the date's leading month and the expiry is
+    // lost. Spaces are still tolerated *around* the separator (Patterson prints
+    // "2016 - 01"), and the trailing groups allow OCR look-alike letters in the
+    // year ("07.20N1" for 07.2011), which normalizeExpiry coerces before
+    // validating. The two MON-anchored alternatives keep the 3-letter-month case.
+    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d{1,4}(?:\s*[-/.]\s*[\dA-Z;!]{1,4}){1,2})(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
+      const val = m[1] || m[2] || m[3];
+      const iso = normalizeExpiry(val);
       if (!iso) continue;
-      const dateIndex = m.index + (m[0].length - (m[1] || m[2] || m[3]).length);
+      const dateIndex = m.index + (m[0].length - val.length);
       const before = flat.slice(Math.max(prevEnd, dateIndex - 14), dateIndex);
       prevEnd = m.index + m[0].length;
       if (/\b(?:REV|MFG|MFD|MANUF|MADE)/.test(before)) continue;
