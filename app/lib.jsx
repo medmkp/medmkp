@@ -653,7 +653,23 @@ export const matchReviewSample = [
 ];
 
 
-export const matchReviewSampleStats = { total: 124, matched: 82, review: 28, notFound: 14, high: 64, med: 40, low: 20, matchedPct: 66, reviewPct: 23, notFoundPct: 11 };
+// Derived sample summary — keeps the demo's "Savings & totals" rail consistent
+// with the rows actually rendered above (and with the derived List subtotal /
+// tab counts). Hardcoding these drifts the moment the sample rows change; the
+// tab counts and List subtotal already derive from the rows (see PR #496).
+export const matchReviewSampleSummary = (() => {
+  const matched = matchReviewSample.filter((r) => r.matchName);
+  const estimatedTotal = matchReviewSample.reduce((sum, r) => sum + (r.lineTotal || 0), 0);
+  const suppliers = new Set(matched.map((r) => r.supplier).filter((s) => s && s !== "—")).size;
+  const coverage = matchReviewSample.length ? Math.round((matched.length / matchReviewSample.length) * 100) : 0;
+  // Best cheaper per-unit alternative for each matched row, summed across the list.
+  const savings = matched.reduce((sum, r) => {
+    if (r.perEa == null || !r.qty || !r.others?.length) return sum;
+    const best = Math.min(...r.others.map((o) => o.perEa).filter((p) => p != null));
+    return Number.isFinite(best) && best < r.perEa ? sum + (r.perEa - best) * r.qty : sum;
+  }, 0);
+  return { estimatedTotal, suppliers, coverage, savings };
+})();
 
 
 export const MR_STATUS = {
