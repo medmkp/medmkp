@@ -389,6 +389,16 @@ export function formatArrival(est) {
   return `Arrives in ~${daysMin}–${daysMax} ${plural(daysMax)}`;
 }
 
+// Compact arrival label for the tight reorder-drawer offer rows: "~2 days" /
+// "~1–2 days". Only "ok" estimates produce a label (a backordered offer can't be
+// fast), so null in / no usable promise → null out.
+export function formatArrivalShort(est) {
+  if (!est || est.status !== "ok") return null;
+  const { daysMin, daysMax } = est;
+  if (daysMin === daysMax) return `~${daysMin} day${daysMin === 1 ? "" : "s"}`;
+  return `~${daysMin}–${daysMax} days`;
+}
+
 // Suppliers write the same pack a dozen ways ("100/Bx", "100/Box", "Box of 300",
 // "200/Box"). The ingestion parser (ingestion/pack.ts) already resolved each to a
 // structured (quantity, basis, base_unit), so render one canonical label from

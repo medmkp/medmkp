@@ -1601,6 +1601,7 @@ export default function Home() {
       listTouched={listTouched}
       buyingPrefs={buyingPrefs}
       supplierShipping={supplierShipping}
+      shipToState={me?.practice?.ship_state || ""}
       onBuyingPrefs={setBuyingPrefs}
       onApplyOptimized={applyOptimizedPlan}
       onArchiveList={requestSaveList}

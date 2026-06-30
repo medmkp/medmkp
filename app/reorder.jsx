@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
-import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, compactSizeLabel, computePlanTotals, deriveMatchRows, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel, variantOptionList } from "./lib";
+import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, compactSizeLabel, computePlanTotals, deriveMatchRows, estimateArrival, formatArrivalShort, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, normSupplierName, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel, variantOptionList } from "./lib";
 import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchManufacturer, MobileHeader, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
@@ -261,6 +261,33 @@ function bestOrderableOfferIndex(candidates) {
   return candidates.findIndex((candidate) => isOrderable(candidate));
 }
 
+// Per-candidate delivery estimate (from the supplier's published ship-time
+// policy, refined to the buyer's state) plus the index of the single soonest
+// orderable offer. "Fastest" only means something as a comparison, so we badge
+// it only when ≥2 orderable offers carry an estimate AND one is strictly sooner
+// than the rest — never a lone known-fast supplier against unknowns, and never a
+// tie. Returns { byIndex: (estimate|null)[], fastestIndex }.
+function deliveryEstimates(candidates, shippingByName, shipToState) {
+  const byIndex = (candidates || []).map((candidate) =>
+    isOrderable(candidate)
+      ? estimateArrival(shippingByName?.[normSupplierName(candidate.supplier)] || null, shipToState, { available: true })
+      : null
+  );
+  const ranked = [];
+  byIndex.forEach((est, index) => {
+    if (est && est.status === "ok") {
+      ranked.push({ index, by: est.arriveMax.getTime(), tie: est.arriveMin.getTime() });
+    }
+  });
+  ranked.sort((a, b) => a.by - b.by || a.tie - b.tie);
+  let fastestIndex = -1;
+  if (ranked.length >= 2) {
+    const [first, second] = ranked;
+    if (first.by < second.by || first.tie < second.tie) fastestIndex = first.index;
+  }
+  return { byIndex, fastestIndex };
+}
+
 function BestPriceStock({ candidate }) {
   if (candidate?.availability !== "limited" && candidate?.liveAvailable === true) {
     return <span className="crl-cand-stock stock-good">In stock</span>;
@@ -268,7 +295,19 @@ function BestPriceStock({ candidate }) {
   return <CandidateStock availability={candidate?.availability} liveAvailable={candidate?.liveAvailable} />;
 }
 
-export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate }) {
+// Compact delivery line for an offer row ("Arrives ~1–2 days"). Null estimate
+// (supplier publishes no usable promise) renders nothing.
+function CandidateEta({ est }) {
+  const label = formatArrivalShort(est);
+  if (!label) return null;
+  return (
+    <span className="crl-cand-eta" title="Estimated delivery — published transit time refined to your state, business days, excludes holidays">
+      <Icon name="icon-truck" className="button-icon" />Arrives {label}
+    </span>
+  );
+}
+
+export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate, supplierShipping = {}, shipToState = "" }) {
   const isResolve = mode === "resolve";
   const isView = mode === "view";
 
@@ -352,6 +391,9 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
   // Land on the buyer's saved choice when it's still in the set, else the lowest
   // priced orderable offer, else the recommendation.
   const bestPriceIndex = bestOrderableOfferIndex(candidates);
+  // Delivery estimate per offer + the single soonest one (the "Fastest" badge),
+  // mirroring the per-supplier ETA already shown on the Review plan.
+  const { byIndex: arrivalByIndex, fastestIndex } = deliveryEstimates(candidates, supplierShipping, shipToState);
   const keyedIndex = selectedKey ? candidates.findIndex((candidate) => candidate.key === selectedKey) : -1;
   const recommendedIndex = candidates.findIndex((candidate) => candidate.recommended);
   const selected = keyedIndex >= 0 ? keyedIndex : bestPriceIndex >= 0 ? bestPriceIndex : Math.max(0, recommendedIndex);
@@ -569,11 +611,13 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
                       <CandidateName supplier={candidate.supplier} name={candidate.name} canonicalName={row.canonicalName} productUrl={candidate.productUrl} />
                       {candidate.packLabel && <small>{candidate.packLabel}</small>}
                       <BestPriceStock candidate={candidate} />
+                      <CandidateEta est={arrivalByIndex[bestPriceIndex]} />
                     </span>
                     <span className="crl-cand-right">
                       <strong>{mrPriceLabel(candidate.price)}</strong>
                       {showPerEa(candidate.perEa, candidate.price) && <span className="crl-cand-per">${mrEa(candidate.perEa)} / ea</span>}
                       <span className="crl-cand-tags">
+                        {bestPriceIndex === fastestIndex && <span className="crl-cand-fast"><Icon name="icon-truck" className="button-icon" />Fastest</span>}
                         {candidate.recommended && <span className="crl-cand-rec">Recommended</span>}
                         {selected === bestPriceIndex && !candidate.recommended && <span className="crl-cand-sel">Selected</span>}
                       </span>
@@ -592,11 +636,13 @@ export function MatchPanel({ row, mode, wide, onToggleWide, onClose, onToast, on
                     <CandidateName supplier={candidate.supplier} name={candidate.name} canonicalName={row.canonicalName} productUrl={candidate.productUrl} />
                     {candidate.packLabel && <small>{candidate.packLabel}</small>}
                     <CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} />
+                    <CandidateEta est={arrivalByIndex[index]} />
                   </span>
                   <span className="crl-cand-right">
                     <strong>{mrPriceLabel(candidate.price)}</strong>
                     {showPerEa(candidate.perEa, candidate.price) && <span className="crl-cand-per">${mrEa(candidate.perEa)} / ea</span>}
                     <span className="crl-cand-tags">
+                      {index === fastestIndex && <span className="crl-cand-fast"><Icon name="icon-truck" className="button-icon" />Fastest</span>}
                       {candidate.recommended && <span className="crl-cand-rec">Recommended</span>}
                       {selected === index && !candidate.recommended && <span className="crl-cand-sel">Selected</span>}
                     </span>
@@ -824,7 +870,7 @@ export function MobileReorderList({ title, rows, stats, totalItems, tab, onTab, 
 // Full-screen mobile detail page. Layout follows the mobile mockup; the footer
 // actions mirror the desktop MatchPanel (Cancel / Confirm by mode).
 
-export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate }) {
+export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast, onConfirmMatch, onLinkProduct, onRemoveItem, onNavigate, supplierShipping = {}, shipToState = "" }) {
   const idx = rows.findIndex((r) => r.id === row.id);
   const total = rows.length;
   const isResolve = mode === "resolve";
@@ -856,6 +902,8 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
   }
   const bestPriceIndex = bestOrderableOfferIndex(candidates);
   const bestPriceHeroIndex = bestPriceIndex >= 0 ? bestPriceIndex : 0;
+  // Delivery estimate per offer + the single soonest one (the "Fastest" badge).
+  const { byIndex: arrivalByIndex, fastestIndex } = deliveryEstimates(candidates, supplierShipping, shipToState);
   const initialSel = candidates.findIndex((candidate) => candidate.key === row.selectedOfferKey);
   const [selected, setSelected] = useState(bestPriceIndex >= 0 ? bestPriceIndex : initialSel < 0 ? 0 : initialSel);
   const [notes, setNotes] = useState(row.note || "");
@@ -955,7 +1003,7 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
               <label className={`m-match best m-match-hero ${selected === bestPriceHeroIndex ? "active" : ""} ${!isOrderable(candidates[bestPriceHeroIndex]) ? "oos" : ""}`} aria-disabled={!isOrderable(candidates[bestPriceHeroIndex])}>
                 <input type="radio" name="m-cand" checked={selected === bestPriceHeroIndex} disabled={!isOrderable(candidates[bestPriceHeroIndex])} onChange={() => setSelected(bestPriceHeroIndex)} />
                 <ProductThumb image={candidates[bestPriceHeroIndex].image} alt={candidates[bestPriceHeroIndex].name} />
-                <span className="m-match-info"><CandidateName supplier={candidates[bestPriceHeroIndex].supplier} name={candidates[bestPriceHeroIndex].name} canonicalName={row.canonicalName} productUrl={candidates[bestPriceHeroIndex].productUrl} />{candidates[bestPriceHeroIndex].packLabel && <small>{candidates[bestPriceHeroIndex].packLabel}</small>}<BestPriceStock candidate={candidates[bestPriceHeroIndex]} /></span>
+                <span className="m-match-info"><CandidateName supplier={candidates[bestPriceHeroIndex].supplier} name={candidates[bestPriceHeroIndex].name} canonicalName={row.canonicalName} productUrl={candidates[bestPriceHeroIndex].productUrl} />{candidates[bestPriceHeroIndex].packLabel && <small>{candidates[bestPriceHeroIndex].packLabel}</small>}<span className="m-match-signals"><BestPriceStock candidate={candidates[bestPriceHeroIndex]} />{bestPriceHeroIndex === fastestIndex && <span className="crl-cand-fast"><Icon name="icon-truck" className="button-icon" />Fastest</span>}</span><CandidateEta est={arrivalByIndex[bestPriceHeroIndex]} /></span>
                 <span className="m-match-right"><strong>{mrPriceLabel(candidates[bestPriceHeroIndex].price)}</strong>{showPerEa(candidates[bestPriceHeroIndex].perEa, candidates[bestPriceHeroIndex].price) ? <small>${mrEa(candidates[bestPriceHeroIndex].perEa)} / ea</small> : (!(candidates[bestPriceHeroIndex].price > 0) && candidates[bestPriceHeroIndex].supplier && candidates[bestPriceHeroIndex].supplier !== "—" && <small>Login required</small>)}</span>
               </label>
             </section>
@@ -968,7 +1016,7 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
                   return (
                   <label className={`m-match ${selected === index ? "active" : ""} ${oos ? "oos" : ""}`} aria-disabled={oos} key={candidate.key ?? index}>
                     <input type="radio" name="m-cand" checked={selected === index} disabled={oos} onChange={() => setSelected(index)} />
-                    <span className="m-match-info"><CandidateName supplier={candidate.supplier} name={candidate.name} canonicalName={row.canonicalName} productUrl={candidate.productUrl} />{candidate.packLabel && <small>{candidate.packLabel}</small>}<CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} /></span>
+                    <span className="m-match-info"><CandidateName supplier={candidate.supplier} name={candidate.name} canonicalName={row.canonicalName} productUrl={candidate.productUrl} />{candidate.packLabel && <small>{candidate.packLabel}</small>}<span className="m-match-signals"><CandidateStock availability={candidate.availability} liveAvailable={candidate.liveAvailable} />{index === fastestIndex && <span className="crl-cand-fast"><Icon name="icon-truck" className="button-icon" />Fastest</span>}</span><CandidateEta est={arrivalByIndex[index]} /></span>
                     <span className="m-match-right"><em className={`m-conf ${mrConfTone(candidate.confidence)}`}>{candidate.confidence}%</em><strong>{mrPriceLabel(candidate.price)}</strong>{showPerEa(candidate.perEa, candidate.price) && <small>${mrEa(candidate.perEa)} / ea</small>}</span>
                   </label>
                   );
@@ -1171,6 +1219,7 @@ export function CurrentReorderList({
   allowSample = false,
   buyingPrefs,
   supplierShipping = {},
+  shipToState = "",
   onBuyingPrefs,
   onApplyOptimized,
   onArchiveList,
@@ -1376,6 +1425,8 @@ export function CurrentReorderList({
             onLinkProduct={onLinkProduct}
             onRemoveItem={onRemoveItem}
             onNavigate={onNavigate}
+            supplierShipping={supplierShipping}
+            shipToState={shipToState}
           />
         )}
         {addMode === "upload" && (
@@ -1602,6 +1653,8 @@ export function CurrentReorderList({
             onLinkProduct={onLinkProduct}
             onRemoveItem={onRemoveItem}
             onNavigate={onNavigate}
+            supplierShipping={supplierShipping}
+            shipToState={shipToState}
           />
         ) : (
         <aside className="crl-rail">
