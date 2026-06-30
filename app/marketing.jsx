@@ -499,7 +499,7 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, itemsChe
             </form>
           </div>
 
-          <ScanResultCard result={scanResult} onClear={onClearScanResult} onEnterManually={() => {}} />
+          <ScanResultCard result={scanResult} onClear={onClearScanResult} onEnterManually={() => {}} showCompare />
           {isDesktop && (
             <button type="button" className="scan-qr-back pscan-qr-back" onClick={() => setMode("qr")}>
               <Icon name="icon-chevron-left" className="button-icon" />Scan with your phone instead

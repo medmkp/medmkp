@@ -701,6 +701,7 @@ export function MobilePublicScan({
             className={s.publicResultCard}
             onClear={onClearScanResult}
             onEnterManually={() => setSheet("manual")}
+            showCompare
           />
         )}
         {!scanResult && (

@@ -7720,6 +7720,13 @@ th {
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  /* Honest breadth behind the "best price" — only on the public benchmark card. */
+  .scan-result-card .src-body small.src-compare {
+    margin-top: 3px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--blue);
+  }
   .scan-result-card .src-right {
     display: flex;
     flex-direction: column;
