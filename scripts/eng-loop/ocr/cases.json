@@ -31,5 +31,7 @@
   { "name": "aastramed-suture-mm-yyyy-real-ocr", "text": "*.\n\n7\n\n2/0 (3METRIC) |\n\nPOLYDIOXANONE o4pcs\nAbsorbable Suture\nSTERILE 75cm\n\n3/8 circle\nC €292 reverse cutting\n\n221071 Fag\n10.2022\n\ng 10.2025\nAastraMed\n\n", "expectLot": "221071", "expectExpiry": "2025-10-31" },
   { "name": "compact-yyyymm-exp-no-separator", "text": "BE, No, 19858 © J\nfie, Dit, 2024-71\nExp.Dt. 202711\n", "expectLot": null, "expectExpiry": "2027-11-30" },
   { "name": "compact-yyyymmdd-exp", "text": "LOT A22  EXP 20260131", "expectLot": "A22", "expectExpiry": "2026-01-31" },
-  { "name": "exp-mm-yy-2digit-year", "text": "Cefalexin Capsules 250mg\nCode KR/DRUGS/ KTK /28 / 342 /2004\nBatch No CBTB0196\nMfg. Date 10/18\nExpiry Date 09/21", "expectLot": "CBTB0196", "expectExpiry": "2021-09-30" }
+  { "name": "exp-mm-yy-2digit-year", "text": "Cefalexin Capsules 250mg\nCode KR/DRUGS/ KTK /28 / 342 /2004\nBatch No CBTB0196\nMfg. Date 10/18\nExpiry Date 09/21", "expectLot": "CBTB0196", "expectExpiry": "2021-09-30" },
+  { "name": "de-charge-bezeichnung-blister", "text": "Oxycodon-HC! Winthrop®\n10 mg Retardtabletten\nOxycodonhydrochlorid\nWinthrop Arzneimittel\n\nMitvertrieb: Zentiva Pharma\nCh.-B.: 6230058\nVerw. bis 02/2020\n", "expectLot": "6230058", "expectExpiry": "2020-02-29" },
+  { "name": "de-charge-alphanumeric", "text": "Oxycodon-HCl AL 10 mg Retardtabletten  Ch.-B.: K2F306  Verw. bis 03/2021", "expectLot": "K2F306", "expectExpiry": "2021-03-31" }
 ]

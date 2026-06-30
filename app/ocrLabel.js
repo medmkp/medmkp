@@ -274,6 +274,17 @@ export function parseLotExpiry(text, { barcode } = {}) {
     if (aiLot && !(barcode && sameCode(aiLot[1], barcode))) lot = aiLot[1];
   }
   if (!lot) {
+    // German "Ch.-B." (Chargenbezeichnung) is the EU equivalent of LOT — the marker
+    // every German/Austrian/Swiss carton stamps the batch under (an Aliud/Zentiva
+    // Oxycodon blister prints "Ch.-B.: 6230058"). The shape fallback below only
+    // catches an all-digit or single-letter+digits batch, so a typical alphanumeric
+    // Charge ("K2F306") is invisible without anchoring on its marker. The "B" follows
+    // "CH" with only OCR-garbled dots/dashes between them, and the usual box/colon
+    // glyphs separate the marker from its value.
+    const chargeMatch = flat.match(/\bCH[.\-\s]*B[\s.\-:#)\]\[|]*([A-Z0-9][A-Z0-9\-/]{2,19})/);
+    if (chargeMatch && !(barcode && sameCode(chargeMatch[1], barcode))) lot = chargeMatch[1];
+  }
+  if (!lot) {
     // No usable "LOT" marker — the box edges defeated the classifier entirely (on
     // a real Patterson label "LOT" read as "[ETI"), or the batch is printed bare.
     // Fall back to a batch-number SHAPE among the tokens. See findBatchToken.
