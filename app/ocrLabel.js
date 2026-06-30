@@ -90,6 +90,19 @@ export function normalizeExpiry(raw) {
     if (mon) return isoFrom(yr, mon, 0);
   }
 
+  // Compact all-digit date, no separators. A dot-matrix / inkjet printer runs
+  // the groups together and OCR then drops the thin separator entirely, so a
+  // real "Exp.Dt. 2027/11" comes back as "202711" and a "20260131" as one run.
+  // Read YYYYMMDD (day precision) then YYYYMM (month precision → month-end). The
+  // year is anchored to 20\d{2} and the month/day range-checked here AND by
+  // isoFrom, so a lot or a phone number can't masquerade as a date. Only the
+  // keyword/structured callers ever pass a bare run in (the bare-date fallback
+  // requires a separator), so this never fires on unanchored body text.
+  m = t.match(/\b(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b/);
+  if (m) return isoFrom(+m[1], +m[2], +m[3]);
+  m = t.match(/\b(20\d{2})(0[1-9]|1[0-2])\b/);
+  if (m) return isoFrom(+m[1], +m[2], 0);
+
   // OCR misreads a digit inside a numeric date as a look-alike letter, which
   // defeats the four layouts above (they all demand a clean 20\d{2}). A real
   // medical label's "07.2011" came back "07.20N1" — the joined "11" strokes read
@@ -114,6 +127,11 @@ export function normalizeExpiry(raw) {
 function isDateLikeDigits(d) {
   if (/^(19|20)\d{2}$/.test(d)) return true; // a year on its own
   if (/^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(d)) return true; // YYYYMMDD
+  // YYYYMM — a separator-less compact expiry ("Exp.Dt. 2027/11" → "202711").
+  // Anchored to a 20xx year + a valid 01–12 month so a true 6-digit batch number
+  // is mostly unaffected; without this the expiry's own digits get picked up as
+  // the lot when no "LOT" marker survives the read.
+  if (/^20\d{2}(0[1-9]|1[0-2])$/.test(d)) return true; // YYYYMM
   return false;
 }
 
