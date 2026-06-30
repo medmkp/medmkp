@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogoMark, Icon, QrScanGlyph } from "./icons";
 import { formatExpiryDate, isQrUrl, parseLocationQr } from "./lib";
-import { ProductSearchResults, ScanResultCard, useBarcodeScanner, useProductSearch } from "./ui";
+import { ProductSearchResults, useBarcodeScanner, useProductSearch } from "./ui";
 import s from "./scanmobile.module.css";
 
 // Mobile scan flow. One scanner, no modes: pick a location, then scan. Each scan
@@ -290,7 +290,7 @@ function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage,
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
           <span className={s.camWordmark}>
-            <span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span>
+            <span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span>
           </span>
         </span>
         <span className={s.camRight} />
@@ -425,7 +425,7 @@ export function MobileScanSession({
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
           <span className={s.camWordmark}>
-            <span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span>
+            <span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span>
           </span>
         </span>
         <span className={s.camRight}>
@@ -567,7 +567,7 @@ export function MobileReorderScan({
         </button>
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
-          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span></span>
         </span>
         <span className={s.camRight}>
           <button
@@ -680,11 +680,13 @@ export function MobileReorderScan({
 // once they sign up and add what they're paying.
 export function MobilePublicScan({
   active = true, scanResult, itemsChecked = 0,
-  onScan, onClearScanResult, onSignup, onLogin, onHome,
+  onScan, onClearScanResult, onApplyDetails, onSearchAdd, onCaptureLabel, onViewProduct,
+  onSignup, onLogin, onHome,
 }) {
-  const [sheet, setSheet] = useState(null); // manual (Enter code)
+  const [sheet, setSheet] = useState(null); // manual (Enter code) | search
   const [captured, setCaptured] = useState(false);
   const pulseTimer = useRef();
+  const kind = scanResult?.kind;
   const cameraActive = active && !sheet;
 
   const { videoRef, cameraStatus, autoDetect, retry } = useBarcodeScanner({
@@ -720,47 +722,74 @@ export function MobilePublicScan({
         </button>
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
-          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span></span>
         </span>
         <span className={s.camRight}>
           <button type="button" className={s.camTextBtn} onClick={onLogin}>Log in</button>
         </span>
       </div>
 
+      {/* A match — fresh or a re-scan — shows the same "identified" pill and the
+          price drawer below. The public scanner is a single-item spot-check, so
+          there's no list and no "already scanned" duplicate state. */}
+      {kind === "added" && (
+        <div className={s.scanAddedBadge}><Icon name="icon-check-circle" /> Item identified</div>
+      )}
+      {kind === "qr" && (
+        <div className={`${s.scanAddedBadge} ${s.scanWarnBadge}`}><Icon name="icon-info" /> Skipped website QR code</div>
+      )}
+
       <div className={s.camFrame} aria-hidden="true"><span /><span /><span /><span /></div>
-      {cameraStatus === "ready" && !scanResult && (
+      {cameraStatus === "ready" && kind !== "added" && kind !== "unmatched" && (
         <div className={s.camHint}>{autoDetect ? "Point at a barcode to see its price" : "Tap Enter code to type it in"}</div>
       )}
 
-      <div className={s.publicBottom}>
-        {/* Single-item price benchmark for the latest scan (no list). */}
-        {scanResult && (
-          <ScanResultCard
-            result={scanResult}
-            className={s.publicResultCard}
-            onClear={onClearScanResult}
-            onEnterManually={() => setSheet("manual")}
-            showCompare
-          />
-        )}
-        {!scanResult && (
+      {/* Post-scan drawer — the exact lot/expiry drawer logged-in users get.
+          Tapping the product opens the full supplier-price comparison. Lot/expiry
+          persist to the local item, so they carry into the list on signup. */}
+      {kind === "added" && (
+        <ReorderScanSheet
+          key={scanResult.item?.id}
+          result={scanResult}
+          onPersist={onApplyDetails}
+          onDismiss={(body) => { onApplyDetails?.(scanResult.item?.id, body); onClearScanResult?.(); }}
+          onViewProduct={onViewProduct}
+        />
+      )}
+      {kind === "unmatched" && (
+        <UnmatchedScanSheet
+          onCaptureLabel={() => { onCaptureLabel?.(); onClearScanResult?.(); }}
+          onSearch={() => setSheet("search")}
+          onSkip={() => onClearScanResult?.()}
+        />
+      )}
+
+      {/* Enter-code + Sign up teaser. Hidden while a drawer owns the bottom. */}
+      {kind !== "added" && kind !== "unmatched" && (
+        <div className={s.publicBottom}>
           <button type="button" className={s.publicManual} onClick={() => setSheet("manual")}>
             <Icon name="icon-plus-circle" /> Enter a barcode or SKU
           </button>
-        )}
-
-        {/* Aggregate teaser → signup. Count-based and honest — no fabricated $. */}
-        <div className={s.publicTeaser}>
-          <span className={s.publicTeaserText}>
-            {itemsChecked > 0
-              ? <><strong>{itemsChecked} item{itemsChecked === 1 ? "" : "s"} checked.</strong> Sign up to keep them as a list and see where you&rsquo;re overpaying.</>
-              : <>Scanning is free, no login. Sign up to save your list and reorder across suppliers.</>}
-          </span>
-          <button type="button" className={s.publicTeaserSignup} onClick={onSignup}>Sign up free</button>
+          <div className={s.publicTeaser}>
+            <span className={s.publicTeaserText}>
+              {itemsChecked > 0
+                ? <><strong>{itemsChecked} item{itemsChecked === 1 ? "" : "s"} checked.</strong> Sign up to keep them as a list and see where you&rsquo;re overpaying.</>
+                : <>Scanning is free, no login. Sign up to save your list and reorder across suppliers.</>}
+            </span>
+            <button type="button" className={s.publicTeaserSignup} onClick={onSignup}>Sign up free</button>
+          </div>
         </div>
-      </div>
+      )}
 
       {sheet === "manual" && <ManualSheet onClose={() => setSheet(null)} onSubmit={(code) => { onScan?.(code); setSheet(null); }} />}
+      {sheet === "search" && (
+        <SearchSheet
+          title="Search the catalog"
+          hint="Find the right product for this scan."
+          onClose={() => setSheet(null)}
+          onPick={(product) => { onSearchAdd?.(product); setSheet(null); onClearScanResult?.(); }}
+        />
+      )}
     </div>
   );
 }
@@ -823,9 +852,15 @@ function UnmatchedScanSheet({ onCaptureLabel, onSearch, onSkip }) {
 // down — or tapping it — dismisses, but that's optional; scanning the next item
 // is enough. Whatever's captured is persisted when the drawer is replaced or
 // dismissed, so a manually typed lot/expiry is never lost.
-function ReorderScanSheet({ result, onPersist, onDismiss }) {
+function ReorderScanSheet({ result, onPersist, onDismiss, onViewProduct }) {
   const item = result.item || {};
   const matched = result.status !== "Not found";
+  // When a match has a canonical handle and the host wants it (logged-out
+  // scanner), the product block becomes a tap target into the full supplier-
+  // price comparison. Logged-in passes no onViewProduct, so it stays static.
+  const handle = item.canonicalHandle || "";
+  const supplierCount = new Set((item.offers || []).map((o) => o?.supplier).filter(Boolean)).size;
+  const canView = matched && typeof onViewProduct === "function" && Boolean(handle);
   const initialLot = item.lot || "";
   const initialExp = item.expirationDate ? String(item.expirationDate).slice(0, 10) : "";
   const [lot, setLot] = useState(initialLot);
@@ -893,21 +928,43 @@ function ReorderScanSheet({ result, onPersist, onDismiss }) {
         >
           <span className={s.modeSheetGrip} aria-hidden="true" />
         </button>
-        <div className={s.modeSheetProduct}>
-          <span className={s.modeSheetThumb}>
-            {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <Icon name="icon-package" />}
-          </span>
-          <div className={s.modeSheetProductInfo}>
-            <span className={s.modeSheetProductName}>
-              <span className={s.modeSheetProductNameText}>{name}</span>
-            </span>
-            {item.sku && <span className={s.modeSheetSku}>SKU: {item.sku}</span>}
-            <span className={`${s.badge} ${matched ? s.badgeGreen : s.badgeAmber}`}>
-              <Icon name={matched ? "icon-check-circle" : "icon-clock"} />
-              {matched ? "Exact match" : "Needs review"}
-            </span>
-          </div>
-        </div>
+        {(() => {
+          const inner = (
+            <>
+              <span className={s.modeSheetThumb}>
+                {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <Icon name="icon-package" />}
+              </span>
+              <div className={s.modeSheetProductInfo}>
+                <span className={s.modeSheetProductName}>
+                  <span className={s.modeSheetProductNameText}>{name}</span>
+                </span>
+                {item.sku && <span className={s.modeSheetSku}>SKU: {item.sku}</span>}
+                <span className={`${s.badge} ${matched ? s.badgeGreen : s.badgeAmber}`}>
+                  <Icon name={matched ? "icon-check-circle" : "icon-clock"} />
+                  {matched ? "Exact match" : "Needs review"}
+                </span>
+                {canView && (
+                  <span className={s.modeSheetCompare}>
+                    {supplierCount >= 2 ? `Tap to compare ${supplierCount} supplier prices` : "Tap to see supplier prices"}
+                  </span>
+                )}
+              </div>
+              {canView && <span className={s.modeSheetViewChevron}><Icon name="icon-chevron-right" /></span>}
+            </>
+          );
+          return canView
+            ? (
+              <button
+                type="button"
+                className={`${s.modeSheetProduct} ${s.modeSheetProductTap}`}
+                onClick={() => onViewProduct(handle)}
+                aria-label="See all supplier prices for this product"
+              >
+                {inner}
+              </button>
+            )
+            : <div className={s.modeSheetProduct}>{inner}</div>;
+        })()}
 
         <div className={s.reorderStrip}>
           <div className={s.reorderField}>

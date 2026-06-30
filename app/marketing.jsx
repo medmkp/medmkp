@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { BrandMark, Icon } from "./icons";
 import { DEFAULT_BUYING_PREFS } from "./lib";
 import { CurrentReorderList } from "./reorder";
+import { ProductDetail } from "./catalog";
 import { ScanHandoffQr, ScanResultCard, useBarcodeScanner } from "./ui";
 
 export function MobileScanItemView({ onBack, onReview, onScan, scanResult, onClearScanResult, scanCount }) {
@@ -509,6 +510,47 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, itemsChe
         )}
       </section>
 
+    </main>
+  );
+}
+
+
+// Public product match view, reached by tapping a scanned item in the no-login
+// scanner. Reuses the full PDP (all supplier offerings, from the public catalog
+// API) inside a slim public shell: a Back-to-scan header and a Sign up CTA.
+// There's no list, so every list/order action converts to signup; product→
+// product navigation (variants, substitutes) stays on the public route.
+export function PublicProductView({ handle, onBack, onSignup, onViewProduct, onToast }) {
+  const handleNavigate = (path) => {
+    if (typeof path === "string") {
+      const match = path.match(/^\/app\/product\/(.+)$/);
+      if (match) { onViewProduct?.(decodeURIComponent(match[1])); return; }
+    }
+    // Catalog browsing, settings, "go to app" — all gated behind signup.
+    onSignup?.();
+  };
+
+  return (
+    <main className="pscan-page pubprod-page">
+      <header className="pscan-header">
+        <button className="secondary-action compact" type="button" onClick={onBack} aria-label="Back to scanner">
+          <Icon name="icon-chevron-left" className="button-icon" />
+          Back to scan
+        </button>
+        <button className="landing-brand" type="button" onClick={onBack} aria-label="TraceDDS">
+          <BrandMark />
+        </button>
+        <button className="primary-action compact" type="button" onClick={onSignup}>Sign up free</button>
+      </header>
+
+      <ProductDetail
+        handle={handle}
+        onNavigate={handleNavigate}
+        onToast={onToast}
+        onAddToList={() => { onToast?.("Sign up free to save items to your reorder list"); onSignup?.(); }}
+        listName={undefined}
+        listSummary={undefined}
+      />
     </main>
   );
 }

@@ -85,6 +85,10 @@ export function viewFromPath(pathname = "/") {
   if (path === "/reset-password") return { view: "resetPassword", isLoggedIn: false };
   if (path === "/sample") return { view: "sample", isLoggedIn: false };
   if (path === "/scan") return { view: "publicScan", isLoggedIn: false };
+  // Public product match view, reached by tapping a scanned item in the no-login
+  // scanner — the full PDP (all supplier offerings) with list/order gated behind
+  // signup. Distinct from the authenticated /app/product/<handle>.
+  if (path.startsWith("/product/")) return { view: "publicProduct", isLoggedIn: false, productHandle: decodeURIComponent(path.split("/")[2] || "") };
   if (path === "/styleguide") return { view: "styleguide", isLoggedIn: false };
 
   // Authenticated app
@@ -383,6 +387,16 @@ export function formatArrival(est) {
   const plural = (n) => (n === 1 ? "business day" : "business days");
   if (daysMin === daysMax) return `Arrives in ~${daysMin} ${plural(daysMin)}`;
   return `Arrives in ~${daysMin}–${daysMax} ${plural(daysMax)}`;
+}
+
+// Compact arrival label for the tight reorder-drawer offer rows: "~2 days" /
+// "~1–2 days". Only "ok" estimates produce a label (a backordered offer can't be
+// fast), so null in / no usable promise → null out.
+export function formatArrivalShort(est) {
+  if (!est || est.status !== "ok") return null;
+  const { daysMin, daysMax } = est;
+  if (daysMin === daysMax) return `~${daysMin} day${daysMin === 1 ? "" : "s"}`;
+  return `~${daysMin}–${daysMax} days`;
 }
 
 // Suppliers write the same pack a dozen ways ("100/Bx", "100/Box", "Box of 300",

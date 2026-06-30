@@ -15,9 +15,9 @@ import { EvidenceView, EvidenceBinderView, EvidenceMatchReview, RedlineView } fr
 import { EvidenceMobileViewer } from "./evidenceviewer";
 import { ReportsView } from "./reports";
 import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
-import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
+import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicProductView, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, ProcurementPlanView, ReorderHistoryDetail, ReorderHistoryView, SupplierHandoffView } from "./procurement";
-import { CurrentReorderList, SavingsView } from "./reorder";
+import { CurrentReorderList, MobileItemDetail, SavingsView } from "./reorder";
 import { SettingsView } from "./settings";
 import StyleGuide from "./styleguide";
 import { ConfirmModal, DesktopOnlyHint } from "./ui";
@@ -78,6 +78,10 @@ export default function Home() {
   const [scanResult, setScanResult] = useState(null);
   const [scanCount, setScanCount] = useState(0);
   const [freeScansUsed, setFreeScansUsed] = useState(0);
+  // On the public scanner, tapping the post-scan product opens the reorder-list
+  // match drawer (best price + other matches) for that single item, rather than
+  // navigating to the full PDP. Holds the derived row while it's open.
+  const [scanMatchRow, setScanMatchRow] = useState(null);
   const [lastUpload, setLastUpload] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [draftItems, setDraftItems] = useState([]);
@@ -862,7 +866,7 @@ export default function Home() {
   // "items checked" tally (the same localStorage key) purely to drive the
   // conversion teaser — it no longer gates anything.
   async function handlePublicScan(code) {
-    const added = await addScannedItem(code);
+    const added = await addScannedItem(code, { publicScan: true });
     if (!added) return;
     setFreeScansUsed((n) => {
       const next = n + 1;
@@ -1016,7 +1020,7 @@ export default function Home() {
       : [...docs, { id: "scan", name: "Barcode scans", itemCount: 0 }]);
   }
 
-  async function addScannedItem(code) {
+  async function addScannedItem(code, { publicScan = false } = {}) {
     // A website QR — our own tracedds.com codes or any URL — isn't a product.
     // Never add it: buzz + a transient "skipped" pill, keep the camera scanning.
     if (isQrUrl(code)) {
@@ -1035,11 +1039,10 @@ export default function Home() {
     if (scanned?.expiry) decoded.expirationDate = scanned.expiry;
 
     // One instance per product: a code already ON the list (active) doesn't add
-    // again — it shows the amber "already scanned" pill (no chime). We still
-    // backfill any lot/expiry the package now carries onto a row that lacks them
-    // (never clobbering a value the buyer already has). Match only active items:
-    // a removed/cleared item is a tombstone (included:false) and re-scanning it
-    // should bring it back, not be treated as a duplicate.
+    // again. We still backfill any lot/expiry the package now carries onto a row
+    // that lacks them (never clobbering a value the buyer already has). Match
+    // only active items: a removed/cleared item is a tombstone (included:false)
+    // and re-scanning it should bring it back, not be treated as a duplicate.
     const existing = code ? draftItems.find((item) => item.barcode === code && item.included !== false) : null;
     if (existing) {
       let item = existing;
@@ -1054,7 +1057,15 @@ export default function Home() {
         setListTouched(true);
         setDraftItems((items) => items.map((it) => (it.id === existing.id ? filled : it)));
       }
-      setScanResult({ kind: "duplicate", status: statusFromItem(item), item, isDuplicate: true, qty: item.draftQty || 1 });
+      // In the app, a re-scan means "already on your list — adjust qty there"
+      // (amber pill, no drawer). On the public single-item scanner there is no
+      // list to manage, so a re-scan isn't a duplicate at all — re-open the
+      // price drawer (kind "added") for the existing item. Either way we return
+      // false, so the public conversion tally counts only distinct items and
+      // never inflates on a re-scan.
+      setScanResult(publicScan
+        ? { kind: "added", status: statusFromItem(item), item, isDuplicate: false, qty: item.draftQty || 1 }
+        : { kind: "duplicate", status: statusFromItem(item), item, isDuplicate: true, qty: item.draftQty || 1 });
       return false;
     }
 
@@ -1594,6 +1605,7 @@ export default function Home() {
       listTouched={listTouched}
       buyingPrefs={buyingPrefs}
       supplierShipping={supplierShipping}
+      shipToState={me?.practice?.ship_state || ""}
       onBuyingPrefs={setBuyingPrefs}
       onApplyOptimized={applyOptimizedPlan}
       onArchiveList={requestSaveList}
@@ -1619,15 +1631,43 @@ export default function Home() {
           : view === "sample" ? <SampleReorderList onNavigate={navigate} authed={authed === true} />
           : view === "publicScan" ? (
             isMobile ? (
-              <MobilePublicScan
-                scanResult={scanResult}
-                itemsChecked={freeScansUsed}
-                onScan={handlePublicScan}
-                onClearScanResult={() => setScanResult(null)}
-                onSignup={() => navigate("/signup")}
-                onLogin={() => navigate("/login")}
-                onHome={() => navigate("/")}
-              />
+              <>
+                <MobilePublicScan
+                  scanResult={scanResult}
+                  itemsChecked={freeScansUsed}
+                  onScan={handlePublicScan}
+                  onClearScanResult={() => setScanResult(null)}
+                  onApplyDetails={applyScanDetails}
+                  onSearchAdd={addSearchedScanProduct}
+                  onCaptureLabel={() => showToast("Label capture is coming soon")}
+                  onViewProduct={() => {
+                    const item = scanResult?.item;
+                    if (!item) return;
+                    const [matchRow] = deriveMatchRows([item], buyingPrefs);
+                    if (matchRow) setScanMatchRow(matchRow);
+                  }}
+                  onSignup={() => navigate("/signup")}
+                  onLogin={() => navigate("/login")}
+                  onHome={() => navigate("/")}
+                />
+                {scanMatchRow && (
+                  <div className="scan-match-fs">
+                    <MobileItemDetail
+                      rows={[scanMatchRow]}
+                      row={scanMatchRow}
+                      mode="view"
+                      onClose={() => setScanMatchRow(null)}
+                      onOpenRow={() => {}}
+                      onToast={showToast}
+                      onConfirmMatch={applyMatchDecision}
+                      onLinkProduct={linkProductToItem}
+                      onRemoveItem={removeDraftItem}
+                      onNavigate={(to) => navigate(to.startsWith("/app/product/") ? to.replace("/app/product/", "/product/") : to)}
+                      publicView
+                    />
+                  </div>
+                )}
+              </>
             ) : (
               <PublicScanView
                 onScan={handlePublicScan}
@@ -1641,6 +1681,15 @@ export default function Home() {
                 authed={authed === true}
               />
             )
+          )
+          : view === "publicProduct" ? (
+            <PublicProductView
+              handle={productHandle}
+              onBack={() => navigate("/scan")}
+              onSignup={() => navigate("/signup")}
+              onViewProduct={(handle) => navigate(`/product/${handle}`)}
+              onToast={showToast}
+            />
           )
           : <LoggedOutLanding onNavigate={navigate} authed={authed === true} />}
         <IconSprite />
