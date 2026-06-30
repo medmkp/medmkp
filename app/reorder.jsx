@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SearchResults } from "./catalog";
 import { Icon } from "./icons";
-import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, compactSizeLabel, computePlanTotals, deriveMatchRows, estimateArrival, formatArrivalShort, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleStats, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, normSupplierName, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel, variantOptionList } from "./lib";
+import { CRL_SAMPLE_SOURCES, CRL_SOURCE_ICON, CRL_STATUS, SWIPE_REVEAL, collapseOffersBySupplier, compactSizeLabel, computePlanTotals, deriveMatchRows, estimateArrival, formatArrivalShort, formatPackLabel, isOrderable, isPlanIncluded, mapSearchOffer, matchReviewSample, matchReviewSampleSummary, money, mrComputeStats, mrConfTone, mrEa, mrMoney, mrPriceLabel, normSupplierName, offerCandidates, offerKey, offerSub, optimizeLandedAssignment, pathForView, rowMode, showPerEa, stripPackFromName, supplierLogoSrc, variantAxisLabel, variantOptionList } from "./lib";
 import { BuyingPreferencesCard, CandidateName, CandidateStock, ConfirmModal, DetailDrawer, ListStatusPill, MatchManufacturer, MobileHeader, ProductCard, ProductSearchResults, ProductThumb, ScanHandoffQr, useBarcodeScanner, useProductSearch } from "./ui";
 
 export function DesktopBarcodeScan({ onScan, scanResult, onNavigate }) {
@@ -1242,8 +1242,8 @@ export function CurrentReorderList({
     ...row,
     source: row.source || CRL_SAMPLE_SOURCES[row.id] || "pdf",
   }));
-  const stats = usingReal ? mrComputeStats(rows) : showSample ? matchReviewSampleStats : mrComputeStats(rows);
-  const totalItems = usingReal ? rows.length : showSample ? stats.total : 0;
+  const stats = mrComputeStats(rows);
+  const totalItems = rows.length;
   // Items that won't make it into the supplier plan (no match, or out of stock
   // everywhere) — surfaced in the warning modal before advancing to Review.
   const unresolvedRows = usingReal ? rows.filter((row) => !isPlanIncluded(row)) : [];
@@ -1726,10 +1726,10 @@ export function CurrentReorderList({
               </>
             ) : showSample ? (
               <div className="crl-plan">
-                <div><span>Estimated total</span><strong>$5,842.16</strong></div>
-                <div><span>Suppliers</span><strong>5</strong></div>
-                <div><span>Coverage</span><strong>92%</strong></div>
-                <div><span>Potential savings</span><strong className="green">$842.15</strong></div>
+                <div><span>Estimated total</span><strong>{money.format(matchReviewSampleSummary.estimatedTotal)}</strong></div>
+                <div><span>Suppliers</span><strong>{matchReviewSampleSummary.suppliers}</strong></div>
+                <div><span>Coverage</span><strong>{matchReviewSampleSummary.coverage}%</strong></div>
+                <div><span>Potential savings</span><strong className="green">{money.format(matchReviewSampleSummary.savings)}</strong></div>
               </div>
             ) : (
               <p className="crl-plan-note">

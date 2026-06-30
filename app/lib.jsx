@@ -653,7 +653,31 @@ export const matchReviewSample = [
 ];
 
 
-export const matchReviewSampleStats = { total: 124, matched: 82, review: 28, notFound: 14, high: 64, med: 40, low: 20, matchedPct: 66, reviewPct: 23, notFoundPct: 11 };
+// Rail summary for the public sample list, derived from matchReviewSample so the
+// preview's "Savings & totals" can never contradict the 7 rows actually shown.
+// (Signed-in lists use the live planSummary; this is the data-less preview only.)
+//  - estimatedTotal: sum of matched line totals (the list subtotal in the footer)
+//  - suppliers: distinct suppliers we found a match at
+//  - coverage: share of lines matched to a product (i.e. not "Not found")
+//  - savings: per-each price gap to the cheapest alternative offer × qty, summed
+export const matchReviewSampleSummary = (() => {
+  const rows = matchReviewSample;
+  const estimatedTotal = rows.reduce((sum, r) => sum + (r.lineTotal || 0), 0);
+  const suppliers = new Set(
+    rows.filter((r) => r.status !== "Not found" && r.supplier && r.supplier !== "—").map((r) => r.supplier)
+  ).size;
+  const covered = rows.filter((r) => r.status !== "Not found").length;
+  const coverage = rows.length ? Math.round((covered / rows.length) * 100) : 0;
+  const savings = rows.reduce((sum, r) => {
+    if (r.status === "Not found" || r.perEa == null) return sum;
+    const cheapest = (r.others || []).reduce(
+      (min, o) => (o.perEa != null && o.perEa < min ? o.perEa : min),
+      r.perEa
+    );
+    return sum + Math.max(0, (r.perEa - cheapest) * (r.qty || 1));
+  }, 0);
+  return { estimatedTotal, suppliers, coverage, savings };
+})();
 
 
 export const MR_STATUS = {
