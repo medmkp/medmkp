@@ -1663,6 +1663,7 @@ export default function Home() {
                       onLinkProduct={linkProductToItem}
                       onRemoveItem={removeDraftItem}
                       onNavigate={(to) => navigate(to.startsWith("/app/product/") ? to.replace("/app/product/", "/product/") : to)}
+                      publicView
                     />
                   </div>
                 )}
