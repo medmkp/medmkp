@@ -729,19 +729,11 @@ export function MobilePublicScan({
         </span>
       </div>
 
-      {/* Acknowledgement pills — same language as the in-app reorder scanner. */}
+      {/* A match — fresh or a re-scan — shows the same "identified" pill and the
+          price drawer below. The public scanner is a single-item spot-check, so
+          there's no list and no "already scanned" duplicate state. */}
       {kind === "added" && (
         <div className={s.scanAddedBadge}><Icon name="icon-check-circle" /> Item identified</div>
-      )}
-      {kind === "duplicate" && (
-        <div className={`${s.scanAddedBadge} ${s.scanWarnBadge}`}>
-          <Icon name="icon-refresh" />
-          <span className={s.scanBadgeText}>
-            {scanResult.item?.product || scanResult.item?.canonicalName
-              ? `Already scanned · ${scanResult.item.product || scanResult.item.canonicalName}`
-              : "Already scanned"}
-          </span>
-        </div>
       )}
       {kind === "qr" && (
         <div className={`${s.scanAddedBadge} ${s.scanWarnBadge}`}><Icon name="icon-info" /> Skipped website QR code</div>
