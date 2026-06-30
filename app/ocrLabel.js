@@ -48,7 +48,12 @@ function gs1Expiry(raw) {
 // label layouts: a year on the left is Y-M(-D); a year on the right is M(-D)-Y.
 export function normalizeExpiry(raw) {
   if (!raw) return null;
-  const t = String(raw).trim().toUpperCase().replace(/[;!]/g, "1").replace(/\s+/g, " ");
+  // The "1" of a month/day, and the vertical stroke of a label's box frame, both
+  // OCR to the same family of punctuation depending on the capture — a real
+  // Patterson suture label's "2016 - 01" edge came back "2016 - 0;" in one read
+  // and "2016 - 0:" / "2016 - 0|" in others. Coerce that whole glyph family to "1"
+  // up front; isoFrom still range-checks, so a non-date coercion falls through.
+  const t = String(raw).trim().toUpperCase().replace(/[;!:|]/g, "1").replace(/\s+/g, " ");
 
   // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
   let m = t.match(/\b(20\d{2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})\b/);
@@ -227,10 +232,11 @@ export function parseLotExpiry(text, { barcode } = {}) {
     // two adjacent numbers — without that, a lot printed just before the date
     // ("0710709 07.2011") swallows the date's leading month and the expiry is
     // lost. Spaces are still tolerated *around* the separator (Patterson prints
-    // "2016 - 01"), and the trailing groups allow OCR look-alike letters in the
-    // year ("07.20N1" for 07.2011), which normalizeExpiry coerces before
-    // validating. The two MON-anchored alternatives keep the 3-letter-month case.
-    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d{1,4}(?:\s*[-/.]\s*[\dA-Z;!]{1,4}){1,2})(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
+    // "2016 - 01"), and the trailing groups allow OCR look-alike letters AND the
+    // box-edge punctuation ";:|" in the year/month ("07.20N1" for 07.2011, "2016 -
+    // 0:" for "2016 - 01"), which normalizeExpiry coerces before validating. The
+    // two MON-anchored alternatives keep the 3-letter-month case.
+    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d{1,4}(?:\s*[-/.]\s*[\dA-Z;!:|]{1,4}){1,2})(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
       const val = m[1] || m[2] || m[3];
       const iso = normalizeExpiry(val);
       if (!iso) continue;

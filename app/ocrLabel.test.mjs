@@ -83,6 +83,14 @@ test("expiry: keyword path is trusted, even when the date is in the past", () =>
   assert.equal(parseLotExpiry("EXP 2018-01-15").expiry, "2018-01-15"); // expired item
 });
 
+test("expiry: tolerates the box-edge glyph family the '1' digit OCRs to (Patterson '2016 - 0[;:|]')", () => {
+  // A real suture label's "2016 - 01" edge OCRs the trailing "1" / box stroke as
+  // ";" in one capture and ":" or "|" in others — all coerce to the same month.
+  for (const edge of [";", ":", "|"]) {
+    assert.equal(parseLotExpiry(`[ET M607840 % 2016 - 0${edge}`).expiry, "2016-01-31");
+  }
+});
+
 test("expiry: a manufacture date never beats the real expiry", () => {
   // Keyword wins outright.
   assert.equal(parseLotExpiry("MFG 2024-01-10\nEXP 2026-01-10").expiry, "2026-01-10");
