@@ -82,10 +82,17 @@ export function normalizeExpiry(raw) {
   m = t.match(/\b([A-Z]{3})\s*[-/. ]\s*(\d{1,2})\s*[-/. ]\s*(20\d{2})\b/);
   if (m && MONTHS[m[1]]) return isoFrom(+m[3], MONTHS[m[1]], +m[2]);
 
-  // MON YYYY / YYYY MON  (3-letter month name, month precision)
-  m = t.match(/\b([A-Z]{3})\s*[-/. ]\s*(20\d{2})\b/) || t.match(/\b(20\d{2})\s*[-/. ]\s*([A-Z]{3})\b/);
+  // MON YYYY / YYYY MON  (month name, month precision). The name may be the
+  // 3-letter abbreviation ("JAN 2027") or fully spelled out ("DECEMBER 2026") —
+  // OTC and international cartons print "EXP DECEMBER 2026" / "USE BY SEPTEMBER
+  // 2027" in full. Match 3–9 letters and key off the first three, which uniquely
+  // name the month for every English spelling (JAN/JANUARY, SEP/SEPT/SEPTEMBER).
+  // Only the keyword path ever feeds a full word here — the bare-date fallback
+  // emits 3-letter MON tokens only (see its matchAll below) — so a stray
+  // "MARKETED 2026" never reaches this, and MONTHS still gates a non-month run.
+  m = t.match(/\b([A-Z]{3,9})\s*[-/. ]\s*(20\d{2})\b/) || t.match(/\b(20\d{2})\s*[-/. ]\s*([A-Z]{3,9})\b/);
   if (m) {
-    const mon = MONTHS[m[1]] || MONTHS[m[2]];
+    const mon = MONTHS[(m[1] || "").slice(0, 3)] || MONTHS[(m[2] || "").slice(0, 3)];
     const yr = /^\d/.test(m[1]) ? +m[1] : +m[2];
     if (mon) return isoFrom(yr, mon, 0);
   }
@@ -221,7 +228,10 @@ export function parseLotExpiry(text, { barcode } = {}) {
   // Prefer a keyword-tagged date (EXP / USE BY / BEST BEFORE), which is
   // unambiguous — trusted even if it's in the past, since an expired item on the
   // shelf is exactly what we want to surface.
-  const expKw = flat.match(/\b(?:EXP(?:IR(?:Y|ES|ATION))?|USE BY|BEST BEFORE|BB)\b[\s:.]*([0-9A-Z][0-9A-Z\-/. ]{4,11})/);
+  // The value window is wide enough for a fully-spelled month and a 4-digit year
+  // ("SEPTEMBER 2027" is 14 chars); normalizeExpiry still finds the date inside,
+  // so a longer capture just gives it harmless trailing context.
+  const expKw = flat.match(/\b(?:EXP(?:IR(?:Y|ES|ATION))?|USE BY|BEST BEFORE|BB)\b[\s:.]*([0-9A-Z][0-9A-Z\-/. ]{4,13})/);
   if (expKw) expiry = normalizeExpiry(expKw[1]);
   if (!expiry) {
     const aiExp = flat.match(/\(17\)\s*(\d{6})\b/);

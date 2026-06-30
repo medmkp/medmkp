@@ -14,5 +14,8 @@
   { "name": "patterson-suture-ocr-semicolon-expiry", "text": "Su? Us\nPATTERN N SESS\n\n“cpss\nAAMT I 1 i li\nclei by ans ical Sumy\n: St. Pau, MN 55120\nPLAIN.\nees SER\n\n089-9534 Ds-24\n\n[ET M607840 % 2016 - 0;\n\n", "expectLot": "M607840", "expectExpiry": "2016-01-31" },
   { "name": "iso-symbol-exp-year-garble", "text": "a Rm\n\nLot |\n\n0710709\n\n07.20n1\n", "expectLot": "0710709", "expectExpiry": "2011-07-31" },
   { "name": "dd-mon-yyyy-suture-carton", "text": "COVIDIEN\n\nPolysorb™ Braided Absorbable Suture 3-0\n\nREF GL-123 18 mm 1/2c\n\nLOT S2210V\n\nEXP 15 JAN 2027\n\nSTERILE R. Do not resterilize. Single use only. Distributed by Medtronic.\n\nMinneapolis, MN 55432 USA.\n", "expectLot": "S2210V", "expectExpiry": "2027-01-15" },
-  { "name": "patterson-suture-ocr-colon-expiry", "text": "WH Sterile Suture USI\n\nP, ATTERSON ABSORBABLE\n\nCP 53 GUT 3-0\n\nAEA fii\n\n*+DB520708895342T\"\nDistributed by : Patterson Dental Supply, Inc.\nSt. Pau, IAN 55120\n\nPLAIN car\n\n1 Doz. (12)\n\nTINGHES 3/8 CIRCLE\nREV.CUT\n\nee\n\n°\n\nps4 gE\n\nNS\n\n|\ni\n\n[ETIMB07840 ¥ 2016 - 0:\n\n", "expectExpiry": "2016-01-31" }
+  { "name": "patterson-suture-ocr-colon-expiry", "text": "WH Sterile Suture USI\n\nP, ATTERSON ABSORBABLE\n\nCP 53 GUT 3-0\n\nAEA fii\n\n*+DB520708895342T\"\nDistributed by : Patterson Dental Supply, Inc.\nSt. Pau, IAN 55120\n\nPLAIN car\n\n1 Doz. (12)\n\nTINGHES 3/8 CIRCLE\nREV.CUT\n\nee\n\n°\n\nps4 gE\n\nNS\n\n|\ni\n\n[ETIMB07840 ¥ 2016 - 0:\n\n", "expectExpiry": "2016-01-31" },
+  { "name": "full-month-exp-ocr", "text": "DuraSeal Dental Adhesive\n\nREF DS-4420\n\nLOT 7A2208\n\nEXP DECEMBER 2026\n", "expectLot": "7A2208", "expectExpiry": "2026-12-31" },
+  { "name": "full-month-useby", "text": "USE BY SEPTEMBER 2027  LOT XJ4471", "expectLot": "XJ4471", "expectExpiry": "2027-09-30" },
+  { "name": "full-month-bestbefore", "text": "BEST BEFORE JANUARY 2027  LOT 5567", "expectLot": "5567", "expectExpiry": "2027-01-31" }
 ]
