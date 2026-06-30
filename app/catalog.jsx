@@ -106,7 +106,7 @@ export function SearchSuggestions({ query = "", suggestions = [], onNavigate }) 
 
 
 export function CatBestPrice({ best, showBadge, hidePack = false }) {
-  const perUnit = best && best.unit_comparable && best.unit_price_cents != null ? best.unit_price_cents : null;
+  const perUnit = best && best.unit_comparable && best.unit_price_cents > 0 ? best.unit_price_cents : null;
   const packLabel = best ? formatPackLabel(best.pack_quantity, best.pack_basis, best.base_unit, best.pack_size) : "";
   // hidePack is set when the surrounding table carries its own Pack column, so
   // the pack isn't shown twice; the sublabel then reads as just the pack price.
@@ -1268,7 +1268,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   // unknown — or whose unit isn't comparable to the rest of the group (F2) —
   // have no trustworthy per-unit price and fall last, ordered by sticker price.
   const offerUnitCost = (offer) =>
-    offer.unit_comparable && offer.unit_price_cents != null
+    offer.unit_comparable && offer.unit_price_cents > 0
       ? offer.unit_price_cents
       : Number.MAX_SAFE_INTEGER;
   const sortedOffers = [...(product.offers || [])].sort((a, b) => {
@@ -1327,7 +1327,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   // unit they compare in — drives the "/ ea" labels and the mixed-units note.
   const unitComparable = !!product.unit_comparable;
   const unitBasis = product.unit_comparison_basis || best?.base_unit || "ea";
-  const bestPerUnit = best && best.unit_comparable && best.unit_price_cents != null
+  const bestPerUnit = best && best.unit_comparable && best.unit_price_cents > 0
     ? best.unit_price_cents / 100
     : null;
   const bestUnit = best ? best.price_cents / 100 : null;
@@ -1550,7 +1550,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                   // The comparable figure is the per-unit price; show it as the
                   // headline and the pack price/size as context. When the offer
                   // has no comparable unit price, fall back to the pack price.
-                  const perUnit = offer.unit_comparable && offer.unit_price_cents != null
+                  const perUnit = offer.unit_comparable && offer.unit_price_cents > 0
                     ? offer.unit_price_cents / 100
                     : null;
                   const packLabel = formatPackLabel(offer.pack_quantity, offer.pack_basis, offer.base_unit, offer.pack_size);
@@ -1642,7 +1642,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                     const logo = supplierLogoSrc(listing.supplier_name);
                     const avail = availabilityInfo(listing.availability);
                     const packPrice = listing.price_cents != null ? listing.price_cents / 100 : null;
-                    const perUnit = listing.unit_price_cents != null ? listing.unit_price_cents / 100 : null;
+                    const perUnit = listing.unit_price_cents > 0 ? listing.unit_price_cents / 100 : null;
                     const packLabel = listing.pack_size || "";
                     return (
                       <div className="pdp-row" key={listing.sku || index}>
