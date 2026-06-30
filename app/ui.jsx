@@ -284,7 +284,7 @@ export function ScanHandoffQr({ url }) {
 // cards auto-dismiss so they don't block the next scan; a no-match card sticks
 // around and offers a way to key the code in by hand.
 
-export function ScanResultCard({ result, className = "", onClear, onEnterManually }) {
+export function ScanResultCard({ result, className = "", onClear, onEnterManually, showCompare = false }) {
   useEffect(() => {
     if (!result || result.status === "Not found") return undefined;
     const timer = window.setTimeout(() => onClear?.(), 3500);
@@ -294,6 +294,11 @@ export function ScanResultCard({ result, className = "", onClear, onEnterManuall
   if (!result) return null;
   const { item, status, isDuplicate, qty } = result;
   const notFound = status === "Not found";
+  // How many suppliers we have a price from for this item — the honest breadth
+  // behind the "best price" shown. Only surfaced on the public price-benchmark
+  // card (showCompare), and only when there's a real comparison to claim (≥2).
+  const supplierCount = new Set((item.offers || []).map((o) => o?.supplier).filter(Boolean)).size;
+  const compareLabel = showCompare && supplierCount >= 2 ? `Compared across ${supplierCount} suppliers` : "";
   const offer = item.bestOffer;
   const rawPrice = offer?.price ?? (item.oldUnitPrice || null);
   const priceMissing = !notFound && (rawPrice == null || rawPrice <= 0);
@@ -329,6 +334,7 @@ export function ScanResultCard({ result, className = "", onClear, onEnterManuall
               ? "Already on your list — adjust the quantity there"
               : `${offer?.supplier || item.oldVendor || item.matchBrand || "Supplier pending"}${item.unit ? ` · ${item.unit}` : ""}`}
         </small>
+        {!notFound && !isDuplicate && compareLabel && <small className="src-compare">{compareLabel}</small>}
       </div>
       <div className="src-right">
         {!notFound && !isDuplicate && priceMissing && <small className="src-noprice">Price not listed</small>}
