@@ -704,6 +704,92 @@
 }
 .camManualBtn svg { width: 17px; height: 17px; }
 
+/* ── Public (logged-out) scanner: header link + bottom stack ──────────────── */
+/* A plain text action in the camera header (Log in), legible over arbitrary
+   video via the same shadow the wordmark uses. */
+.camTextBtn {
+  border: 0;
+  background: rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.camTextBtn:active { background: rgba(255, 255, 255, 0.28); }
+
+/* Bottom stack: the per-scan price card (or the Enter-code fallback) sits above
+   a persistent Sign up bar, both pinned above the safe area. Flows in a column
+   so the card and the bar never overlap (unlike the absolute camManualBtn). */
+.publicBottom {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0 12px calc(16px + env(safe-area-inset-bottom));
+  z-index: 3;
+}
+.publicResultCard { position: static; left: auto; right: auto; }
+.publicManual {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(12, 16, 24, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.publicManual svg { width: 17px; height: 17px; }
+
+/* Persistent conversion bar — count-based teaser + Sign up. Dark translucent so
+   it reads over the live camera without hiding it. */
+.publicTeaser {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(12, 16, 24, 0.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.publicTeaserText {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.publicTeaserText strong { color: #fff; font-weight: 600; }
+.publicTeaserSignup {
+  flex-shrink: 0;
+  border: 0;
+  background: var(--blue);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.publicTeaserSignup:active { filter: brightness(0.94); }
+
 /* Result card (after a scan) */
 .resultCard {
   position: absolute;

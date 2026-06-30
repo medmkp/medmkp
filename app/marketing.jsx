@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { BrandMark, Icon } from "./icons";
-import { DEFAULT_BUYING_PREFS, FREE_SCAN_LIMIT } from "./lib";
+import { DEFAULT_BUYING_PREFS } from "./lib";
 import { CurrentReorderList } from "./reorder";
 import { ScanHandoffQr, ScanResultCard, useBarcodeScanner } from "./ui";
 
@@ -161,7 +161,7 @@ export function LoggedOutLanding({ onNavigate, authed = false }) {
           <div className="landing-actions">
             <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/scan")}>
               <Icon name="icon-scan" className="button-icon" />
-              Scan {FREE_SCAN_LIMIT} items <em>FREE</em>
+              Scan items <em>Free</em>
             </button>
             <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
               <Icon name="icon-play" className="button-icon" />
@@ -355,12 +355,10 @@ export function SampleReorderList({ onNavigate, authed = false }) {
 // passes it in. When the budget is gone the signup wall slides over the card —
 // the final result stays visible for a beat first so the visitor sees the payoff.
 
-export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScansUsed, limit, onSignup, onLogin, onHome, onApp, authed = false }) {
+export function PublicScanView({ onScan, scanResult, onClearScanResult, itemsChecked = 0, onSignup, onLogin, onHome, onApp, authed = false }) {
   const [manualCode, setManualCode] = useState("");
   const [captured, setCaptured] = useState(false);
   const flashTimer = useRef();
-  const exhausted = freeScansUsed >= limit;
-  const remaining = Math.max(0, limit - freeScansUsed);
 
   // Desktop default: hand scanning off to the buyer's phone via a QR (desktop
   // webcams read small item barcodes poorly), with a "use this computer's
@@ -374,19 +372,8 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
   }, []);
   const scanUrl = typeof window !== "undefined" ? `${window.location.origin}/scan` : "";
 
-  // Hold the wall back briefly after the last scan so its result card is seen.
-  const [gateVisible, setGateVisible] = useState(false);
-  useEffect(() => {
-    if (!exhausted) {
-      setGateVisible(false);
-      return undefined;
-    }
-    const timer = window.setTimeout(() => setGateVisible(true), 1500);
-    return () => window.clearTimeout(timer);
-  }, [exhausted]);
-
   const { videoRef, cameraStatus, autoDetect, capture, retry } = useBarcodeScanner({
-    active: !exhausted && mode === "camera",
+    active: mode === "camera",
     onScan: (code) => {
       onScan?.(code);
       setCaptured(true);
@@ -398,7 +385,7 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
   function submitManual(event) {
     event.preventDefault();
     const value = manualCode.trim();
-    if (!value || exhausted) return;
+    if (!value) return;
     onScan?.(value);
     setManualCode("");
   }
@@ -426,8 +413,8 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
           <h1>Scan a product to see its price benchmark</h1>
           <p>
             {mode === "qr"
-              ? <>Point your phone&rsquo;s camera at the code to open the scanner &mdash; phone cameras read item barcodes far better than a laptop webcam. {limit} scans free, no login required.</>
-              : <>Point your camera at any dental supply barcode &mdash; or key in the code &mdash; to identify the item and compare typical prices. {limit} scans free, no login required.</>}
+              ? <>Point your phone&rsquo;s camera at the code to open the scanner &mdash; phone cameras read item barcodes far better than a laptop webcam. Free to scan, no login required.</>
+              : <>Point your camera at any dental supply barcode &mdash; or key in the code &mdash; to identify the item and compare typical prices. Free to scan, no login required.</>}
           </p>
         </div>
 
@@ -483,7 +470,7 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
                   ? "Point at a barcode"
                   : "Align the barcode, then tap Scan"}
             </div>
-            <span className="pscan-counter">{remaining} of {limit} free scans left</span>
+            <span className="pscan-counter">{itemsChecked > 0 ? `${itemsChecked} item${itemsChecked === 1 ? "" : "s"} checked` : "Free to scan"}</span>
           </div>
 
           <div className="pscan-controls">
@@ -491,7 +478,7 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
               className="pscan-shutter"
               type="button"
               onClick={capture}
-              disabled={cameraStatus !== "ready" || exhausted}
+              disabled={cameraStatus !== "ready"}
             >
               <Icon name="icon-scan" className="button-icon" />
               Scan barcode
@@ -505,15 +492,14 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
                 aria-label="Barcode or SKU"
                 value={manualCode}
                 onChange={(event) => setManualCode(event.target.value)}
-                disabled={exhausted}
               />
-              <button className="secondary-action" type="submit" disabled={!manualCode.trim() || exhausted}>
+              <button className="secondary-action" type="submit" disabled={!manualCode.trim()}>
                 Look up
               </button>
             </form>
           </div>
 
-          <ScanResultCard result={scanResult} onClear={onClearScanResult} onEnterManually={() => {}} />
+          <ScanResultCard result={scanResult} onClear={onClearScanResult} onEnterManually={() => {}} showCompare />
           {isDesktop && (
             <button type="button" className="scan-qr-back pscan-qr-back" onClick={() => setMode("qr")}>
               <Icon name="icon-chevron-left" className="button-icon" />Scan with your phone instead
@@ -523,21 +509,6 @@ export function PublicScanView({ onScan, scanResult, onClearScanResult, freeScan
         )}
       </section>
 
-      {gateVisible && (
-        <div className="pscan-gate" role="dialog" aria-modal="true" aria-label="Sign up to keep scanning">
-          <div className="pscan-gate-card">
-            <Icon name="icon-lock" className="pscan-gate-icon" />
-            <h2>That&rsquo;s your {limit} free scans</h2>
-            <p>Sign up free to keep scanning, save your reorder list, and compare prices across suppliers. Your scanned items are waiting in your list.</p>
-            <button className="primary-action" type="button" onClick={onSignup}>
-              <Icon name="icon-cloud-upload" className="button-icon" />
-              Sign up free
-            </button>
-            <button className="secondary-action" type="button" onClick={onLogin}>Log in</button>
-            <button className="pscan-gate-back" type="button" onClick={onHome}>Back to home</button>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
