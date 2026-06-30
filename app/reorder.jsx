@@ -906,11 +906,13 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
     <div className="m-detail">
       <header className="m-detail-top">
         <button className="m-iconbtn" type="button" aria-label="Back to list" onClick={onClose}><Icon name="icon-chevron-left" className="button-icon" /></button>
-        <div className="m-pager">
-          <button type="button" aria-label="Previous item" disabled={idx <= 0} onClick={() => idx > 0 && onOpenRow(rows[idx - 1])}><Icon name="icon-chevron-left" className="button-icon" /></button>
-          <span>{idx + 1} of {total}</span>
-          <button type="button" aria-label="Next item" disabled={idx >= total - 1} onClick={() => idx < total - 1 && onOpenRow(rows[idx + 1])}><Icon name="icon-chevron-right" className="button-icon" /></button>
-        </div>
+        {total > 1 && (
+          <div className="m-pager">
+            <button type="button" aria-label="Previous item" disabled={idx <= 0} onClick={() => idx > 0 && onOpenRow(rows[idx - 1])}><Icon name="icon-chevron-left" className="button-icon" /></button>
+            <span>{idx + 1} of {total}</span>
+            <button type="button" aria-label="Next item" disabled={idx >= total - 1} onClick={() => idx < total - 1 && onOpenRow(rows[idx + 1])}><Icon name="icon-chevron-right" className="button-icon" /></button>
+          </div>
+        )}
         <button className="m-iconbtn" type="button" aria-label="More"><span aria-hidden="true">⋯</span></button>
       </header>
 

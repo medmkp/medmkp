@@ -17,7 +17,7 @@ import { ReportsView } from "./reports";
 import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicProductView, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, ProcurementPlanView, ReorderHistoryDetail, ReorderHistoryView, SupplierHandoffView } from "./procurement";
-import { CurrentReorderList, SavingsView } from "./reorder";
+import { CurrentReorderList, MobileItemDetail, SavingsView } from "./reorder";
 import { SettingsView } from "./settings";
 import StyleGuide from "./styleguide";
 import { ConfirmModal, DesktopOnlyHint } from "./ui";
@@ -78,6 +78,10 @@ export default function Home() {
   const [scanResult, setScanResult] = useState(null);
   const [scanCount, setScanCount] = useState(0);
   const [freeScansUsed, setFreeScansUsed] = useState(0);
+  // On the public scanner, tapping the post-scan product opens the reorder-list
+  // match drawer (best price + other matches) for that single item, rather than
+  // navigating to the full PDP. Holds the derived row while it's open.
+  const [scanMatchRow, setScanMatchRow] = useState(null);
   const [lastUpload, setLastUpload] = useState(null);
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [draftItems, setDraftItems] = useState([]);
@@ -1626,19 +1630,40 @@ export default function Home() {
           : view === "sample" ? <SampleReorderList onNavigate={navigate} authed={authed === true} />
           : view === "publicScan" ? (
             isMobile ? (
-              <MobilePublicScan
-                scanResult={scanResult}
-                itemsChecked={freeScansUsed}
-                onScan={handlePublicScan}
-                onClearScanResult={() => setScanResult(null)}
-                onApplyDetails={applyScanDetails}
-                onSearchAdd={addSearchedScanProduct}
-                onCaptureLabel={() => showToast("Label capture is coming soon")}
-                onViewProduct={(handle) => navigate(`/product/${handle}`)}
-                onSignup={() => navigate("/signup")}
-                onLogin={() => navigate("/login")}
-                onHome={() => navigate("/")}
-              />
+              <>
+                <MobilePublicScan
+                  scanResult={scanResult}
+                  itemsChecked={freeScansUsed}
+                  onScan={handlePublicScan}
+                  onClearScanResult={() => setScanResult(null)}
+                  onApplyDetails={applyScanDetails}
+                  onSearchAdd={addSearchedScanProduct}
+                  onCaptureLabel={() => showToast("Label capture is coming soon")}
+                  onViewProduct={() => {
+                    const item = scanResult?.item;
+                    if (!item) return;
+                    const [matchRow] = deriveMatchRows([item], buyingPrefs);
+                    if (matchRow) setScanMatchRow(matchRow);
+                  }}
+                  onSignup={() => navigate("/signup")}
+                  onLogin={() => navigate("/login")}
+                  onHome={() => navigate("/")}
+                />
+                {scanMatchRow && (
+                  <MobileItemDetail
+                    rows={[scanMatchRow]}
+                    row={scanMatchRow}
+                    mode="view"
+                    onClose={() => setScanMatchRow(null)}
+                    onOpenRow={() => {}}
+                    onToast={showToast}
+                    onConfirmMatch={applyMatchDecision}
+                    onLinkProduct={linkProductToItem}
+                    onRemoveItem={removeDraftItem}
+                    onNavigate={(to) => navigate(to.startsWith("/app/product/") ? to.replace("/app/product/", "/product/") : to)}
+                  />
+                )}
+              </>
             ) : (
               <PublicScanView
                 onScan={handlePublicScan}
