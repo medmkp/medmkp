@@ -198,17 +198,21 @@ export function parseLotExpiry(text, { barcode } = {}) {
   const flat = raw.toUpperCase().replace(/\s+/g, " ").trim();
 
   let lot;
-  // LOT [NO|NUMBER|#] <value>. Keyword-anchored is the precise path; tolerate the
-  // usual garbles of the three letters (L0T, LDT, LOI) AND the boxed "LOT" marker
+  // LOT / BATCH [NO|NUMBER|#] <value>. Keyword-anchored is the precise path; tolerate
+  // the usual garbles of the three letters (L0T, LDT, LOI) AND the boxed "LOT" marker
   // on medical labels: its frame OCRs as bracket/pipe junk glued to the value, so
   // Tesseract reads "[LoT]|260212" or "LOT] 24015414". The separator between the
   // marker and the value therefore allows those box glyphs, not just spaces and
-  // colons. Some labels spell the descriptor as "LOT Batch Code <value>", and
-  // OCR can drop "Batch" and leave "LOT Code <value>", so skip that wording
-  // before taking the value. Value allows common batch separators (A-219,
-  // 13593092, M607840).
+  // colons. "BATCH" is also accepted as a standalone marker, not only as a descriptor
+  // after "LOT": non-US pharma/medical labels stamp the batch as "Batch No." rather
+  // than "Lot" (a real Difenac/Diclofenac carton prints "BATCH NO : BJ11529"), and the
+  // shape fallback can't recover an alphanumeric value like that — it isn't a bare
+  // digit run nor a single-letter+digits stamp. Some labels spell the descriptor as
+  // "LOT Batch Code <value>", and OCR can drop "Batch" and leave "LOT Code <value>",
+  // so skip that wording before taking the value. Value allows common batch separators
+  // (A-219, 13593092, M607840).
   const lotMatch = flat.match(
-    /\bL[O0D][T1I]\b[\s.:#)\]\[|]*(?:(?:N[O0]\.?|NUMBER|BATCH(?:\s+CODE)?|CODE)[\s.:#)\]\[|]*)?([A-Z0-9][A-Z0-9\-/]{2,19})/,
+    /\b(?:L[O0D][T1I]|BATCH)\b[\s.:#)\]\[|]*(?:(?:N[O0]\.?|NUMBER|BATCH(?:\s+CODE)?|CODE)[\s.:#)\]\[|]*)?([A-Z0-9][A-Z0-9\-/]{2,19})/,
   );
   if (
     lotMatch &&
