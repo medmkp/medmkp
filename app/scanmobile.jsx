@@ -290,7 +290,7 @@ function MobileScanLocationGate({ locations, starting, onPick, onBack, onManage,
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
           <span className={s.camWordmark}>
-            <span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span>
+            <span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span>
           </span>
         </span>
         <span className={s.camRight} />
@@ -425,7 +425,7 @@ export function MobileScanSession({
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
           <span className={s.camWordmark}>
-            <span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span>
+            <span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span>
           </span>
         </span>
         <span className={s.camRight}>
@@ -567,7 +567,7 @@ export function MobileReorderScan({
         </button>
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
-          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span></span>
         </span>
         <span className={s.camRight}>
           <button
@@ -722,26 +722,18 @@ export function MobilePublicScan({
         </button>
         <span className={s.camBrand}>
           <BrandLogoMark className={s.camBrandMark} />
-          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span>{" "}<span className={s.camWordDds}>DDS</span></span>
+          <span className={s.camWordmark}><span className={s.camWordTrace}>Trace</span><span className={s.camWordDds}>DDS</span></span>
         </span>
         <span className={s.camRight}>
           <button type="button" className={s.camTextBtn} onClick={onLogin}>Log in</button>
         </span>
       </div>
 
-      {/* Acknowledgement pills — same language as the in-app reorder scanner. */}
+      {/* A match — fresh or a re-scan — shows the same "identified" pill and the
+          price drawer below. The public scanner is a single-item spot-check, so
+          there's no list and no "already scanned" duplicate state. */}
       {kind === "added" && (
         <div className={s.scanAddedBadge}><Icon name="icon-check-circle" /> Item identified</div>
-      )}
-      {kind === "duplicate" && (
-        <div className={`${s.scanAddedBadge} ${s.scanWarnBadge}`}>
-          <Icon name="icon-refresh" />
-          <span className={s.scanBadgeText}>
-            {scanResult.item?.product || scanResult.item?.canonicalName
-              ? `Already scanned · ${scanResult.item.product || scanResult.item.canonicalName}`
-              : "Already scanned"}
-          </span>
-        </div>
       )}
       {kind === "qr" && (
         <div className={`${s.scanAddedBadge} ${s.scanWarnBadge}`}><Icon name="icon-info" /> Skipped website QR code</div>

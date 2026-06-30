@@ -9422,6 +9422,16 @@ th {
    other than our Recommended one, so the two are visually distinct. */
 .crl-cand-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin-top: 3px; }
 .crl-cand-sel { display: inline-block; padding: 2px 7px; border-radius: 6px; background: var(--blue-2); color: var(--blue); font-size: 10px; font-weight: 600; }
+/* "Fastest" tag — the offer with the soonest estimated delivery, paired with the
+   per-offer ETA line. Truck mark distinguishes it from the green Recommended tag. */
+.crl-cand-fast { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--green) 12%, var(--surface)); color: var(--green); font-size: 10px; font-weight: 600; white-space: nowrap; }
+.crl-cand-fast .button-icon { width: 11px; height: 11px; flex: none; }
+/* Estimated delivery window for an offer, shown under its stock badge. */
+.crl-cand-eta { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 500; white-space: nowrap; }
+.crl-cand-eta .button-icon { width: 12px; height: 12px; flex: none; }
+/* Mobile offer rows stack stock + Fastest on one line, ETA on the next. */
+.m-match-signals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.m-match-signals .crl-cand-stock { margin-top: 0; }
 
 /* Remove-from-list action inside the verify drawer / mobile detail. */
 .crl-drawer-remove { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--red); font-weight: 500; font-size: 13px; cursor: pointer; }
@@ -9945,8 +9955,9 @@ th {
 .cat-main { min-width: 0; }
 
 /* Stat row */
-.cat-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+.cat-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 28px; }
 .cat-stat { display: flex; align-items: center; gap: 13px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+.cat-stat > div { min-width: 0; }
 .cat-stat-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; flex: 0 0 auto; }
 .cat-stat-icon .nav-icon { width: 22px; height: 22px; }
 .cat-stat small { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }

@@ -48,7 +48,11 @@ function gs1Expiry(raw) {
 // label layouts: a year on the left is Y-M(-D); a year on the right is M(-D)-Y.
 export function normalizeExpiry(raw) {
   if (!raw) return null;
-  const t = String(raw).trim().toUpperCase().replace(/[;!]/g, "1").replace(/\s+/g, " ");
+  // A lone "1" in a date OCRs as punctuation that shares its single vertical
+  // stroke — a real Patterson label's "2016-01" came back "2016 - 0:" (and on a
+  // different capture "2016 - 0;"). Coerce those ; ! : strokes back to 1 before
+  // matching; isoFrom still range-checks, so a stray coercion just yields null.
+  const t = String(raw).trim().toUpperCase().replace(/[;!:]/g, "1").replace(/\s+/g, " ");
 
   // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
   let m = t.match(/\b(20\d{2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})\b/);
@@ -227,10 +231,11 @@ export function parseLotExpiry(text, { barcode } = {}) {
     // two adjacent numbers — without that, a lot printed just before the date
     // ("0710709 07.2011") swallows the date's leading month and the expiry is
     // lost. Spaces are still tolerated *around* the separator (Patterson prints
-    // "2016 - 01"), and the trailing groups allow OCR look-alike letters in the
-    // year ("07.20N1" for 07.2011), which normalizeExpiry coerces before
-    // validating. The two MON-anchored alternatives keep the 3-letter-month case.
-    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d{1,4}(?:\s*[-/.]\s*[\dA-Z;!]{1,4}){1,2})(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
+    // "2016 - 01"), and the trailing groups allow OCR look-alike glyphs in the
+    // year or month — letters ("07.20N1" for 07.2011) and the ; ! : strokes a
+    // lone "1" reads as ("2016 - 0:" for 2016-01) — which normalizeExpiry coerces
+    // before validating. The two MON-anchored alternatives keep the 3-letter case.
+    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d{1,4}(?:\s*[-/.]\s*[\dA-Z;!:]{1,4}){1,2})(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
       const val = m[1] || m[2] || m[3];
       const iso = normalizeExpiry(val);
       if (!iso) continue;

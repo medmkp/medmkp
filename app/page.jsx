@@ -862,7 +862,7 @@ export default function Home() {
   // "items checked" tally (the same localStorage key) purely to drive the
   // conversion teaser — it no longer gates anything.
   async function handlePublicScan(code) {
-    const added = await addScannedItem(code);
+    const added = await addScannedItem(code, { publicScan: true });
     if (!added) return;
     setFreeScansUsed((n) => {
       const next = n + 1;
@@ -1016,7 +1016,7 @@ export default function Home() {
       : [...docs, { id: "scan", name: "Barcode scans", itemCount: 0 }]);
   }
 
-  async function addScannedItem(code) {
+  async function addScannedItem(code, { publicScan = false } = {}) {
     // A website QR — our own tracedds.com codes or any URL — isn't a product.
     // Never add it: buzz + a transient "skipped" pill, keep the camera scanning.
     if (isQrUrl(code)) {
@@ -1035,11 +1035,10 @@ export default function Home() {
     if (scanned?.expiry) decoded.expirationDate = scanned.expiry;
 
     // One instance per product: a code already ON the list (active) doesn't add
-    // again — it shows the amber "already scanned" pill (no chime). We still
-    // backfill any lot/expiry the package now carries onto a row that lacks them
-    // (never clobbering a value the buyer already has). Match only active items:
-    // a removed/cleared item is a tombstone (included:false) and re-scanning it
-    // should bring it back, not be treated as a duplicate.
+    // again. We still backfill any lot/expiry the package now carries onto a row
+    // that lacks them (never clobbering a value the buyer already has). Match
+    // only active items: a removed/cleared item is a tombstone (included:false)
+    // and re-scanning it should bring it back, not be treated as a duplicate.
     const existing = code ? draftItems.find((item) => item.barcode === code && item.included !== false) : null;
     if (existing) {
       let item = existing;
@@ -1054,7 +1053,15 @@ export default function Home() {
         setListTouched(true);
         setDraftItems((items) => items.map((it) => (it.id === existing.id ? filled : it)));
       }
-      setScanResult({ kind: "duplicate", status: statusFromItem(item), item, isDuplicate: true, qty: item.draftQty || 1 });
+      // In the app, a re-scan means "already on your list — adjust qty there"
+      // (amber pill, no drawer). On the public single-item scanner there is no
+      // list to manage, so a re-scan isn't a duplicate at all — re-open the
+      // price drawer (kind "added") for the existing item. Either way we return
+      // false, so the public conversion tally counts only distinct items and
+      // never inflates on a re-scan.
+      setScanResult(publicScan
+        ? { kind: "added", status: statusFromItem(item), item, isDuplicate: false, qty: item.draftQty || 1 }
+        : { kind: "duplicate", status: statusFromItem(item), item, isDuplicate: true, qty: item.draftQty || 1 });
       return false;
     }
 
@@ -1594,6 +1601,7 @@ export default function Home() {
       listTouched={listTouched}
       buyingPrefs={buyingPrefs}
       supplierShipping={supplierShipping}
+      shipToState={me?.practice?.ship_state || ""}
       onBuyingPrefs={setBuyingPrefs}
       onApplyOptimized={applyOptimizedPlan}
       onArchiveList={requestSaveList}
