@@ -161,7 +161,7 @@ export function LoggedOutLanding({ onNavigate, authed = false }) {
           <div className="landing-actions">
             <button className="primary-action" type="button" onClick={() => onNavigate(authed ? "/app" : "/scan")}>
               <Icon name="icon-scan" className="button-icon" />
-              Scan an item <em>FREE</em>
+              Scan items <em>Free</em>
             </button>
             <button className="secondary-action" type="button" onClick={() => onNavigate("/sample")}>
               <Icon name="icon-play" className="button-icon" />
