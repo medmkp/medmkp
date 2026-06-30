@@ -35,6 +35,17 @@ test("keyword path: plain LOT, NO. variant, and alphanumeric value", () => {
   assert.equal(parseLotExpiry("LOT: A219").lot, "A219");
 });
 
+test("keyword path: combined 'Lot No./ Mfg. Date/ Exp Date' header (Beacons atenolol)", () => {
+  // Pharma boxes pack the field names into one header row with the values below,
+  // so the token after "LOT NO" is the next label word, not the lot. Skip the
+  // field-label chain to the first value, and don't mistake the expiry for the lot.
+  const r = parseLotExpiry("Lot No./ Mfg. Date/ Exp Date:\n05057 05/2017 01/2021");
+  assert.equal(r.lot, "05057");
+  assert.equal(r.expiry, "2021-01-31");
+  // A value-less "… Exp Date:" header must not let the expiry become the lot.
+  assert.equal(parseLotExpiry("LOT/EXP DATE 2025-01").lot, undefined);
+});
+
 test("does not read a barcode's printed digits as a lot (generated UPC HRI)", () => {
   // The human-readable line under a 1D barcode (here 785306841174, a valid UPC-A)
   // OCRs as a bare digit run with no LOT marker. It's the scanned code, not a lot:
@@ -81,6 +92,14 @@ test("expiry: keyword path is trusted, even when the date is in the past", () =>
   assert.equal(parseLotExpiry("EXP 2026-07-31").expiry, "2026-07-31");
   assert.equal(parseLotExpiry("USE BY 2027-03").expiry, "2027-03-31"); // month precision
   assert.equal(parseLotExpiry("EXP 2018-01-15").expiry, "2018-01-15"); // expired item
+});
+
+test("expiry: tolerates the box-edge glyph family the '1' digit OCRs to (Patterson '2016 - 0[;:|]')", () => {
+  // A real suture label's "2016 - 01" edge OCRs the trailing "1" / box stroke as
+  // ";" in one capture and ":" or "|" in others — all coerce to the same month.
+  for (const edge of [";", ":", "|"]) {
+    assert.equal(parseLotExpiry(`[ET M607840 % 2016 - 0${edge}`).expiry, "2016-01-31");
+  }
 });
 
 test("expiry: a manufacture date never beats the real expiry", () => {

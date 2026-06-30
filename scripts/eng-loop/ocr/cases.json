@@ -6,6 +6,9 @@
   { "name": "exp-mmddyyyy",       "text": "LOT C12D34  EXP 03-15-2026",          "expectLot": "C12D34", "expectExpiry": "2026-03-15" },
   { "name": "bb-month",           "text": "BB 12/2026  LOT 5567",                "expectLot": "5567", "expectExpiry": "2026-12-31" },
   { "name": "mon-yyyy-front",     "text": "EXP MAR 2028  LOT XJ4471",            "expectLot": "XJ4471", "expectExpiry": "2028-03-31" },
+  { "name": "dd-mon-yyyy",        "text": "LOT AB12345  EXP 15 JAN 2026",        "expectLot": "AB12345", "expectExpiry": "2026-01-15" },
+  { "name": "dd-mon-yyyy-dashed", "text": "EXP 31-DEC-2027  LOT 5567",           "expectLot": "5567", "expectExpiry": "2027-12-31" },
+  { "name": "mon-dd-yyyy",        "text": "LOT C12D34  EXP JAN 15 2026",         "expectLot": "C12D34", "expectExpiry": "2026-01-15" },
   { "name": "shape-fallback-lot", "text": "M607840",                             "expectLot": "M607840", "expectExpiry": null },
   { "name": "expiry-only-iso",    "text": "EXP 2026-09",                         "expectLot": null, "expectExpiry": "2026-09-30" },
   { "name": "yyyymm-slash",       "text": "LOT 88123  EXP 2025/07",              "expectLot": "88123", "expectExpiry": "2025-07-31" },
@@ -20,5 +23,15 @@
   { "name": "full-month-exp-ocr", "text": "DuraSeal Dental Adhesive\n\nREF DS-4420\n\nLOT 7A2208\n\nEXP DECEMBER 2026\n", "expectLot": "7A2208", "expectExpiry": "2026-12-31" },
   { "name": "full-month-useby", "text": "USE BY SEPTEMBER 2027  LOT XJ4471", "expectLot": "XJ4471", "expectExpiry": "2027-09-30" },
   { "name": "full-month-bestbefore", "text": "BEST BEFORE JANUARY 2027  LOT 5567", "expectLot": "5567", "expectExpiry": "2027-01-31" },
-  { "name": "comma-us-date-disinfectant", "text": "CaviCide Surface Disinfectant\n\nREF 13-1000 24 fl 0z (710 mL)\n\nLOT 7A2208\n\nEXP JAN 15, 2027\n\nKeep out of reach of children. For professional use.\n", "expectLot": "7A2208", "expectExpiry": "2027-01-15" }
+  { "name": "comma-us-date-disinfectant", "text": "CaviCide Surface Disinfectant\n\nREF 13-1000 24 fl 0z (710 mL)\n\nLOT 7A2208\n\nEXP JAN 15, 2027\n\nKeep out of reach of children. For professional use.\n", "expectLot": "7A2208", "expectExpiry": "2027-01-15" },
+  { "name": "biosis-charcoal-mfg-then-exp", "text": "Batch No.: 170294.\nMfg. Date: 12. 2017.\nExp. Date: 11. 2021.", "expectLot": "170294", "expectExpiry": "2021-11-30" },
+  { "name": "beacons-atenolol-combined-header", "text": "Lot No./ Mfg. Date/ Exp Date:\n05057 05/2017 01/2021", "expectLot": "05057", "expectExpiry": "2021-01-31" },
+  { "name": "eu-ddmmyyyy-slash-expiry", "text": "LOT C4419  EXP 31/12/2026",       "expectLot": "C4419", "expectExpiry": "2026-12-31" },
+  { "name": "eu-ddmmyyyy-dot-useby",   "text": "LOT 7781  USE BY 28.02.2027",     "expectLot": "7781", "expectExpiry": "2027-02-28" },
+  { "name": "aastramed-suture-mm-yyyy-real-ocr", "text": "*.\n\n7\n\n2/0 (3METRIC) |\n\nPOLYDIOXANONE o4pcs\nAbsorbable Suture\nSTERILE 75cm\n\n3/8 circle\nC €292 reverse cutting\n\n221071 Fag\n10.2022\n\ng 10.2025\nAastraMed\n\n", "expectLot": "221071", "expectExpiry": "2025-10-31" },
+  { "name": "compact-yyyymm-exp-no-separator", "text": "BE, No, 19858 © J\nfie, Dit, 2024-71\nExp.Dt. 202711\n", "expectLot": null, "expectExpiry": "2027-11-30" },
+  { "name": "compact-yyyymmdd-exp", "text": "LOT A22  EXP 20260131", "expectLot": "A22", "expectExpiry": "2026-01-31" },
+  { "name": "exp-mm-yy-2digit-year", "text": "Cefalexin Capsules 250mg\nCode KR/DRUGS/ KTK /28 / 342 /2004\nBatch No CBTB0196\nMfg. Date 10/18\nExpiry Date 09/21", "expectLot": "CBTB0196", "expectExpiry": "2021-09-30" },
+  { "name": "de-charge-bezeichnung-blister", "text": "Oxycodon-HC! Winthrop®\n10 mg Retardtabletten\nOxycodonhydrochlorid\nWinthrop Arzneimittel\n\nMitvertrieb: Zentiva Pharma\nCh.-B.: 6230058\nVerw. bis 02/2020\n", "expectLot": "6230058", "expectExpiry": "2020-02-29" },
+  { "name": "de-charge-alphanumeric", "text": "Oxycodon-HCl AL 10 mg Retardtabletten  Ch.-B.: K2F306  Verw. bis 03/2021", "expectLot": "K2F306", "expectExpiry": "2021-03-31" }
 ]
