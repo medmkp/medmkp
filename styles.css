@@ -445,6 +445,13 @@ p {
   gap: 10px;
 }
 
+/* Header CTAs must stay on one line — when space is tight on mobile the flex
+   container would otherwise break "Sign up" across two lines. */
+.landing-nav-actions .primary-action,
+.landing-nav-actions .secondary-action {
+  white-space: nowrap;
+}
+
 .landing-main {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(380px, 1fr);
@@ -9190,6 +9197,9 @@ th {
   .crl-layout.has-detail.detail-wide { grid-template-columns: minmax(0, 1fr); }
   .crl-rail { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .crl-detail { position: static; max-height: none; }
+  /* Panel is now full-width: the details column has ample room, so put the
+     imported thumbnail back beside it. */
+  .crl-detail .crl-imported { grid-template-columns: 126px minmax(0, 1fr); }
 }
 
 @media (max-width: 900px) {
@@ -9307,7 +9317,12 @@ th {
 .crl-packdeal-text small { font-size: 12px; color: var(--muted); }
 .crl-packdeal-switch { flex: 0 0 auto; padding: 5px 12px; border-radius: 7px; background: var(--green); color: #fff; font-size: 12px; font-weight: 600; }
 
-.crl-imported { display: grid; grid-template-columns: 126px minmax(0, 1fr); gap: 12px; align-items: start; }
+/* Narrow drawer: stack the imported item (thumbnail above details) so the
+   details column spans the panel's full width. Side by side, the details
+   column collapses to ~110px next to the 126px thumb, narrower than the
+   "Needs review" status pill, which then overflows the panel's clipped edge.
+   The expanded (⤢) layout has the room to keep them side by side. */
+.crl-imported { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
 .crl-imported .crl-thumb { width: 126px; height: 126px; }
 /* When the drawer is expanded (⤢), double the imported-item image. */
 .crl-layout.has-detail.detail-wide .crl-imported { grid-template-columns: 252px minmax(0, 1fr); }
@@ -9326,7 +9341,7 @@ th {
 .crl-qty-step { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .crl-qty-step button { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 15px; line-height: 1; }
 .crl-qty-step em { font-style: normal; font-weight: 600; color: var(--ink); }
-.crl-imported-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.crl-imported-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; color: var(--muted); }
 
 .crl-cand-list { display: grid; gap: 8px; }
 .crl-cand { display: grid; grid-template-columns: 18px 78px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }

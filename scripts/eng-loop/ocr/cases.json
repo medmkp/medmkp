@@ -16,5 +16,8 @@
   { "name": "dd-mon-yyyy-suture-carton", "text": "COVIDIEN\n\nPolysorb™ Braided Absorbable Suture 3-0\n\nREF GL-123 18 mm 1/2c\n\nLOT S2210V\n\nEXP 15 JAN 2027\n\nSTERILE R. Do not resterilize. Single use only. Distributed by Medtronic.\n\nMinneapolis, MN 55432 USA.\n", "expectLot": "S2210V", "expectExpiry": "2027-01-15" },
   { "name": "patterson-suture-ocr-colon-expiry", "text": "WH Sterile Suture USI\n\nP, ATTERSON ABSORBABLE\n\nCP 53 GUT 3-0\n\nAEA fii\n\n*+DB520708895342T\"\nDistributed by : Patterson Dental Supply, Inc.\nSt. Pau, IAN 55120\n\nPLAIN car\n\n1 Doz. (12)\n\nTINGHES 3/8 CIRCLE\nREV.CUT\n\nee\n\n°\n\nps4 gE\n\nNS\n\n|\ni\n\n[ETIMB07840 ¥ 2016 - 0:\n\n", "expectExpiry": "2016-01-31" },
   { "name": "de-charge-bezeichnung-blister", "text": "Oxycodon-HC! Winthrop®\n10 mg Retardtabletten\nOxycodonhydrochlorid\nWinthrop Arzneimittel\n\nMitvertrieb: Zentiva Pharma\nCh.-B.: 6230058\nVerw. bis 02/2020\n", "expectLot": "6230058", "expectExpiry": "2020-02-29" },
-  { "name": "de-charge-alphanumeric", "text": "Oxycodon-HCl AL 10 mg Retardtabletten  Ch.-B.: K2F306  Verw. bis 03/2021", "expectLot": "K2F306", "expectExpiry": "2021-03-31" }
+  { "name": "de-charge-alphanumeric", "text": "Oxycodon-HCl AL 10 mg Retardtabletten  Ch.-B.: K2F306  Verw. bis 03/2021", "expectLot": "K2F306", "expectExpiry": "2021-03-31" },
+  { "name": "full-month-exp-ocr", "text": "DuraSeal Dental Adhesive\n\nREF DS-4420\n\nLOT 7A2208\n\nEXP DECEMBER 2026\n", "expectLot": "7A2208", "expectExpiry": "2026-12-31" },
+  { "name": "full-month-useby", "text": "USE BY SEPTEMBER 2027  LOT XJ4471", "expectLot": "XJ4471", "expectExpiry": "2027-09-30" },
+  { "name": "full-month-bestbefore", "text": "BEST BEFORE JANUARY 2027  LOT 5567", "expectLot": "5567", "expectExpiry": "2027-01-31" }
 ]
