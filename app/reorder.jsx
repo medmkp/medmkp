@@ -961,7 +961,7 @@ export function MobileItemDetail({ rows, row, mode, onClose, onOpenRow, onToast,
             <button type="button" aria-label="Next item" disabled={idx >= total - 1} onClick={() => idx < total - 1 && onOpenRow(rows[idx + 1])}><Icon name="icon-chevron-right" className="button-icon" /></button>
           </div>
         )}
-        <button className="m-iconbtn" type="button" aria-label="More"><span aria-hidden="true">⋯</span></button>
+        <span className="m-detail-spacer" aria-hidden="true" />
       </header>
 
       <div className="m-detail-body">

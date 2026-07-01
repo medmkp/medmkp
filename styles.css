@@ -9300,6 +9300,30 @@ th {
 
 .crl-modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); }
 
+/* ── Unlock Practice paywall ──────────────────────────────────────────
+   Locked feature (invoice matching, savings) → a card over the real content.
+   The backdrop blur leaves the value legible-but-inert behind the lock; the
+   underlying <main> also carries `inert`/`aria-hidden` for a11y. */
+.paywall-overlay { position: fixed; inset: 0; z-index: 55; display: grid; place-items: center; padding: 24px; background: rgba(11, 21, 51, 0.32); backdrop-filter: blur(3px); }
+.paywall-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: min(400px, 94vw); padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+.paywall-lock { display: inline-grid; place-items: center; width: 40px; height: 40px; margin-bottom: 4px; border-radius: 10px; background: var(--blue-2); color: var(--blue); }
+.paywall-lock svg { display: block; width: 20px; height: 20px; }
+.paywall-title { margin: 0; font-size: 19px; font-weight: 600; color: var(--ink); }
+.paywall-benefit { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.paywall-price { margin: 4px 0 12px; color: var(--ink); font-size: 14px; }
+.paywall-price strong { font-size: 20px; font-weight: 600; }
+.paywall-error { margin: 0 0 8px; color: var(--red); font-size: 13px; }
+.paywall-upgrade { width: 100%; min-height: 44px; }
+.paywall-dismiss { width: 100%; min-height: 40px; padding: 0 12px; border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 500; }
+.paywall-dismiss:hover { color: var(--ink); }
+
+/* Mobile (≤900px): dock the card as a bottom sheet with 44px tap targets. */
+@media (max-width: 900px) {
+  .paywall-overlay { place-items: end stretch; padding: 0; }
+  .paywall-card { width: 100%; border-width: 1px 0 0; border-radius: 16px 16px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); }
+  .paywall-dismiss { min-height: 44px; }
+}
+
 /* Buying preferences: edit link + static form */
 .crl-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .crl-edit-link { padding: 0; border: 0; background: none; color: var(--blue); font-size: 12px; font-weight: 500; line-height: 1; }
@@ -9575,7 +9599,9 @@ th {
 .m-topbar h1 { font-size: 24px; font-weight: 700; color: var(--ink); }
 .m-iconbtn { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
 .m-iconbtn .button-icon { width: 18px; height: 18px; }
-.m-iconbtn span { font-size: 20px; line-height: 1; }
+/* Right-side spacer that keeps the pager centered in .m-detail-top (mirrors
+   the 40px back button on the left) without presenting a fake control. */
+.m-detail-spacer { width: 40px; }
 
 .m-scan-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--blue); color: #fff; font-size: 14px; font-weight: 600; }
 .m-scan-btn .button-icon { width: 18px; height: 18px; color: currentColor; }
@@ -9926,9 +9952,7 @@ th {
 .pdp-field > span { font-size: 12px; font-weight: 500; color: var(--muted); }
 .pdp-current-list { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 500; color: var(--ink); }
 .pdp-current-list .nav-icon { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
-.pdp-select { display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
-.pdp-select select { flex: 1; min-width: 0; border: 0; background: none; padding: 10px 0; outline: none; color: var(--ink); appearance: none; }
-.pdp-select .nav-icon { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
+.pdp-unit { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 500; color: var(--ink); }
 .pdp-qty-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 /* Rounded pill stepper with circular − / + controls — same language as the
    reorder-list inline qty editor (.crl-qty-inline), with a typeable input. */
@@ -10715,6 +10739,35 @@ th {
   animation: cart-spin 0.7s linear infinite;
 }
 @keyframes cart-spin { to { transform: rotate(360deg); } }
+
+/* Post-checkout return landing (Activating… / Checkout canceled). A calm,
+   centered card in the app content area — one shadow, token colors only. */
+.billing-return {
+  max-width: 460px; margin: 48px auto; padding: 40px 32px;
+  display: grid; justify-items: center; gap: 14px; text-align: center;
+  border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.billing-return h1 { font-size: 22px; font-weight: 600; color: var(--ink); }
+.billing-return p { color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 42ch; }
+.billing-return-spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--blue);
+  animation: cart-spin 0.8s linear infinite;
+}
+.billing-return-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; }
+.billing-return-icon .icon { width: 28px; height: 28px; }
+.billing-return-icon.ok { background: #e3f6ed; }
+.billing-return-icon.ok .icon { color: var(--green); }
+.billing-return-icon.muted { background: var(--surface-2); }
+.billing-return-icon.muted .icon { color: var(--muted); }
+.billing-return-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 6px; }
+@media (max-width: 520px) {
+  .billing-return { margin: 24px auto; padding: 32px 20px; }
+  .billing-return-actions { width: 100%; }
+  .billing-return-actions .primary-action,
+  .billing-return-actions .secondary-action { width: 100%; }
+}
 
 .cart-prefill {
   display: grid; justify-items: center; gap: 6px; text-align: center;

@@ -67,6 +67,7 @@ export const routeByView = {
   savings: "/app/savings",
   history: "/app/history",
   settings: "/app/settings",
+  billingReturn: "/app/billing/return",
 };
 
 
@@ -146,6 +147,16 @@ export function viewFromPath(pathname = "/") {
   if (path.startsWith("/app/catalog/")) return { view: "catalogCategory", isLoggedIn: true, categorySlug: decodeURIComponent(path.split("/")[3] || "") };
   if (path.startsWith("/app/product/")) return { view: "productDetail", isLoggedIn: true, productHandle: decodeURIComponent(path.split("/")[3] || "") };
   if (path === "/app/settings") return { view: "settings", isLoggedIn: true };
+  // Landing spot after Stripe hosted Checkout. `status` (success|canceled) is set
+  // by the checkout route's success_url/cancel_url; `returnTo` is where to drop the
+  // buyer once their plan activates (defaults to the app home).
+  if (path === "/app/billing/return")
+    return {
+      view: "billingReturn",
+      isLoggedIn: true,
+      billingReturnStatus: query.get("status") || "",
+      billingReturnTo: query.get("returnTo") || "",
+    };
 
   return { view: "home", isLoggedIn: true };
 }
@@ -153,6 +164,26 @@ export function viewFromPath(pathname = "/") {
 
 export function pathForView(view) {
   return routeByView[view] || "/app";
+}
+
+
+// A practice is entitled to the paid features only while its subscription is
+// `active`. Every other status (trialing, past_due, canceled, incomplete,
+// unpaid, paused, …) or a missing subscription is not entitled. Kept in lockstep
+// with the backend's authoritative entitlement() (utils/practice.ts) so the
+// post-checkout unlock never drops a buyer into a feature the paywall still gates.
+export function isEntitled(subscription) {
+  return subscription?.status === "active";
+}
+
+
+// Resolve which post-checkout landing state to show from the `status` query
+// param the checkout route stamps onto its cancel_url. Anything that isn't an
+// explicit cancel is treated as a successful return, so a missing/garbled param
+// still lands the just-paid buyer on the reassuring "Activating…" path rather
+// than a false "canceled".
+export function billingReturnState(status) {
+  return status === "canceled" ? "canceled" : "activating";
 }
 
 

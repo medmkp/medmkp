@@ -39,6 +39,13 @@ async function matchLineItems(vendor, lineItems, token) {
       signal: AbortSignal.timeout(MATCH_TIMEOUT_MS),
     });
 
+    // 402 = the practice isn't entitled to invoice matching (a paid Practice
+    // feature). Surface it verbatim so the upload flow can raise the paywall,
+    // rather than silently degrading to an unmatched import.
+    if (response.status === 402) {
+      return { locked: true };
+    }
+
     if (!response.ok) {
       throw new Error(`Medusa returned ${response.status}`);
     }
@@ -163,6 +170,13 @@ export async function POST(request) {
   const vendor = String(formData.get("supplierName") || "") || parsed.vendor;
   const token = await bearer();
   const matched = await matchLineItems(vendor, parsed.lineItems, token);
+
+  if (matched?.locked) {
+    return NextResponse.json(
+      { error: "Invoice matching is a Practice feature.", locked: true },
+      { status: 402 }
+    );
+  }
 
   const lineItems = matched
     ? matched.line_items.map((match) => toUiLineItem(match, vendor, source))

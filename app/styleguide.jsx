@@ -84,7 +84,6 @@ const P_PAGES = Math.ceil(P_TOTAL / P_PER);
 const JSX_COMPONENTS = [
   ["ListStatusPill", "list status chip (draft → handed off)"],
   ["QtyStepper", "− / value / + quantity control"],
-  ["UomSelect", "unit-of-measure dropdown"],
   ["ProductThumb", "product image with fallback"],
   ["MatchSupplier / CandidateName", "supplier + match candidate rows"],
   ["BuyingPreferencesCard", "editable buying-preferences panel"],

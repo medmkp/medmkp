@@ -1,5 +1,5 @@
 import { genericAdapter } from "../generic"
-import { shopifyAdapter } from "../shopify"
+import { shopifyExtractProducts } from "../shopify"
 import { extractShopifyCatalogProducts } from "../../shopify-catalog-extraction"
 import type { ProductPageCandidate } from "../../types"
 
@@ -49,7 +49,7 @@ describe("supplier product image extraction", () => {
   })
 
   it("stores Shopify product and variant image URLs on page extraction rows", () => {
-    const rows = shopifyAdapter.extractProducts?.(
+    const rows = shopifyExtractProducts(
       candidate(),
       `
         <script type="application/json" id="medmkp-shopify-product-json">

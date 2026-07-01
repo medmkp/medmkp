@@ -1,0 +1,18 @@
+[
+  {
+    "supplier_id": "msup_carolinadental_com",
+    "supplier_name": "Carolina Dental Supply",
+    "slug": "carolinadental",
+    "website_url": "https://carolinadental.com",
+    "source_catalog": "carolinadental-website-public",
+    "source_type": "website",
+    "source_url": "https://carolinadental.com",
+    "classification": "catalog_candidate",
+    "confidence_score": 0.95,
+    "source_company_name": "Carolina Dental Supply",
+    "platform": "shopify",
+    "origin": "https://carolinadental.com",
+    "distributor_aliases": ["carolina dental supply"],
+    "notes": "Shopify store. Config-driven Shopify routing (adapters/shopify-config.ts): matched by origin host carolinadental.com OR distributor alias, then extracted via the shared /products.json catalog path (shopify-catalog-extraction.ts) with the per-page HTML adapter (adapters/shopify.ts) as the fallback tier. variant.sku -> supplier SKU, product.vendor -> brand, variant.price (dollars string) -> price, variant.available -> stock. Shopify strips variant.barcode from the public list /products.json, so expect no GTIN/UPC (no lot/expiry barcode hook) and no unit_of_measure, same limitation as our other Shopify-sourced suppliers."
+  }
+]

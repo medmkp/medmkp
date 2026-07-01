@@ -2,7 +2,6 @@ import { firstMatch, stripTags } from "../html"
 import type {
   ExtractedProductRow,
   ProductPageCandidate,
-  SupplierProductAdapter,
 } from "../types"
 
 type ShopifyVariant = {
@@ -157,7 +156,7 @@ export function shopifyPackSize(value: string) {
   ])
 }
 
-function extractProducts(candidate: ProductPageCandidate, html: string): ExtractedProductRow[] {
+export function shopifyExtractProducts(candidate: ProductPageCandidate, html: string): ExtractedProductRow[] {
   const product = productJson(html)
   const variants = product?.variants?.length ? product.variants : [{}]
   const description = stripTags(product?.description ?? "")
@@ -203,14 +202,6 @@ function extractProducts(candidate: ProductPageCandidate, html: string): Extract
   })
 }
 
-export const shopifyAdapter: SupplierProductAdapter = {
-  id: "shopify",
-  matches: (candidate: ProductPageCandidate) =>
-    /(^|\.)amerdental\.com/i.test(candidate.url) ||
-    /(^|\.)carolinadental\.com/i.test(candidate.url) ||
-    /(^|\.)(thedentaldistributors|ddisupply)\.com/i.test(candidate.url) ||
-    /(^|\.)davisdentalsupply\.com/i.test(candidate.url) ||
-    /american dental accessories|carolina dental supply|ddi supply|dental distributors|davis dental supply/i.test(candidate.distributor),
-  extractProduct: (candidate, html): ExtractedProductRow => extractProducts(candidate, html)[0],
-  extractProducts,
+export function shopifyExtractProduct(candidate: ProductPageCandidate, html: string): ExtractedProductRow {
+  return shopifyExtractProducts(candidate, html)[0]
 }

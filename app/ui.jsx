@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useRef, useCallback } from "react";
 import { BrandLogoMark, Icon } from "./icons";
-import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
+import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
 
 export function useBarcodeScanner({ active, onScan }) {
   const videoRef = useRef(null);
@@ -369,21 +369,6 @@ export function QtyStepper({ qty, setQty }) {
         aria-label="Quantity"
       />
       <button type="button" onClick={() => setQty((value) => value + 1)} aria-label="Increase quantity">+</button>
-    </div>
-  );
-}
-
-
-export function UomSelect({ uom, setUom }) {
-  const options = [...new Set([uom, "Box", "Bag", "Case", "Pack", "Each"].filter(Boolean))];
-  return (
-    <div className="pdp-select">
-      <select value={uom} onChange={(event) => setUom(event.target.value)} aria-label="Unit of measure">
-        {options.map((option) => (
-          <option key={option} value={option}>{cap(option)}</option>
-        ))}
-      </select>
-      <Icon name="icon-chevron-down" className="nav-icon" />
     </div>
   );
 }
@@ -792,6 +777,51 @@ export function ConfirmModal({ title, body, confirmLabel = "Confirm", secondaryL
           )}
           <button className={`primary-action compact${destructive ? " danger" : ""}`} type="button" onClick={onConfirm}>{confirmLabel}</button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+// The "Unlock Practice" paywall. Rendered when a gated feature (invoice matching,
+// savings) returns a 402 for a practice without an active subscription. It sits
+// over the real content — which the caller blurs + marks `inert` — so the value
+// stays visible behind the lock. Desktop: a centered card; mobile (≤900px): a
+// bottom sheet with 44px tap targets (see styles.css). The lock is conveyed by
+// icon + text, never blur alone. "Upgrade" starts Stripe Checkout (backend #546)
+// and redirects to the returned URL.
+export function PracticePaywall({ onClose }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function startCheckout() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/billing/checkout", { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok && body.url) {
+        window.location.assign(body.url);
+        return;
+      }
+      setError(body.error || "Couldn’t start checkout. Please try again.");
+    } catch {
+      setError("Couldn’t reach the server. Check your connection and try again.");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="paywall-overlay" role="dialog" aria-modal="true" aria-labelledby="paywallTitle">
+      <div className="paywall-card">
+        <span className="paywall-lock" aria-hidden="true"><Icon name="icon-lock" /></span>
+        <h2 id="paywallTitle" className="paywall-title">Unlock Practice</h2>
+        <p className="paywall-benefit">Match every invoice and keep an audit-ready record of every lot you scan.</p>
+        <p className="paywall-price"><strong>$149</strong> / location / month</p>
+        {error && <p className="paywall-error" role="alert">{error}</p>}
+        <button type="button" className="primary-action paywall-upgrade" onClick={startCheckout} disabled={busy}>
+          {busy ? "Starting checkout…" : "Upgrade"}
+        </button>
+        <button type="button" className="paywall-dismiss" onClick={onClose}>Not now</button>
       </div>
     </div>
   );
