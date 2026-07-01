@@ -258,6 +258,55 @@ describe("variant families", () => {
     expect(families[0].familyName).not.toMatch(/econo|braided|wrapped/i)
     expect(families[0].familyName.toLowerCase()).toContain("cotton rolls")
   })
+
+  it("groups mask colors into one Color family (White included, not read as a shade)", () => {
+    const rows = [
+      ...variantPair("Cranberry", "Cranberry S3+ Face Masks Level 3 - Blue", "CRAN-S3-BLUE"),
+      ...variantPair("Cranberry", "Cranberry S3+ Face Masks Level 3 - Black", "CRAN-S3-BLACK"),
+      ...variantPair("Cranberry", "Cranberry S3+ Face Masks Level 3 - White", "CRAN-S3-WHITE"),
+    ]
+    const { byRepName } = familiesByName(rows)
+    const families = [...byRepName.values()].filter((f): f is FamilyInfo => Boolean(f))
+
+    // All three color clusters — including White — land in one Color family.
+    expect(new Set(families.map((f) => f.familyId)).size).toBe(1)
+    expect(families.length).toBe(3)
+    expect(new Set(families.map((f) => f.variantLabel))).toEqual(
+      new Set(["Blue", "Black", "White"])
+    )
+    expect(families.every((f) => f.variantAxis === "color")).toBe(true)
+    // Family title drops the color word; the "White" mask is a color, not a shade.
+    expect(families[0].familyName).not.toMatch(/blue|black|white/i)
+    expect(families[0].familyName.toLowerCase()).toContain("face masks")
+  })
+
+  it("keeps glove color lines apart as separate size families (color not stripped off-axis)", () => {
+    const rows = [
+      ...variantPair("Aurelia", "Aurelia Nitrile Exam Gloves Blue Small 100/Box", "AUR-NIT-BLUE-S"),
+      ...variantPair("Aurelia", "Aurelia Nitrile Exam Gloves Blue Large 100/Box", "AUR-NIT-BLUE-L"),
+      ...variantPair("Aurelia", "Aurelia Nitrile Exam Gloves Purple Small 100/Box", "AUR-NIT-PURP-S"),
+      ...variantPair("Aurelia", "Aurelia Nitrile Exam Gloves Purple Large 100/Box", "AUR-NIT-PURP-L"),
+    ]
+    const { byRepName } = familiesByName(rows)
+    const blue = [...byRepName.entries()]
+      .filter(([name]) => /blue/i.test(name))
+      .map(([, f]) => f)
+    const purple = [...byRepName.entries()]
+      .filter(([name]) => /purple/i.test(name))
+      .map(([, f]) => f)
+
+    // Two distinct Size families (one per color), each with Small + Large — not
+    // one collapsed family with duplicate "Large" labels.
+    expect(blue.every((f) => f?.variantAxis === "size")).toBe(true)
+    expect(purple.every((f) => f?.variantAxis === "size")).toBe(true)
+    const blueId = new Set(blue.map((f) => f?.familyId))
+    const purpleId = new Set(purple.map((f) => f?.familyId))
+    expect(blueId.size).toBe(1)
+    expect(purpleId.size).toBe(1)
+    expect([...blueId][0]).not.toEqual([...purpleId][0])
+    expect(new Set(blue.map((f) => f?.variantLabel))).toEqual(new Set(["Small", "Large"]))
+    expect(new Set(purple.map((f) => f?.variantLabel))).toEqual(new Set(["Small", "Large"]))
+  })
 })
 
 describe("Tier-3-discovered selector axes", () => {

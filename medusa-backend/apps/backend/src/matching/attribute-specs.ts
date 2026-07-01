@@ -123,6 +123,12 @@ const TOPICAL_FLUORIDE_FLAVORS = [
 const SIZE_RANK: Record<string, number> = {
   XS: 0, S: 1, M: 2, L: 3, XL: 4, "2XL": 5, "3XL": 6,
 }
+/** Selector sort order for colors — the registry list order (blue before black,
+ * etc.). Values are already normalized (grey → gray), so the map is keyed on the
+ * normalized value. */
+const COLOR_RANK: Record<string, number> = Object.fromEntries(
+  COLOR_WORDS.map((color, index) => [color, index])
+)
 const SIZE_LABEL: Record<string, string> = {
   XS: "X-Small", S: "Small", M: "Medium", L: "Large",
   XL: "X-Large", "2XL": "2X-Large", "3XL": "3X-Large",
@@ -227,14 +233,25 @@ export const VARIANT_SPECS: VariantSpec[] = [
       while ((match = shadeRe.exec(lowered))) {
         out.push(["shade", match[1]])
       }
-      // Extra-white is matched first so "XW"/"XWB" isn't read as plain white.
-      const xWhiteRe = /\b(?:x[\s-]?w[be]?|(?:extra|xtra)[\s-]?white)\b/g
-      while ((match = xWhiteRe.exec(lowered))) {
-        out.push(["shade", "xw"])
-      }
-      const whiteRe = /\b(?:wb|whb|white)\b/g
-      while ((match = whiteRe.exec(lowered))) {
-        out.push(["shade", "w"])
+      // "White" / "Extra White" are composite shades, but the same words name a
+      // COLOR on masks, gloves, gowns and other textiles. Skip the WORDED white
+      // shades for those so a white mask/glove is a color variant (see the color
+      // spec), not a shade. Numeric A1-D7 codes above stay global — they're
+      // unambiguous — so this only reclassifies the bare word.
+      const isApparel =
+        /\b(?:masks?|gloves?|gowns?|bibs?|aprons?|drapes?|towels?|napkins?|scrubs?|face\s*shields?)\b/.test(
+          lowered
+        )
+      if (!isApparel) {
+        // Extra-white is matched first so "XW"/"XWB" isn't read as plain white.
+        const xWhiteRe = /\b(?:x[\s-]?w[be]?|(?:extra|xtra)[\s-]?white)\b/g
+        while ((match = xWhiteRe.exec(lowered))) {
+          out.push(["shade", "xw"])
+        }
+        const whiteRe = /\b(?:wb|whb|white)\b/g
+        while ((match = whiteRe.exec(lowered))) {
+          out.push(["shade", "w"])
+        }
       }
       // Ivoclar Tetric composites use roman-style shade codes (IVA/IVB/IVW)
       // instead of the A1-D7 family. Treat them as shades only inside the scoped
@@ -324,8 +341,13 @@ export const VARIANT_SPECS: VariantSpec[] = [
     },
   },
 
-  // Common product colors (hard conflict, but not a selector — color variants
-  // stay as separate cards).
+  // Common product colors (hard conflict). Surfaced as a selector so
+  // otherwise-identical color variants — face masks in Blue/Black/White, gloves,
+  // bibs — group into one browsable product with a Color selector instead of a
+  // card per color. Lowest selector priority: color yields to a real size /
+  // shade / model axis when a listing carries one (see the mask White case,
+  // where the shade spec now defers to color for apparel), so color is the
+  // variant only when nothing more specific varies.
   {
     id: "color",
     extract: ({ lowered }) => {
@@ -336,6 +358,15 @@ export const VARIANT_SPECS: VariantSpec[] = [
         out.push(["color", match[1] === "grey" ? "gray" : match[1]])
       }
       return out
+    },
+    family: {
+      color: {
+        priority: 40,
+        axisLabel: "Color",
+        label: capitalize,
+        rank: (value) => COLOR_RANK[value] ?? 99,
+        stripTokens: COLOR_WORDS,
+      },
     },
   },
 
@@ -818,19 +849,37 @@ export const AXIS_PRIORITY: string[] = [...SELECTOR_AXES.entries()]
   .sort((a, b) => a[1].priority - b[1].priority)
   .map(([axis]) => axis)
 
-/** Worded tokens stripped from a family key so variants group together. */
-const FAMILY_STRIP_TOKENS = new Set<string>(
-  [...SELECTOR_AXES.values()].flatMap((config) => config.stripTokens ?? [])
-)
-/** Token patterns stripped from a family key (e.g. shade "A1"). */
-const FAMILY_STRIP_PATTERNS: RegExp[] = [...SELECTOR_AXES.values()]
-  .map((config) => config.stripPattern)
-  .filter((pattern): pattern is RegExp => Boolean(pattern))
+/** Per-axis strip config (worded tokens + a token pattern) for building a family
+ * key. Scoped to the axis on purpose: a family strips only the tokens of ITS OWN
+ * variant axis. Stripping every axis's tokens globally would fuse two lines that
+ * are distinct on a different axis — a Blue and a Purple glove line, each stripped
+ * of color, would collapse into one Size family with duplicate "Large" labels. */
+const AXIS_STRIP: Map<string, { tokens: Set<string>; patterns: RegExp[] }> = (() => {
+  const map = new Map<string, { tokens: Set<string>; patterns: RegExp[] }>()
+  for (const [axis, config] of SELECTOR_AXES) {
+    map.set(axis, {
+      tokens: new Set(config.stripTokens ?? []),
+      patterns: config.stripPattern ? [config.stripPattern] : [],
+    })
+  }
+  return map
+})()
 
-/** True when a name token is a varying-attribute token that must not gate a
- * family (so two glove sizes / two shades share one family key). */
-export function isFamilyStripToken(token: string): boolean {
-  return FAMILY_STRIP_TOKENS.has(token) || FAMILY_STRIP_PATTERNS.some((re) => re.test(token))
+function matchesStrip(strip: { tokens: Set<string>; patterns: RegExp[] }, token: string): boolean {
+  return strip.tokens.has(token) || strip.patterns.some((re) => re.test(token))
+}
+
+/** True when `token` is a varying-attribute token. Scoped to `axis` when given,
+ * so a family key drops only the tokens of ITS OWN axis (two glove sizes / two
+ * shades / two mask colors share one key, while a token that varies a DIFFERENT
+ * axis stays as product identity). With no `axis`, checks across every selector
+ * axis — the Tier-3 discovery pass uses that to skip already-modeled tokens. */
+export function isFamilyStripToken(token: string, axis?: string): boolean {
+  if (axis === undefined) {
+    return [...AXIS_STRIP.values()].some((strip) => matchesStrip(strip, token))
+  }
+  const strip = AXIS_STRIP.get(axis)
+  return strip ? matchesStrip(strip, token) : false
 }
 
 /** Every modeled concept's id, e.g. for telling the Tier-3 proposer what the

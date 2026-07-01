@@ -1,5 +1,5 @@
 import { createHash } from "crypto"
-import { AXIS_PRIORITY, axisLabelFor, formatVariant, isFamilyStripToken } from "./attribute-specs"
+import { AXIS_PRIORITY, axisLabelFor, COLOR_WORDS, formatVariant, isFamilyStripToken } from "./attribute-specs"
 import type { Cluster, FamilyInfo, NormalizedProduct } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -22,15 +22,16 @@ import type { Cluster, FamilyInfo, NormalizedProduct } from "./types"
 // the catalog's variant selectors can never drift from the matcher's conflict
 // axes. AXIS_PRIORITY / formatVariant / isFamilyStripToken are derived there.
 
-function familyTokens(coreTokens: string[]): string[] {
-  // Drop the varying-attribute tokens (glove "large", shade "A1", cotton-roll
-  // "braided") so two variants share one family key. Measured/taper/"#"/bare
+function familyTokens(coreTokens: string[], axis: string): string[] {
+  // Drop the tokens that vary THIS family's axis (glove "large", shade "A1",
+  // cotton-roll "braided", mask "blue") so its variants share one key, while
+  // keeping tokens that vary a different axis as identity. Measured/taper/"#"/bare
   // numbers never reach coreTokens, so only word-token axes need stripping.
-  return coreTokens.filter((token) => !isFamilyStripToken(token))
+  return coreTokens.filter((token) => !isFamilyStripToken(token, axis))
 }
 
 function familyKey(rep: NormalizedProduct, axis: string): string {
-  const tokens = [...new Set(familyTokens(rep.coreTokens))].sort().join(" ")
+  const tokens = [...new Set(familyTokens(rep.coreTokens, axis))].sort().join(" ")
   return `${rep.brandKey ?? ""}|${tokens}|${axis}`
 }
 
@@ -162,7 +163,7 @@ export function clusterAttributes(cluster: Cluster): ClusterAttribute[] {
  * gets a clean title ("Alasta Aloe Nitrile Glove Large 100/Box - Large" →
  * "Alasta Aloe Nitrile Glove 100/Box").
  */
-function cleanFamilyName(name: string): string {
+function cleanFamilyName(name: string, axis: string): string {
   let cleaned = name
     // shade ranges in supplier helper copy ("A1-D4 Shade Guide") are context,
     // not the specific purchasable variant.
@@ -180,6 +181,16 @@ function cleanFamilyName(name: string): string {
     .replace(/\b(?:econo(?:my)?|braided|wrapped)\b/gi, "")
     // needle length words
     .replace(/\b(?:short|long)\b/gi, "")
+  // Color words are dropped only for a color family's title ("… Face Masks -
+  // Blue" → "… Face Masks"). For a family whose variant is a different axis, the
+  // color is fixed product identity (a "Blue Nitrile Glove" size family), so it
+  // stays in the title.
+  if (axis === "color") {
+    cleaned = cleaned
+      .replace(new RegExp(`\\s*[-–]\\s*(?:${COLOR_WORDS.join("|")})\\s*$`, "i"), "")
+      .replace(new RegExp(`\\b(?:${COLOR_WORDS.join("|")})\\b`, "gi"), "")
+  }
+  cleaned = cleaned
     .replace(/\s{2,}/g, " ")
     .replace(/\s*[-–]\s*$/g, "")
     .replace(/\(\s*\)/g, "")
@@ -201,9 +212,9 @@ function familyNamePenalty(name: string): number {
   return score
 }
 
-function clusterFamilyName(cluster: Cluster): string {
+function clusterFamilyName(cluster: Cluster, axis: string): string {
   const candidates = cluster.members
-    .map((member) => cleanFamilyName(member.row.name))
+    .map((member) => cleanFamilyName(member.row.name, axis))
     .filter(Boolean)
   candidates.sort((a, b) => {
     const score = familyNamePenalty(a) - familyNamePenalty(b)
@@ -212,7 +223,7 @@ function clusterFamilyName(cluster: Cluster): string {
     }
     return b.length - a.length
   })
-  return candidates[0] || cleanFamilyName(cluster.representative.row.name)
+  return candidates[0] || cleanFamilyName(cluster.representative.row.name, axis)
 }
 
 function duplicateAwareLabel(member: Member, duplicateLabels: Set<string>): string {
@@ -249,7 +260,7 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
       continue
     }
     const rep = cluster.representative
-    const tokens = new Set(familyTokens(rep.coreTokens))
+    const tokens = new Set(familyTokens(rep.coreTokens, variant.axis))
     if (tokens.size === 0) {
       continue
     }
@@ -346,7 +357,7 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
     // Name from the lowest-rank member (e.g. the "Small"/smallest variant) for a
     // stable, deterministic title regardless of cluster iteration order.
     const naming = [...members].sort((a, b) => a.variant.rank - b.variant.rank)[0]
-    const familyName = clusterFamilyName(naming.cluster)
+    const familyName = clusterFamilyName(naming.cluster, naming.variant.axis)
     const familyHandle = `${slugify(familyName)}-${familyId.slice(-6)}`
 
     for (const member of members) {

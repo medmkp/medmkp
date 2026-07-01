@@ -212,6 +212,7 @@ export function variantAxisLabel(variants) {
   if (labels.some((l) => /^[A-D][1-4]/.test(l))) return "Shade";
   if (labels.some((l) => /taper/i.test(l))) return "Taper";
   if (labels.some((l) => /^(?:econo|braided|wrapped)$/i.test(l))) return "Style";
+  if (labels.some((l) => /^(?:black|blue|brown|clear|gold|gray|grey|green|orange|pink|purple|red|silver|teal|white|yellow)$/i.test(l))) return "Color";
   return "Option";
 }
 
