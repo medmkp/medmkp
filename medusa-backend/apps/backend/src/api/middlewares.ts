@@ -69,10 +69,15 @@ export default defineMiddlewares({
       matcher: "/medmkp/savings",
       middlewares: [authenticate("customer", ["bearer", "session"])],
     },
-    // Billing: the Customer-Portal and checkout/portal-return reconcile are
-    // practice-scoped and must be authed. Gate each path explicitly — NOT the
+    // Billing: Checkout, the Customer-Portal, and checkout/portal-return reconcile
+    // are practice-scoped and must be authed. Gate each path explicitly — NOT the
     // whole /medmkp/billing* subtree — so the future unauthed Stripe webhook
     // (/medmkp/billing/webhook) stays open, as noted above.
+    {
+      matcher: "/medmkp/billing/checkout",
+      method: ["POST"],
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
     {
       matcher: "/medmkp/billing/portal",
       method: ["POST"],
