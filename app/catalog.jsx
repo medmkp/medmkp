@@ -1146,7 +1146,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const [status, setStatus] = useState("loading");
   const [subs, setSubs] = useState([]);
   const [qty, setQty] = useState(1);
-  const [uom, setUom] = useState("Box");
+  const [uom, setUom] = useState("Unit");
   // Full-screen image viewer (the "View larger image" affordance).
   const [lightbox, setLightbox] = useState(false);
   // Chosen pack quantity when a canonical's offers span multiple packs (null
@@ -1183,7 +1183,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
         setVariants(list);
         setFamily(familyInfo || null);
         setActiveIdx(idx);
-        setUom(cap(list[idx].unit_of_measure) || "Box");
+        setUom(cap(list[idx].unit_of_measure) || "Unit");
         setStatus("ready");
 
         // Comparable products: surface same-type substitutes from a different
