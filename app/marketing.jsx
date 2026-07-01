@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { BrandMark, Icon } from "./icons";
-import { DEFAULT_BUYING_PREFS } from "./lib";
+import { DEFAULT_BUYING_PREFS, PRACTICE_MONTHLY_FEE_CENTS } from "./lib";
 import { CurrentReorderList } from "./reorder";
 import { ProductDetail } from "./catalog";
 import { ScanHandoffQr, ScanResultCard, useBarcodeScanner } from "./ui";
@@ -583,9 +583,13 @@ export function PublicNav({ onNavigate, active, authed = false }) {
 
 
 export function PricingPage({ onNavigate, authed = false }) {
+  // Keep the Practice price in lockstep with the canonical billing constant
+  // (paywall + Settings → Billing both quote it), so the marketing page can't
+  // drift from what a prospect is actually charged at checkout.
+  const practicePrice = `$${PRACTICE_MONTHLY_FEE_CENTS / 100}`;
   const tiers = [
     { name: "Starter", price: "Free", per: "", blurb: "For trying it out", cta: "Start free", to: "/signup", featured: false, features: ["Scan & search products", "1 reorder list", "Benchmark price ranges"] },
-    { name: "Practice", price: "$199", per: "/mo", blurb: "For a single office", cta: "Start free trial", to: "/signup", featured: true, features: ["Unlimited reorder lists", "Invoice upload & matching", "Supplier handoffs", "Price alerts"] },
+    { name: "Practice", price: practicePrice, per: "/mo", blurb: "For a single office", cta: "Start free trial", to: "/signup", featured: true, features: ["Unlimited reorder lists", "Invoice upload & matching", "Supplier handoffs", "Price alerts"] },
     { name: "Group", price: "Custom", per: "", blurb: "For multi-location groups", cta: "Contact sales", to: "/about", featured: false, features: ["Everything in Practice", "Multiple locations", "Team roles & approvals", "Priority support"] },
   ];
   return (
