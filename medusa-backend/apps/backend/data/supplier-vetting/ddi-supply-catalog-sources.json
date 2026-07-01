@@ -10,6 +10,10 @@
     "classification": "catalog_candidate",
     "confidence_score": 0.95,
     "source_company_name": "Dental Distributors, Inc.",
+    "platform": "shopify",
+    "origin": "https://thedentaldistributors.com",
+    "origin_aliases": ["https://ddisupply.com"],
+    "distributor_aliases": ["ddi supply", "dental distributors"],
     "notes": "Shopify store (Dental Distributors, Inc., Grimes IA; ddisupply.com 301s here). Reuses the generic Shopify adapter (adapters/shopify.ts): variant.sku -> supplier SKU, product.vendor -> brand, variant.price -> price, variant.available -> stock. Catalog discovered via /sitemap.xml -> sitemap_products_N.xml then pulled in full from /products.json?limit=250&page=N (~9,858 products across ~40 pages). SKU+brand matching only; variant.barcode empty (no GTIN/UPC, so no lot/expiry barcode hook), same limitation as our other Shopify-sourced suppliers. No bot protection observed (plain UA gets 200 JSON). Net32 winning seller (1,939 wins). Verified live 2026-06-30: products.json 200, Implacare II (sku IMPCKITII, Hu-Friedy) = $165.64, 0/250 sampled variants carried a barcode."
   }
 ]

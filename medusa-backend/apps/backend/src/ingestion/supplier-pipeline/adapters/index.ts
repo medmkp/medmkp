@@ -7,12 +7,17 @@ import { pattersonAdapter } from "./patterson"
 import { pearsonAdapter } from "./pearson"
 import { practiconAdapter } from "./practicon"
 import { shastaAdapter } from "./shasta"
-import { shopifyAdapter } from "./shopify"
+import { loadShopifyConfigs, makeShopifyRouter } from "./shopify-config"
 import { skyDentalAdapter } from "./skydental"
 import type {
   ProductPageCandidate,
   SupplierProductAdapter,
 } from "../types"
+
+// Built once from the per-supplier vetting configs (platform: "shopify"), so
+// onboarding a Shopify vendor is dropping a config object into a
+// *-catalog-sources.json array — no edit to this file.
+const shopifyAdapter = makeShopifyRouter(loadShopifyConfigs())
 
 const adapters: SupplierProductAdapter[] = [
   darbyDentalAdapter,
