@@ -1,13 +1,20 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../modules/medmkp"
 import type MedMKPModuleService from "../../../modules/medmkp/service"
-import { requirePractice } from "../../../utils/practice"
+import { assertEntitled, requirePractice } from "../../../utils/practice"
 import { buildEvidenceListFilter, buildEvidenceWrite } from "../../../utils/evidence"
 
 // GET /medmkp/evidence — the practice's evidence documents, newest first.
 // Optional exact-match filters: document_type, status, inventory_item_id,
 // canonical_product_id, supplier_id, supplier_product_id, location_id.
+//
+// Evidence is a paid Practice feature (the "Unlock Practice" paywall promises an
+// audit-ready record of every lot scanned), so it's gated by the same
+// entitlement check as Savings — a 402 under BILLING_ENFORCE for an unentitled
+// practice, which the UI turns into the paywall. Dark by default (flag off ⇒
+// always allowed), so prod is unaffected until billing goes live.
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
+  if (!(await assertEntitled(req, res))) return
   const practiceId = await requirePractice(req, res)
   if (!practiceId) return
 
