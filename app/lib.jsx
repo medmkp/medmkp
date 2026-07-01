@@ -483,10 +483,13 @@ export function displayUom(uom) {
 // A trustworthy per-unit price is never higher than the pack price it came from
 // (a pack holds ≥1 unit). When a bad pack parse inverts that — e.g. a measured
 // "0.2g" basis turning $143.99 into "$719.95/ea" — suppress the per-unit rather
-// than show a nonsense figure.
+// than show a nonsense figure. An unknown pack quantity comes back as perEa 0
+// (not null), which renders as a meaningless "$0.000 / ea"; a non-positive
+// per-unit is just as much a nonsense figure, so suppress it too.
 
 export function showPerEa(perEa, packPrice) {
   if (perEa == null) return false;
+  if (!(perEa > 0)) return false;
   if (packPrice != null && perEa > packPrice + 1e-6) return false;
   return true;
 }
