@@ -370,8 +370,15 @@ export function parseLotExpiry(text, { barcode } = {}) {
     // "2016 - 01"), and the trailing groups allow OCR look-alike letters AND the
     // box-edge punctuation ";:|" in the year/month ("07.20N1" for 07.2011, "2016 -
     // 0:" for "2016 - 01"), which normalizeExpiry coerces before validating. The
-    // two MON-anchored alternatives keep the 3-letter-month case.
-    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d{1,4}(?:\s*[-/.]\s*[\dA-Z;!:|]{1,4}){1,2})(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
+    // two MON-anchored alternatives keep the 3-letter-month case. The first of them
+    // ("MON YYYY") carries a `(?![-/.]\d)` guard so it can't swallow a year that is
+    // really the head of a longer numeric date: without it a non-month 3-letter word
+    // sitting right before a bare ISO date ("CAD 2026-09" — the Spanish "caducidad"
+    // marker, or any stray "USP"/"REF"-style triplet) matched "CAD 2026", consumed the
+    // year, and — since MONTHS rejects "CAD" — dropped it, leaving only "-09" for the
+    // real date, so the expiry was lost entirely. A genuine "MAR 2028" (nothing but a
+    // space/end after the year) is unaffected.
+    for (const m of flat.matchAll(/(?:^|[^A-Z0-9])(\d{1,4}(?:\s*[-/.]\s*[\dA-Z;!:|]{1,4}){1,2})(?=$|[^A-Z0-9])|\b([A-Z]{3}[-/. ]20\d{2})\b(?![-/.]\d)|\b(20\d{2}[-/. ][A-Z]{3})\b/g)) {
       const val = m[1] || m[2] || m[3];
       const iso = normalizeExpiry(val);
       if (!iso) continue;
