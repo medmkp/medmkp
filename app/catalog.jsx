@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "./icons";
-import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, cap, catMoney, compactSizeLabel, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
-import { CatalogSupplierAvatar, QtyStepper, UomSelect } from "./ui";
+import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, canonPackUnit, cap, catMoney, compactSizeLabel, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
+import { CatalogSupplierAvatar, QtyStepper } from "./ui";
 import { CATALOG_CATEGORIES, CATALOG_TINTS, bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
 
 export function SearchResults({ results, query = "", loading, onNavigate }) {
@@ -1146,7 +1146,6 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const [status, setStatus] = useState("loading");
   const [subs, setSubs] = useState([]);
   const [qty, setQty] = useState(1);
-  const [uom, setUom] = useState("Unit");
   // Full-screen image viewer (the "View larger image" affordance).
   const [lightbox, setLightbox] = useState(false);
   // Chosen pack quantity when a canonical's offers span multiple packs (null
@@ -1183,7 +1182,6 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
         setVariants(list);
         setFamily(familyInfo || null);
         setActiveIdx(idx);
-        setUom(cap(list[idx].unit_of_measure) || "Unit");
         setStatus("ready");
 
         // Comparable products: surface same-type substitutes from a different
@@ -1322,7 +1320,19 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
   const rawTitle = family ? family.family_name : product.name;
   const displayName = hasPackChoice ? stripTrailingPack(rawTitle) || rawTitle : rawTitle;
   const packSize = normalizePackText(attrs.pack_sizes?.[0] || best?.name?.match(/(\d+\s*\/\s*[A-Za-z.]+)/)?.[1]) || "—";
-  const uomLabel = (uom || "unit").toLowerCase();
+  // Order unit — derived from the selected pack, never asked. The reorder item,
+  // toast, and supplier handoff all carry this, so it must match the packaging
+  // the page already shows (e.g. "100/Box" → "Box"). The product's own declared
+  // unit_of_measure wins when present; otherwise pull the container word from the
+  // active pack label, falling back to "Unit" for measured/unknown packs.
+  const activePackText = hasPackChoice ? activePackLabel : packSize;
+  const packContainerUnit =
+    activePackText && activePackText !== "—"
+      ? activePackText.match(/\d+\s*\/\s*([A-Za-z.]+)/)?.[1]
+      : null;
+  const orderUnit =
+    cap(product.unit_of_measure) || (packContainerUnit ? cap(canonPackUnit(packContainerUnit)) : "Unit");
+  const uomLabel = orderUnit.toLowerCase();
   // Whether the group's per-unit prices are comparable (same base unit), and the
   // unit they compare in — drives the "/ ea" labels and the mixed-units note.
   const unitComparable = !!product.unit_comparable;
@@ -1373,7 +1383,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
 
   const specs = [
     ["Category", product.category],
-    ["Unit of measure", cap(product.unit_of_measure)],
+    ["Unit of measure", orderUnit],
     ["Pack size", packSize !== "—" ? packSize : null],
     ...modeledSpecs,
     ["Type", titleCase(attrs.family)],
@@ -1495,7 +1505,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
               <div className="pdp-spec-row">
                 <div><span>SKU</span><strong>{best?.sku || "—"}</strong></div>
                 <div><span>Pack Size</span><strong>{hasPackChoice ? activePackLabel : packSize}</strong></div>
-                <div><span>UOM</span><strong>{cap(product.unit_of_measure) || "Unit"}</strong></div>
+                <div><span>UOM</span><strong>{orderUnit}</strong></div>
                 <div><span>Category</span><strong>{product.category}</strong></div>
               </div>
               <div className="pdp-desc">
@@ -1527,7 +1537,7 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                   </span>
                 )}
               </div>
-              <span className="pdp-compare-note">Extended price shown for {qty} &times; {cap(uom)}</span>
+              <span className="pdp-compare-note">Extended price shown for {qty} &times; {orderUnit}</span>
             </div>
 
             <div className="pdp-table-wrap">
@@ -1750,10 +1760,10 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
                 <span>Quantity</span>
                 <QtyStepper qty={qty} setQty={setQty} />
               </label>
-              <label className="pdp-field">
-                <span>UOM</span>
-                <UomSelect uom={uom} setUom={setUom} />
-              </label>
+              <div className="pdp-field">
+                <span>Unit</span>
+                <div className="pdp-unit" title="Taken from this product's pack — you order by this unit">{orderUnit}</div>
+              </div>
             </div>
             {best && (
               <div className="pdp-best-box">
@@ -1772,8 +1782,8 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
               className="primary-action"
               type="button"
               onClick={() => {
-                onAddToList?.(product, qty, cap(uom));
-                onToast(`Added ${qty} × ${cap(uom)} of ${product.name} to ${listName || "your reorder list"}`);
+                onAddToList?.(product, qty, orderUnit);
+                onToast(`Added ${qty} × ${orderUnit} of ${product.name} to ${listName || "your reorder list"}`);
               }}
             >
               Add to Reorder List

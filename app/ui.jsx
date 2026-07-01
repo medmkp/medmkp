@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useRef, useCallback } from "react";
 import { BrandLogoMark, Icon } from "./icons";
-import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, cap, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
+import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
 
 export function useBarcodeScanner({ active, onScan }) {
   const videoRef = useRef(null);
@@ -369,21 +369,6 @@ export function QtyStepper({ qty, setQty }) {
         aria-label="Quantity"
       />
       <button type="button" onClick={() => setQty((value) => value + 1)} aria-label="Increase quantity">+</button>
-    </div>
-  );
-}
-
-
-export function UomSelect({ uom, setUom }) {
-  const options = [...new Set([uom, "Box", "Bag", "Case", "Pack", "Each"].filter(Boolean))];
-  return (
-    <div className="pdp-select">
-      <select value={uom} onChange={(event) => setUom(event.target.value)} aria-label="Unit of measure">
-        {options.map((option) => (
-          <option key={option} value={option}>{cap(option)}</option>
-        ))}
-      </select>
-      <Icon name="icon-chevron-down" className="nav-icon" />
     </div>
   );
 }

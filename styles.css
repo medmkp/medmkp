@@ -9889,9 +9889,7 @@ th {
 .pdp-field > span { font-size: 12px; font-weight: 500; color: var(--muted); }
 .pdp-current-list { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 500; color: var(--ink); }
 .pdp-current-list .nav-icon { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
-.pdp-select { display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
-.pdp-select select { flex: 1; min-width: 0; border: 0; background: none; padding: 10px 0; outline: none; color: var(--ink); appearance: none; }
-.pdp-select .nav-icon { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
+.pdp-unit { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 500; color: var(--ink); }
 .pdp-qty-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 /* Rounded pill stepper with circular − / + controls — same language as the
    reorder-list inline qty editor (.crl-qty-inline), with a typeable input. */
