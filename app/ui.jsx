@@ -745,7 +745,7 @@ export function BuyingPreferencesCard({ prefs, supplierOptions, onSave, onToast,
 // title lives as an H1 below the bar, per the wireframe frames.
 export function MobileHeader({ onBack, backLabel = "Back to scanning", actions = null }) {
   return (
-    <header className="m-appbar">
+    <header className={`m-appbar${actions ? " has-actions" : ""}`}>
       <button type="button" className="m-appbar-back" onClick={onBack} aria-label={backLabel}>
         <Icon name="icon-chevron-left" />
       </button>
