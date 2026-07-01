@@ -9562,7 +9562,9 @@ th {
 .m-topbar h1 { font-size: 24px; font-weight: 700; color: var(--ink); }
 .m-iconbtn { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
 .m-iconbtn .button-icon { width: 18px; height: 18px; }
-.m-iconbtn span { font-size: 20px; line-height: 1; }
+/* Right-side spacer that keeps the pager centered in .m-detail-top (mirrors
+   the 40px back button on the left) without presenting a fake control. */
+.m-detail-spacer { width: 40px; }
 
 .m-scan-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--blue); color: #fff; font-size: 14px; font-weight: 600; }
 .m-scan-btn .button-icon { width: 18px; height: 18px; color: currentColor; }
