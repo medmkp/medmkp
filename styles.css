@@ -4348,6 +4348,43 @@ kbd {
 .set-section-info p { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.5; max-width: 240px; }
 .set-section-body { display: grid; gap: 18px; min-width: 0; }
 
+/* Plan & billing tab: one calm plan card (surface-2 inset) + a status badge and
+   the single Stripe CTA. Tokens only — no stacked shadows, one border. */
+.bill-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.bill-plan { display: grid; gap: 6px; min-width: 0; }
+.bill-plan-head { display: flex; align-items: center; gap: 10px; }
+.bill-plan-name { font-size: 17px; font-weight: 600; color: var(--ink); }
+.bill-plan-meta { margin: 0; font-size: 13px; color: var(--muted); }
+.bill-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.bill-badge-green { background: #e3f6ed; color: var(--green); }
+.bill-badge-gold { background: #fcf0db; color: var(--gold); }
+.bill-badge-red { background: #fdeaea; color: var(--red); }
+.bill-card .primary-action { flex-shrink: 0; }
+.bill-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; max-width: 60ch; }
+
+@media (max-width: 560px) {
+  .bill-card { align-items: stretch; }
+  .bill-card .primary-action { width: 100%; justify-content: center; }
+}
+
 .set-grid { display: grid; gap: 16px 20px; }
 .set-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .set-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }

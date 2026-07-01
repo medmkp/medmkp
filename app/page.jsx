@@ -489,7 +489,7 @@ export default function Home() {
       .then((response) => response.json())
       .then((data) => {
         setAuthed(Boolean(data.authenticated));
-        setMe(data.authenticated ? { customer: data.customer || null, practice: data.practice || null } : null);
+        setMe(data.authenticated ? { customer: data.customer || null, practice: data.practice || null, subscription: data.subscription || null } : null);
       })
       .catch(() => setAuthed(false));
   }, []);

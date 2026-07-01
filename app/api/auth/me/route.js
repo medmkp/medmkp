@@ -16,8 +16,10 @@ export async function GET() {
       cache: "no-store",
     });
     if (response.ok) {
-      const { customer, practice } = await response.json();
-      return NextResponse.json({ authenticated: true, customer, practice });
+      const { customer, practice, subscription } = await response.json();
+      // `subscription` is optional — older backends omit it, in which case the
+      // billing tab treats the account as Free (no plan/status to show).
+      return NextResponse.json({ authenticated: true, customer, practice, subscription });
     }
   } catch {
     // fall through — still authenticated, just without profile details
