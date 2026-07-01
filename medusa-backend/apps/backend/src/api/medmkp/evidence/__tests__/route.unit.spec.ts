@@ -8,10 +8,12 @@ import { GET as DETAIL, PATCH as UPDATE } from "../[id]/route"
 
 const PRAC = "prac_1"
 
-function makeService(seed: any[] = []) {
+function makeService(seed: any[] = [], subs: any[] = []) {
   const docs = [...seed]
   return {
     docs,
+    // Read by entitlement() via assertEntitled — active sub ⇒ entitled.
+    listPracticeSubscriptions: jest.fn(async () => subs),
     listEvidenceDocuments: jest.fn(async (filter: Record<string, any>) =>
       docs.filter((d) => Object.entries(filter).every(([k, v]) => d[k] === v))
     ),
@@ -141,6 +143,41 @@ describe("GET /medmkp/evidence — list", () => {
     const res = makeRes()
     await LIST(makeReq(service, { practiceId: null }), res)
     expect(res.statusCode).toBe(404)
+  })
+})
+
+describe("GET /medmkp/evidence — entitlement gate (Unlock Practice paywall)", () => {
+  const prev = process.env.BILLING_ENFORCE
+  afterEach(() => {
+    if (prev === undefined) delete process.env.BILLING_ENFORCE
+    else process.env.BILLING_ENFORCE = prev
+  })
+
+  it("402s for an unentitled practice when BILLING_ENFORCE is on", async () => {
+    process.env.BILLING_ENFORCE = "true"
+    const service = makeService([SDS, IFU]) // no active subscription
+    const res = makeRes()
+    await LIST(makeReq(service), res)
+    expect(res.statusCode).toBe(402)
+    expect(service.listEvidenceDocuments).not.toHaveBeenCalled()
+  })
+
+  it("200s with the evidence list when the practice is entitled", async () => {
+    process.env.BILLING_ENFORCE = "true"
+    const service = makeService([SDS, IFU], [{ status: "active" }])
+    const res = makeRes()
+    await LIST(makeReq(service), res)
+    expect(res.statusCode).toBe(200)
+    expect(res.body.evidence.map((d: any) => d.id).sort()).toEqual(["evdoc_ifu", "evdoc_sds"])
+  })
+
+  it("200s with the flag off regardless of subscription (prod default)", async () => {
+    delete process.env.BILLING_ENFORCE
+    const service = makeService([SDS]) // no active subscription
+    const res = makeRes()
+    await LIST(makeReq(service), res)
+    expect(res.statusCode).toBe(200)
+    expect(service.listEvidenceDocuments).toHaveBeenCalled()
   })
 })
 
