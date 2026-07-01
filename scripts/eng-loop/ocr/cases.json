@@ -38,5 +38,6 @@
   { "name": "us-full-month-comma-exp", "text": "Hibiclens Antiseptic Skin Cleanser\nREF 57591\nLOT 7A2208\nEXP JANUARY 15, 2027\nFor external use only", "expectLot": "7A2208", "expectExpiry": "2027-01-15" },
   { "name": "dd-sept-4letter-exp", "text": "Septocaine Articaine HCl 4%\nREF 01-A1100\nLOT 5567\nEXP 15 SEPT 2027", "expectLot": "5567", "expectExpiry": "2027-09-15" },
   { "name": "mon-yy-2digit-exp", "text": "Gauze Sponges 4x4 Non-sterile\nREF 2187\nLOT 240115\nEXP DEC 26", "expectLot": "240115", "expectExpiry": "2026-12-31" },
-  { "name": "dd-mon-yy-2digit-exp", "text": "Alginate Impression Material\nREF AL-200\nLOT B7741\nEXP 15 DEC 26", "expectLot": "B7741", "expectExpiry": "2026-12-15" }
+  { "name": "dd-mon-yy-2digit-exp", "text": "Alginate Impression Material\nREF AL-200\nLOT B7741\nEXP 15 DEC 26", "expectLot": "B7741", "expectExpiry": "2026-12-15" },
+  { "name": "it-lotto-marker", "text": "CLOREXIDINA 0,2%\n\nCollutorio - Mouthwash\n\nLOTTO 7A2208\nScad. 03/2027\n\nProdotto in Italia\n", "expectLot": "7A2208", "expectExpiry": "2027-03-31" }
 ]

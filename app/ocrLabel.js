@@ -274,7 +274,14 @@ export function parseLotExpiry(text, { barcode } = {}) {
   // after "LOT": non-US pharma/medical labels stamp the batch as "Batch No." rather
   // than "Lot" (a real Difenac/Diclofenac carton prints "BATCH NO : BJ11529"), and the
   // shape fallback can't recover an alphanumeric value like that — it isn't a bare
-  // digit run nor a single-letter+digits stamp. Some labels spell the descriptor as
+  // digit run nor a single-letter+digits stamp. The Romance-language equivalents are
+  // accepted as standalone markers too: Spanish/Portuguese cartons stamp the batch as
+  // "LOTE" and Italian ones as "LOTTO" (a real Novocol/Clorexidina import prints "LOTE
+  // L2F5A" / "LOTTO 7A2208"), and the shape fallback can't recover an alphanumeric
+  // value like that either. They share the "LOT" stem, so the marker just allows an
+  // optional "E" (LOTE) or "TO" (LOTTO) suffix; the `\b` after it still keeps "LOTION"
+  // and "LOTS" out (neither is LOT + one of those suffixes at a word boundary).
+  // Some labels spell the descriptor as
   // "LOT Batch Code <value>", and OCR can drop "Batch" and leave "LOT Code <value>",
   // so skip that wording before taking the value. The descriptor is also a *chain*:
   // pharma boxes pack the field names into one header row ("Lot No./ Mfg. Date/ Exp
@@ -283,7 +290,7 @@ export function parseLotExpiry(text, { barcode } = {}) {
   // / DATE / EXP …) and their "/"-style separators to reach the first value. Value
   // allows common batch separators (A-219, 13593092, M607840).
   const lotMatch = flat.match(
-    /\b(?:L[O0D][T1I]|BATCH)\b[\s.:#)\]\[|/]*(?:(?:N[O0]\.?|NUMBER|BATCH(?:\s+CODE)?|CODE|MF[GD]|MANUF(?:ACTURE)?D?|DATE|EXP(?:IRY|IRES|IRATION)?|USE\s+BY|BEST\s+BEFORE)[\s.:#)\]\[|/]*)*([A-Z0-9][A-Z0-9\-/]{2,19})/,
+    /\b(?:L[O0D][T1I](?:E|T[O0])?|BATCH)\b[\s.:#)\]\[|/]*(?:(?:N[O0]\.?|NUMBER|BATCH(?:\s+CODE)?|CODE|MF[GD]|MANUF(?:ACTURE)?D?|DATE|EXP(?:IRY|IRES|IRATION)?|USE\s+BY|BEST\s+BEFORE)[\s.:#)\]\[|/]*)*([A-Z0-9][A-Z0-9\-/]{2,19})/,
   );
   if (
     lotMatch &&
