@@ -1121,7 +1121,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
 
 // Product detail surface reached from search (/app/product/[handle]). Pulls the
 // canonical product + supplier offers from the same API the search uses, then
-// lays out the comparison, specs, substitutes, and reorder rail.
+// lays out the comparison, substitutes, and reorder rail.
 
 export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listName, listSummary }) {
   // A product may be a family of size/spec variants. `variants` holds them in
@@ -1356,27 +1356,6 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
     !hasPackChoice && packSize !== "—" && ["Pack", packSize],
     product.category && ["Category", product.category],
   ].filter(Boolean).filter(([label]) => label !== variantChipLabel).slice(0, 5);
-
-  // Data-driven spec rows from the matcher's structured attributes (each labeled
-  // by its registry axis: "Shade A2", "Gauge 25 ga"). Falls back to the single
-  // variant-label row for products matched before the attribute store shipped.
-  const modeledSpecs =
-    Array.isArray(attrs.modeled_attributes) && attrs.modeled_attributes.length
-      ? attrs.modeled_attributes.map((attr) => [attr.axis_label || "Variant", attr.label])
-      : attrs.size
-        ? [[variantGroupLabel || "Size", titleCase(attrs.size)]]
-        : [];
-
-  const specs = [
-    ["Category", product.category],
-    ["Unit of measure", orderUnit],
-    ["Pack size", packSize !== "—" ? packSize : null],
-    ...modeledSpecs,
-    ["Type", titleCase(attrs.family)],
-    ["Brand", brand],
-    ["Suppliers", String(supplierCount)],
-    ["Match basis", best?.match_status ? titleCase(best.match_status) : null],
-  ].filter(([, value]) => Boolean(value));
 
   return (
     <div className="pdp">
@@ -1692,46 +1671,30 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
             </section>
           )}
 
-          <div className="pdp-bottom-grid">
-            <section className="crl-card pdp-subs">
-              <div className="pdp-card-head">
-                <h2>Comparable products / substitutes</h2>
-                <a className="pdp-link" href="/app/catalog" onClick={(event) => { event.preventDefault(); onNavigate("/app/catalog"); }}>View all</a>
-              </div>
-              {subs.length === 0 && <p className="pdp-empty">No substitutes found in this category.</p>}
-              {subs.map((sub) => {
-                const subImage = sub.image_url || sub.best_offer?.image_url || "";
-                const subPrice = sub.best_offer ? money.format(sub.best_offer.price_cents / 100) : "Price pending";
-                return (
-                  <div className="pdp-sub" key={sub.id}>
-                    <span className="pdp-sub-thumb">
-                      {subImage ? <img src={subImage} alt={sub.name} loading="lazy" /> : <Icon name="icon-package" className="nav-icon" />}
-                    </span>
-                    <div className="pdp-sub-body">
-                      <strong>{sub.name}</strong>
-                      <small>{sub.best_offer?.supplier_name || sub.best_offer?.brand || "Supplier pending"}</small>
-                    </div>
-                    <span className="pdp-sub-price">{subPrice}</span>
-                    <button className="pdp-sub-link" type="button" onClick={() => onNavigate(`/app/product/${sub.handle}`)}>View alternative</button>
+          <section className="crl-card pdp-subs">
+            <div className="pdp-card-head">
+              <h2>Comparable products / substitutes</h2>
+              <a className="pdp-link" href="/app/catalog" onClick={(event) => { event.preventDefault(); onNavigate("/app/catalog"); }}>View all</a>
+            </div>
+            {subs.length === 0 && <p className="pdp-empty">No substitutes found in this category.</p>}
+            {subs.map((sub) => {
+              const subImage = sub.image_url || sub.best_offer?.image_url || "";
+              const subPrice = sub.best_offer ? money.format(sub.best_offer.price_cents / 100) : "Price pending";
+              return (
+                <div className="pdp-sub" key={sub.id}>
+                  <span className="pdp-sub-thumb">
+                    {subImage ? <img src={subImage} alt={sub.name} loading="lazy" /> : <Icon name="icon-package" className="nav-icon" />}
+                  </span>
+                  <div className="pdp-sub-body">
+                    <strong>{sub.name}</strong>
+                    <small>{sub.best_offer?.supplier_name || sub.best_offer?.brand || "Supplier pending"}</small>
                   </div>
-                );
-              })}
-            </section>
-
-            <section className="crl-card pdp-specs">
-              <div className="pdp-card-head">
-                <h2>Product details &amp; specifications</h2>
-              </div>
-              <div className="pdp-specs-grid">
-                {specs.map(([label, value]) => (
-                  <div className="pdp-spec" key={label}>
-                    <span>{label}</span>
-                    <strong>{value}</strong>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
+                  <span className="pdp-sub-price">{subPrice}</span>
+                  <button className="pdp-sub-link" type="button" onClick={() => onNavigate(`/app/product/${sub.handle}`)}>View alternative</button>
+                </div>
+              );
+            })}
+          </section>
         </div>
 
         <aside className="pdp-rail">
