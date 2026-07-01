@@ -208,7 +208,8 @@ export const shopifyAdapter: SupplierProductAdapter = {
   matches: (candidate: ProductPageCandidate) =>
     /(^|\.)amerdental\.com/i.test(candidate.url) ||
     /(^|\.)carolinadental\.com/i.test(candidate.url) ||
-    /american dental accessories|carolina dental supply/i.test(candidate.distributor),
+    /(^|\.)(thedentaldistributors|ddisupply)\.com/i.test(candidate.url) ||
+    /american dental accessories|carolina dental supply|ddi supply|dental distributors/i.test(candidate.distributor),
   extractProduct: (candidate, html): ExtractedProductRow => extractProducts(candidate, html)[0],
   extractProducts,
 }
