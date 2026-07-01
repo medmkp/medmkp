@@ -234,14 +234,18 @@ async function queryCategoryProducts(
              OR category ~* $5 OR family_name ~* $5)
     ),
     priced AS (
-      SELECT cat.grp, m.supplier_product_id, cp.price_cents, cp.unit_price_cents
+      SELECT cat.grp, m.supplier_product_id, sp.supplier_id, cp.price_cents, cp.unit_price_cents
       FROM medmkp_canonical_product_match m
       JOIN medmkp_supplier_current_price cp ON cp.supplier_product_id = m.supplier_product_id
+      JOIN medmkp_supplier_product sp ON sp.id = m.supplier_product_id
       JOIN cat ON cat.id = m.canonical_product_id
       WHERE m.match_status NOT IN ('unmatched', 'substitute') AND m.deleted_at IS NULL
     ),
     agg AS (
-      SELECT grp, COUNT(*)::int AS offer_count FROM priced GROUP BY grp
+      -- Count distinct suppliers, not raw offers: a family's offers span its
+      -- variants (and one supplier may carry several packs), so COUNT(*) inflated
+      -- the "N suppliers" badge for multi-variant products.
+      SELECT grp, COUNT(DISTINCT supplier_id)::int AS offer_count FROM priced GROUP BY grp
     ),
     best AS (
       SELECT DISTINCT ON (grp) grp, supplier_product_id, price_cents, unit_price_cents
