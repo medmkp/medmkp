@@ -235,6 +235,21 @@ function sameCode(a, b) {
   return da.length >= 6 && da === norm(b);
 }
 
+// Whether a digit run is a *fragment* of the code we already scanned. The
+// human-readable line printed under a barcode is that code spelled out, and when
+// OCR reads a long code whose delimiters don't survive — an HIBC primary like
+// "*+D5207089953427*" comes back as a bare "953427" once the "*+…L*" framing is
+// dropped — the leftover digits are a substring of the scanned code, never a batch
+// number. `sameCode` only catches the whole line; this catches a piece of it. Gated
+// on a known scanned code, and a real lot is essentially never a 6+ digit substring
+// of the item's own barcode; the rare miss just leaves the lot blank, which we
+// already prefer to a wrong one (a bad lot on a recall pull-list is worse than none).
+function isCodeFragment(v, barcode) {
+  const code = String(barcode || "").replace(/\D/g, "");
+  const digits = String(v || "").replace(/\D/g, "");
+  return digits.length >= 6 && code.length > digits.length && code.includes(digits);
+}
+
 // Find a batch/lot token in OCR text when there's no readable "LOT" marker.
 // Conservative on purpose — a wrong lot on a recall pull-list is worse than a
 // blank one — so it walks the whitespace tokens in reading order and takes the
@@ -262,6 +277,7 @@ function findBatchToken(flat, barcode) {
     const run = tok.match(/(?:^|[^0-9A-Z])(\d{6,14})(?:$|[^0-9A-Z])/);
     if (run && !isDateLikeDigits(run[1]) && !/\d-\d/.test(tok)) {
       if (barcode && sameCode(run[1], barcode)) continue; // the scanned code's printed line
+      if (isCodeFragment(run[1], barcode)) continue;      // an OCR fragment of that code (HIBC)
       if (isGtin(run[1])) continue;                       // any UPC/EAN print, not a lot
       return run[1];
     }
