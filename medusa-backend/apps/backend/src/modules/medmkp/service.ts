@@ -10,6 +10,7 @@ import EvidenceMatchCandidate from "./models/evidence-match-candidate"
 import InvoiceLineItem from "./models/invoice-line-item"
 import Invoice from "./models/invoice"
 import PracticeSubscription from "./models/practice-subscription"
+import ProcessedWebhookEvent from "./models/processed-webhook-event"
 import ProcurementRequest from "./models/procurement-request"
 import Quote from "./models/quote"
 import ReorderList from "./models/reorder-list"
@@ -31,6 +32,7 @@ class MedMKPModuleService extends MedusaService({
   EvidenceExtraction,
   EvidenceMatchCandidate,
   PracticeSubscription,
+  ProcessedWebhookEvent,
   Invoice,
   InvoiceLineItem,
   Supplier,
