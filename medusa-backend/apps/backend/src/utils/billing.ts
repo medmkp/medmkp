@@ -52,6 +52,10 @@ export type SubscriptionRow = {
   stripe_customer_id?: string | null
   stripe_subscription_id?: string | null
   renews_at?: string | null
+  // As-of time of our latest known truth; written by both reconcile and the
+  // webhook handler, and read by the webhook's ordering guard. A dateTime column,
+  // so it comes back as a Date (or an ISO string over the wire).
+  last_reconciled_at?: string | Date | null
 }
 
 export type ReconcileResult = {
