@@ -640,13 +640,15 @@ export function AboutPage({ onNavigate, authed = false }) {
 }
 
 
-export function AuthShell({ subtitle, children, onNavigate }) {
+export function AuthShell({ title, subtitle, children, onNavigate }) {
   return (
     <main className="auth-page">
       <div className="auth-card">
         <a className="auth-brand" href="/" onClick={(event) => { event.preventDefault(); onNavigate("/"); }} aria-label="TraceDDS home">
           <BrandMark />
         </a>
+        {title && <h1>{title}</h1>}
+        {subtitle && <p className="auth-sub">{subtitle}</p>}
         {children}
       </div>
     </main>
