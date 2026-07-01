@@ -884,7 +884,7 @@ export function ReorderHistoryDetail({ id, onBack, archivedLists = [], handoffs 
           })}
         </div>
       )}
-      <p className="history-detail-note">This saved list is read-only. Reopen it to keep editing as your current list, or duplicate it to start a fresh copy{linkedHandoff ? ", or revisit the supplier handoff" : ""}.</p>
+      <p className="history-detail-note">This saved list is read-only. {isReal ? "Reopen it to keep editing as your current list, or duplicate it" : "Duplicate it"} to start a fresh copy{linkedHandoff ? ", or revisit the supplier handoff" : ""}.</p>
       <div className="history-detail-actions">
         {isReal && (
           <button className="primary-action compact" type="button" onClick={() => onReopen?.(list)}><Icon name="icon-edit" className="button-icon" />Reopen as current list</button>
