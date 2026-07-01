@@ -632,17 +632,10 @@ export function CatalogSupplierView({ supplierId, onNavigate }) {
                       ) : (
                         <span className="cat-pcard-name">{product.name}</span>
                       )}
-                      <span className="cat-pcard-path">{product.category || "Uncategorized"}</span>
                       <div className="cat-pcard-foot">
                         <CatBestPrice best={best} showBadge={false} />
                         <span className="cat-pcard-suppliers">{best?.sku || "—"}</span>
                       </div>
-                      {open && (
-                        <button type="button" className="cat-pt-view" onClick={open}>
-                          View product
-                          <Icon name="icon-link" className="button-icon" />
-                        </button>
-                      )}
                     </div>
                   </article>
                 );
@@ -976,17 +969,10 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                       </button>
                       <div className="cat-pcard-body">
                         <button type="button" className="cat-pcard-name" onClick={open}>{product.name}</button>
-                        <span className="cat-pcard-path">
-                          {category.name} <Icon name="icon-chevron-right" className="cat-pt-pathsep" /> {product.category}
-                        </span>
                         <div className="cat-pcard-foot">
                           <CatBestPrice best={best} showBadge={product.id === cheapest?.id && !sub} />
                           <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
                         </div>
-                        <button type="button" className="cat-pt-view" onClick={open}>
-                          View product
-                          <Icon name="icon-link" className="button-icon" />
-                        </button>
                       </div>
                       {product.variant_count > 1 && (
                         <span className="cat-pcard-options">{product.variant_count} options</span>
