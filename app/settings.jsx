@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "./icons";
-import { COUNTRY_OPTIONS, CURRENCY_OPTIONS, ITEMS_PER_PAGE_OPTIONS, SETTINGS_TABS, SETTINGS_TAB_STUBS, TIMEZONE_OPTIONS, UOM_OPTIONS, US_STATES, formFromMe, meFromForm } from "./lib";
+import { COUNTRY_OPTIONS, CURRENCY_OPTIONS, ITEMS_PER_PAGE_OPTIONS, PRACTICE_PLAN_NAME, SETTINGS_TABS, SETTINGS_TAB_STUBS, TIMEZONE_OPTIONS, UOM_OPTIONS, US_STATES, billingMonthlyLabel, billingRenewalLabel, billingStatusDisplay, formFromMe, meFromForm } from "./lib";
 import { BuyingPreferencesCard, MatchSupplier } from "./ui";
 
 export function SettingsView({ me, onMeUpdate, defaultBuyingPrefs, onSaveDefaults, supplierOptions = [], onToast }) {
@@ -35,6 +35,8 @@ export function SettingsView({ me, onMeUpdate, defaultBuyingPrefs, onSaveDefault
         />
       ) : tab === "suppliers" ? (
         <SupplierLoginsSettings onToast={onToast} />
+      ) : tab === "billing" ? (
+        <BillingSettings me={me} onToast={onToast} />
       ) : (
         <SettingsComingSoon tab={tab} />
       )}
@@ -52,6 +54,80 @@ export function SettingsComingSoon({ tab }) {
       <p>{stub.body}</p>
       <span className="settings-stub-badge">Coming soon</span>
     </div>
+  );
+}
+
+// Plan & billing tab. Shows the practice's real plan + subscription status from
+// `me.subscription` and routes to Stripe: paid practices open the Customer
+// Portal ("Manage billing"), free practices start Checkout ("Upgrade to
+// Practice"). When the backend doesn't report a subscription yet, the account
+// reads as Free — the same graceful-degrade the billing banner uses.
+export function BillingSettings({ me, onToast }) {
+  const [busy, setBusy] = useState(false);
+  const sub = me?.subscription || null;
+  const isPaid = Boolean(sub);
+  const status = billingStatusDisplay(sub?.status);
+  const renews = billingRenewalLabel(sub?.renews_at);
+  const price = billingMonthlyLabel(sub?.monthly_fee_cents);
+
+  // Ask the backend for a Stripe URL, then hand off. On failure we surface a
+  // toast rather than a dead click; nothing is mutated client-side.
+  async function redirectTo(endpoint, label) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const response = await fetch(endpoint, { method: "POST" });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.url) {
+        window.location.href = data.url;
+        return; // leaving the page — keep the button in its busy state
+      }
+      onToast?.(data?.error || `Couldn’t open ${label}. Please try again.`);
+    } catch {
+      onToast?.(`Couldn’t open ${label}. Please try again.`);
+    }
+    setBusy(false);
+  }
+
+  const manageBilling = () => redirectTo("/api/billing/portal", "billing");
+  const upgrade = () => redirectTo("/api/billing/checkout", "checkout");
+
+  return (
+    <section className="set-section">
+      <div className="set-section-info">
+        <h3>Plan &amp; billing</h3>
+        <p>Manage your TraceDDS subscription, update your payment method, and download invoices.</p>
+      </div>
+      <div className="set-section-body">
+        <div className="bill-card">
+          <div className="bill-plan">
+            <div className="bill-plan-head">
+              <span className="bill-plan-name">{isPaid ? PRACTICE_PLAN_NAME : "Free"}</span>
+              {status && <span className={`bill-badge bill-badge-${status.tone}`}>{status.label}</span>}
+            </div>
+            <p className="bill-plan-meta">
+              {isPaid
+                ? (renews ? `${price} · Renews ${renews}` : price)
+                : "Invoice matching and live per-unit savings are Practice features."}
+            </p>
+          </div>
+          {isPaid ? (
+            <button className="primary-action compact" type="button" onClick={manageBilling} disabled={busy}>
+              <Icon name="icon-credit-card" className="button-icon" />{busy ? "Opening…" : "Manage billing"}
+            </button>
+          ) : (
+            <button className="primary-action compact" type="button" onClick={upgrade} disabled={busy}>
+              <Icon name="icon-bolt" className="button-icon" />{busy ? "Redirecting…" : "Upgrade to Practice"}
+            </button>
+          )}
+        </div>
+        <p className="settings-hint bill-hint">
+          {isPaid
+            ? "Manage billing opens the secure Stripe portal, where you can update your card, view past invoices, or cancel."
+            : "Upgrade unlocks invoice matching, live per-unit savings, and automated cart building — $149/mo per location, billed by Stripe."}
+        </p>
+      </div>
+    </section>
   );
 }
 

@@ -1921,11 +1921,59 @@ export const SETTINGS_TABS = [
 
 export const SETTINGS_TAB_STUBS = {
   users: { icon: "icon-users", title: "Team & users", body: "Invite teammates, assign buyer or approver roles, and manage who can place orders for your practice." },
-  billing: { icon: "icon-credit-card", title: "Billing & payment", body: "Manage payment methods, billing contacts, and download invoices for your TraceDDS subscription." },
   notifications: { icon: "icon-bell", title: "Notifications", body: "Choose which emails and alerts you receive. Order-related email toggles live under Profile → Preferences for now." },
   integrations: { icon: "icon-plug", title: "Integrations", body: "Connect your practice-management system and accounting tools to sync orders and invoices automatically." },
   security: { icon: "icon-shield-check", title: "Security", body: "Two-factor authentication, active sessions, and audit history. Password changes live under Profile → Change password." },
 };
+
+
+// Subscription presentation for the Settings → Billing tab. The paid tier is
+// "Practice" ($149/mo per location); the marketing plan name is the same for
+// every paid `medmkp_practice_subscription`, so we key display off status.
+export const PRACTICE_PLAN_NAME = "Practice";
+export const PRACTICE_MONTHLY_FEE_CENTS = 14900;
+
+const BILLING_STATUS_LABELS = {
+  active: "Active",
+  trialing: "Trial",
+  past_due: "Past due",
+  unpaid: "Past due",
+  paused: "Paused",
+  canceled: "Canceled",
+  incomplete: "Incomplete",
+  incomplete_expired: "Expired",
+};
+
+// One-word status badge + a token tone (green = good, gold = needs attention,
+// red = lapsed) for the plan card.
+export function billingStatusDisplay(status) {
+  if (!status) return null;
+  const label = BILLING_STATUS_LABELS[status] || "Active";
+  const tone =
+    status === "active" || status === "trialing"
+      ? "green"
+      : status === "past_due" || status === "unpaid" || status === "incomplete"
+        ? "gold"
+        : "red";
+  return { label, tone };
+}
+
+// "$149/mo" from cents; falls back to the standard Practice fee.
+export function billingMonthlyLabel(cents) {
+  const value = Number.isFinite(cents) && cents > 0 ? cents : PRACTICE_MONTHLY_FEE_CENTS;
+  const dollars = value / 100;
+  const formatted = dollars % 1 === 0 ? String(dollars) : dollars.toFixed(2);
+  return `$${formatted}/mo`;
+}
+
+// Renewal date like "Aug 1, 2026" from an ISO string or timestamp; null if unset
+// or unparseable, so callers just omit the renewal line.
+export function billingRenewalLabel(renewsAt) {
+  if (!renewsAt) return null;
+  const date = new Date(renewsAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 
 
 export const DEFAULT_PREFERENCES = {
