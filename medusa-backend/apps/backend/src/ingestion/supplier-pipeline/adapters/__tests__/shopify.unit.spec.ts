@@ -46,6 +46,41 @@ describe("Shopify adapter matching", () => {
     expect(adapterForCandidate(candidate()).id).toBe("shopify")
   })
 
+  it("matches Davis Dental Supply product URLs and distributor name (Shopify, CF-fronted)", () => {
+    expect(
+      shopifyAdapter.matches(
+        candidate({
+          distributor: "Davis Dental Supply",
+          url: "https://davisdentalsupply.com/products/some-item",
+        })
+      )
+    ).toBe(true)
+    expect(
+      shopifyAdapter.matches(
+        candidate({
+          distributor: "Davis Dental Supply",
+          url: "https://www.davisdentalsupply.com/products/some-item",
+        })
+      )
+    ).toBe(true)
+    expect(
+      shopifyAdapter.matches(
+        candidate({ distributor: "Davis Dental Supply", url: "https://supplier.test/x" })
+      )
+    ).toBe(true)
+  })
+
+  it("routes Davis Dental Supply candidates to the Shopify adapter so the full /products.json catalog path runs", () => {
+    expect(
+      adapterForCandidate(
+        candidate({
+          distributor: "Davis Dental Supply",
+          url: "https://davisdentalsupply.com/products/some-item",
+        })
+      ).id
+    ).toBe("shopify")
+  })
+
   it("still matches the existing Shopify-sourced suppliers", () => {
     expect(
       shopifyAdapter.matches(
