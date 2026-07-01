@@ -61,6 +61,7 @@
     "react-router-dom": "6.30.3",
     "react-i18next": "13.5.0",
     "@medusajs/ui": "4.1.15",
+    "stripe": "19.1.0",
     "zod": "4.2.0"
   },
   "devDependencies": {

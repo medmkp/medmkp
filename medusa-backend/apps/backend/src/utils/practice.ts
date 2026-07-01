@@ -2,6 +2,7 @@ import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/frame
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
+import { getStripe, reconcilePracticeFromStripe, stripeConfigured } from "./billing"
 
 // The customer<->practice link join table. We read it directly rather than via
 // query.graph traversal: the practice model is registered on the service under
@@ -67,20 +68,38 @@ export async function entitlement(
 // not entitled. Only enforces when BILLING_ENFORCE is set (dark launch) — with the
 // flag off it always allows, so authed-but-unentitled practices are unaffected. A
 // transient subscription-read error fails closed (deny) and is logged.
+//
+// Read-through self-heal: only in the deny path (local row says not-entitled) and
+// only when Stripe is configured, do one bounded live Stripe read to reconcile
+// before returning 402. This rescues a paying practice whose local row is stale
+// because a webhook was missed/delayed/out-of-order — without any cron or cache.
 export async function assertEntitled(
   req: AuthenticatedMedusaRequest,
   res: MedusaResponse
 ): Promise<boolean> {
   if (process.env.BILLING_ENFORCE !== "true") return true
 
+  let practiceId: string | null = null
   let entitled = false
   try {
-    const practiceId = await resolvePracticeId(req)
+    practiceId = await resolvePracticeId(req)
     entitled = practiceId ? await entitlement(req, practiceId) : false
   } catch (err) {
     console.error("[billing] entitlement check failed; denying", err)
     res.status(402).json({ error: "Subscription required." })
     return false
+  }
+
+  // Deny-path read-through: a one-shot live Stripe read to self-heal a stale lock.
+  if (!entitled && practiceId && stripeConfigured()) {
+    try {
+      const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
+      const result = await reconcilePracticeFromStripe(medmkp, practiceId, getStripe())
+      entitled = result.entitled
+    } catch (err) {
+      // A Stripe hiccup must not upgrade a deny into an allow — stay denied.
+      console.error("[billing] deny-path reconcile failed; staying denied", err)
+    }
   }
 
   if (!entitled) {
