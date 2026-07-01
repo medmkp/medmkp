@@ -46,6 +46,33 @@ describe("Shopify adapter matching", () => {
     expect(adapterForCandidate(candidate()).id).toBe("shopify")
   })
 
+  it("matches JMU Dental product URLs and distributor name", () => {
+    expect(
+      shopifyAdapter.matches(
+        candidate({
+          distributor: "JMU Dental",
+          url: "https://www.jmudental.com/products/eighteeth-surfyone-sonic-activator",
+        })
+      )
+    ).toBe(true)
+    expect(
+      shopifyAdapter.matches(
+        candidate({ distributor: "JMU Dental", url: "https://supplier.test/x" })
+      )
+    ).toBe(true)
+  })
+
+  it("routes JMU Dental candidates to the Shopify adapter so the full /products.json catalog path runs", () => {
+    expect(
+      adapterForCandidate(
+        candidate({
+          distributor: "JMU Dental",
+          url: "https://www.jmudental.com/products/eighteeth-surfyone-sonic-activator",
+        })
+      ).id
+    ).toBe("shopify")
+  })
+
   it("still matches the existing Shopify-sourced suppliers", () => {
     expect(
       shopifyAdapter.matches(
