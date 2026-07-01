@@ -46,6 +46,36 @@ describe("Shopify adapter matching", () => {
     expect(adapterForCandidate(candidate()).id).toBe("shopify")
   })
 
+  it("matches Bite Supply product URLs (bitesupply.com)", () => {
+    expect(
+      shopifyAdapter.matches(
+        candidate({
+          distributor: "Bite Supply",
+          url: "https://bitesupply.com/products/accutron-scavenging-circuit-components-large-y-connector",
+        })
+      )
+    ).toBe(true)
+  })
+
+  it("matches Bite Supply by distributor name regardless of URL", () => {
+    expect(
+      shopifyAdapter.matches(
+        candidate({ distributor: "Bite Supply", url: "https://supplier.test/x" })
+      )
+    ).toBe(true)
+  })
+
+  it("routes Bite Supply candidates to the Shopify adapter so the full /products.json catalog path runs", () => {
+    expect(
+      adapterForCandidate(
+        candidate({
+          distributor: "Bite Supply",
+          url: "https://bitesupply.com/products/accutron-scavenging-circuit-components-large-y-connector",
+        })
+      ).id
+    ).toBe("shopify")
+  })
+
   it("still matches the existing Shopify-sourced suppliers", () => {
     expect(
       shopifyAdapter.matches(
