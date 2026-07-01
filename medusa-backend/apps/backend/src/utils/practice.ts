@@ -1,5 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { MEDMKP_MODULE } from "../modules/medmkp"
+import type MedMKPModuleService from "../modules/medmkp/service"
 
 // The customer<->practice link join table. We read it directly rather than via
 // query.graph traversal: the practice model is registered on the service under
@@ -42,4 +44,48 @@ export async function requirePractice(
     return null
   }
   return practiceId
+}
+
+// Whether a practice is entitled to the paid ("Practice" tier) features. Reads
+// the practice's subscription via the medmkp module service (no new pg.Pool) and
+// treats only an "active" status as entitled — no row / trialing / past_due /
+// canceled all mean not entitled. Errors propagate so the caller can fail closed.
+export async function entitlement(
+  req: AuthenticatedMedusaRequest,
+  practiceId: string
+): Promise<boolean> {
+  const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
+  const [sub] = await medmkp.listPracticeSubscriptions(
+    { practice_id: practiceId },
+    { order: { created_at: "DESC" }, take: 1 }
+  )
+  return sub?.status === "active"
+}
+
+// Gate for the paid invoice-match / savings routes. Returns true to let the
+// request proceed; writes a 402 and returns false when the caller's practice is
+// not entitled. Only enforces when BILLING_ENFORCE is set (dark launch) — with the
+// flag off it always allows, so authed-but-unentitled practices are unaffected. A
+// transient subscription-read error fails closed (deny) and is logged.
+export async function assertEntitled(
+  req: AuthenticatedMedusaRequest,
+  res: MedusaResponse
+): Promise<boolean> {
+  if (process.env.BILLING_ENFORCE !== "true") return true
+
+  let entitled = false
+  try {
+    const practiceId = await resolvePracticeId(req)
+    entitled = practiceId ? await entitlement(req, practiceId) : false
+  } catch (err) {
+    console.error("[billing] entitlement check failed; denying", err)
+    res.status(402).json({ error: "Subscription required." })
+    return false
+  }
+
+  if (!entitled) {
+    res.status(402).json({ error: "Subscription required." })
+    return false
+  }
+  return true
 }

@@ -57,5 +57,17 @@ export default defineMiddlewares({
       matcher: "/medmkp/evidence*",
       middlewares: [authenticate("customer", ["bearer", "session"])],
     },
+    // Invoice matching + savings are the upcoming paid "Practice" tier. Gate them
+    // behind customer auth so they're practice-scoped and can be entitlement-checked
+    // (see assertEntitled in utils/practice.ts). The future billing webhook must NOT
+    // be authed — do not widen this to /medmkp/billing*.
+    {
+      matcher: "/medmkp/invoices*",
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
+    {
+      matcher: "/medmkp/savings",
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
   ],
 })

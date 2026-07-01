@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { MEDUSA_URL } from "../../../lib/medusaAuth";
+import { bearer } from "../../../lib/medusaProxy";
 import { createRequest, listRequests } from "../../../lib/requestStore";
 import { parseInvoicePdf } from "../../../lib/invoiceParser";
 import { parseInvoiceCsv } from "../../../lib/csvParser";
@@ -14,11 +15,16 @@ export async function GET() {
 // fall back to returning the parsed line items unmatched.
 const MATCH_TIMEOUT_MS = 150000;
 
-async function matchLineItems(vendor, lineItems) {
+async function matchLineItems(vendor, lineItems, token) {
   try {
+    // Forward the caller's Medusa session as a Bearer credential — /medmkp/invoices/match
+    // is now customer-authed, so an unauthenticated call correctly 401s (and we fall
+    // back to unmatched line items below).
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(`${MEDUSA_URL}/medmkp/invoices/match`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         vendor_name: vendor,
         line_items: lineItems.map((item) => ({
@@ -155,7 +161,8 @@ export async function POST(request) {
   }
 
   const vendor = String(formData.get("supplierName") || "") || parsed.vendor;
-  const matched = await matchLineItems(vendor, parsed.lineItems);
+  const token = await bearer();
+  const matched = await matchLineItems(vendor, parsed.lineItems, token);
 
   const lineItems = matched
     ? matched.line_items.map((match) => toUiLineItem(match, vendor, source))

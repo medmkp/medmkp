@@ -1,6 +1,7 @@
-import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Pool } from "pg"
 import { matchInvoice, type LineItemInput } from "../../../../../matching/line-items"
+import { assertEntitled } from "../../../../../utils/practice"
 
 let pool: Pool | null = null
 
@@ -19,7 +20,11 @@ function getPool(): Pool {
   return pool
 }
 
-export async function POST(req: MedusaRequest, res: MedusaResponse) {
+export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
+  // Paid-tier gate (dark by default): auth is enforced by middleware; this only
+  // 402s an unentitled practice when BILLING_ENFORCE is on.
+  if (!(await assertEntitled(req, res))) return
+
   const body = (req.body ?? {}) as {
     vendor_name?: string
     line_items?: LineItemInput[]
