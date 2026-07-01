@@ -1809,7 +1809,7 @@ export function CurrentReorderList({
 // (paid "what you pay now" minus the cheapest pack-normalized option) across the
 // live list and archived lists. No fabricated numbers: when nothing has a paid
 // price yet, the page is an honest order-history-import onboarding instead.
-export function SavingsView({ rows = [], archivedLists = [], onNavigate, onImportInvoice }) {
+export function SavingsView({ rows = [], archivedLists = [], onNavigate, onImportInvoice, lapsed = false, onManageBilling }) {
   const sumSavings = (list) => list.reduce((total, row) => total + (row.lineSavings || 0), 0);
   const listSavings = sumSavings(rows);
   const archiveSavings = archivedLists.reduce((total, entry) => total + sumSavings(entry.rows || []), 0);
@@ -1828,7 +1828,20 @@ export function SavingsView({ rows = [], archivedLists = [], onNavigate, onImpor
         <p>How much your reorder list beats what you pay today — compared per unit, including the cheapest in-stock supplier. We never get between you and your vendor.</p>
       </header>
 
-      {!hasData ? (
+      {lapsed ? (
+        // Lapsed (canceled) practice: live savings is a paid feature, so it's
+        // paused behind the resubscribe paywall. Saved history stays viewable
+        // elsewhere — nothing here is deleted.
+        <div className="sv-empty sv-locked">
+          <span className="sv-empty-icon sv-locked-icon"><Icon name="icon-lock" /></span>
+          <h2>Savings is a Practice feature</h2>
+          <p>Your subscription has ended, so live per-unit comparisons are paused. Your saved lists, invoices and reports stay available to view. Resubscribe to compare every line again.</p>
+          <button type="button" className="sv-import" onClick={onManageBilling}>
+            <Icon name="icon-credit-card" className="button-icon" />
+            Resubscribe to unlock
+          </button>
+        </div>
+      ) : !hasData ? (
         <div className="sv-empty">
           <span className="sv-empty-icon"><Icon name="icon-dollar-circle" /></span>
           <h2>See what you&rsquo;re overpaying</h2>

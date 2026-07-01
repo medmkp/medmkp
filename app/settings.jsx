@@ -5,8 +5,10 @@ import { Icon } from "./icons";
 import { COUNTRY_OPTIONS, CURRENCY_OPTIONS, ITEMS_PER_PAGE_OPTIONS, PRACTICE_PLAN_NAME, SETTINGS_TABS, SETTINGS_TAB_STUBS, TIMEZONE_OPTIONS, UOM_OPTIONS, US_STATES, billingMonthlyLabel, billingRenewalLabel, billingStatusDisplay, formFromMe, meFromForm } from "./lib";
 import { BuyingPreferencesCard, MatchSupplier } from "./ui";
 
-export function SettingsView({ me, onMeUpdate, defaultBuyingPrefs, onSaveDefaults, supplierOptions = [], onToast }) {
-  const [tab, setTab] = useState("profile");
+export function SettingsView({ me, initialTab = "profile", onMeUpdate, defaultBuyingPrefs, onSaveDefaults, supplierOptions = [], onToast }) {
+  const [tab, setTab] = useState(initialTab);
+  // Follow the caller's requested tab (e.g. the billing banner deep-links here).
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
   return (
     <div className="settings-page">
       <header className="settings-head">

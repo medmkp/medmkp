@@ -18,7 +18,8 @@ export async function GET() {
     if (response.ok) {
       // `subscription` is forwarded when the backend emits it (billing) so the
       // app can read entitlement. It's optional — older backends omit it, in
-      // which case the billing tab treats the account as Free (no plan/status).
+      // which case the app treats the account as fully active (no banner, no
+      // read-only gate) and the billing tab treats it as Free (no plan/status).
       const { customer, practice, subscription } = await response.json();
       return NextResponse.json({ authenticated: true, customer, practice, subscription });
     }

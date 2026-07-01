@@ -4,6 +4,38 @@ import { Fragment, useState, useEffect, useRef, useCallback } from "react";
 import { BrandLogoMark, Icon } from "./icons";
 import { CRL_STATUS, LIST_STATUS, STRATEGY_LABELS, SUBSTITUTION_LABELS, availabilityBadge, brandLogoSrc, candidateSub, formatNeedBy, isQrUrl, listingNameDiffers, mrEa, mrMoney, mrPriceLabel, stripPackFromName, supplierInitials, supplierLogoSrc } from "./lib";
 
+// App-shell subscription-lifecycle banner. `past_due` is a soft warning (card
+// retrying) that keeps full access; `canceled`/lapsed tells the buyer their saved
+// history is now read-only and points them at resubscribing. Any other status —
+// including a fully active account or a backend that doesn't report status yet —
+// renders nothing.
+export function BillingBanner({ status, onManageBilling }) {
+  if (status !== "past_due" && status !== "canceled") return null;
+  const pastDue = status === "past_due";
+  return (
+    <div className={`billing-banner ${pastDue ? "is-past-due" : "is-lapsed"}`} role="status">
+      <span className="billing-banner-icon" aria-hidden="true">
+        <Icon name={pastDue ? "icon-credit-card" : "icon-lock"} />
+      </span>
+      <div className="billing-banner-body">
+        <strong>
+          {pastDue
+            ? "Your card needs updating to keep Practice"
+            : "Your Practice subscription has ended"}
+        </strong>
+        <p>
+          {pastDue
+            ? "We couldn’t charge your card. Update it now to keep your Practice features — nothing is locked yet."
+            : "Your saved lists, invoices and reports stay here, read-only. Resubscribe to unlock live savings and new orders."}
+        </p>
+      </div>
+      <button type="button" className="billing-banner-cta" onClick={onManageBilling}>
+        {pastDue ? "Manage billing" : "Resubscribe"}
+      </button>
+    </div>
+  );
+}
+
 export function useBarcodeScanner({ active, onScan }) {
   const videoRef = useRef(null);
   const [cameraStatus, setCameraStatus] = useState("requesting");

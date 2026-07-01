@@ -8758,11 +8758,46 @@ th {
 .sv-link { padding: 0; border: 0; background: none; color: var(--blue); font: inherit; font-weight: 600; cursor: pointer; }
 .sv-footer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 4px; }
 .sv-footer-note { color: var(--muted); font-size: 12px; }
+/* Lapsed (canceled) savings paywall: a calm muted lock, not the blue onboarding tint. */
+.sv-locked-icon { background: #eef1f6; }
+.sv-locked-icon .nav-icon { color: var(--muted); }
 
 @media (max-width: 720px) {
   .sv-metrics { grid-template-columns: 1fr; }
   .sv-row { grid-template-columns: minmax(0, 1fr) auto; }
   .sv-row-prices { grid-column: 1 / -1; grid-row: 2; text-align: left; display: flex; gap: 10px; }
+}
+
+/* Subscription-lifecycle banner in the app shell. Calm single accent: past_due
+   warns in gold (card retrying, access retained), lapsed reads as a neutral
+   read-only notice. Tokens only — one border, no stacked shadows. */
+.billing-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 20px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.billing-banner-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; }
+.billing-banner-icon .nav-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.billing-banner-body strong { display: block; font-size: 14px; font-weight: 600; color: var(--ink); }
+.billing-banner-body p { margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.billing-banner-cta { padding: 9px 16px; border: 0; border-radius: 10px; font-size: 13.5px; font-weight: 600; color: #fff; cursor: pointer; white-space: nowrap; }
+.billing-banner-cta:hover { filter: brightness(0.96); }
+.billing-banner.is-past-due { border-color: #f0dcb4; background: #fdf7ec; }
+.billing-banner.is-past-due .billing-banner-icon { background: #fcf0db; color: var(--gold); }
+.billing-banner.is-past-due .billing-banner-cta { background: var(--gold); }
+.billing-banner.is-lapsed { border-color: var(--line); background: var(--surface-2); }
+.billing-banner.is-lapsed .billing-banner-icon { background: #eef1f6; color: var(--muted); }
+.billing-banner.is-lapsed .billing-banner-cta { background: var(--blue); }
+
+@media (max-width: 720px) {
+  .billing-banner { grid-template-columns: auto minmax(0, 1fr); }
+  .billing-banner-cta { grid-column: 1 / -1; justify-self: start; }
 }
 
 /* Page wrapper */
