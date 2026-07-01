@@ -127,19 +127,26 @@ export function CatBestPrice({ best, showBadge, hidePack = false }) {
 }
 
 
+// Some suppliers (e.g. net32) ingest a "not-found"/"no-image" placeholder as the
+// image URL. Treat those as no image so a category tile never fronts a broken-
+// looking graphic as its representative photo.
+function isRealProductImage(url) {
+  return Boolean(url) && !/not-?found|no-?image/i.test(url);
+}
+
 // Fetch a representative product photo for a category (optionally narrowed to a
 // subcategory `pattern`). The listing is ranked cheapest-first and the cheapest
 // SKUs often have no photo, so scan the first page for the first offer that
-// carries one. Returns "" when nothing usable is found (callers fall back to the
-// category icon). Real product imagery reads far better than the abstract icon
-// tiles it replaces.
+// carries a real one. Returns "" when nothing usable is found (callers fall back
+// to the category icon). Real product imagery reads far better than the abstract
+// icon tiles it replaces.
 async function fetchRepresentativeImage(source, pattern, signal) {
   if (!source) return "";
   const params = new URLSearchParams({ category: source, limit: "12" });
   if (pattern) params.set("pattern", pattern);
   try {
     const res = await fetch(`/api/canonical-products?${params}`, { signal }).then((r) => r.json());
-    return (res.canonical_products || []).find((p) => p.image_url)?.image_url || "";
+    return (res.canonical_products || []).find((p) => isRealProductImage(p.image_url))?.image_url || "";
   } catch {
     return "";
   }
@@ -835,7 +842,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
       const merged = [];
       responses.forEach(({ canonical_products }) => {
         (canonical_products || []).forEach((product) => {
-          if (product.image_url && !seen.has(product.id)) {
+          if (isRealProductImage(product.image_url) && !seen.has(product.id)) {
             seen.add(product.id);
             merged.push(product);
           }
