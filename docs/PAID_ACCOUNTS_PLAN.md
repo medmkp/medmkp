@@ -20,7 +20,7 @@ Three tiers, two already shipped:
 |---|---|---|---|
 | 0 — Public scan | $0, no account | "Am I overpaying on this?" — unlimited single-item price check | Shipped (#486) |
 | 1 — Free account | $0, sign up | Save + sync reorder list, scan history, catalog browse | Shipped (the funnel) |
-| 2 — Practice (paid) | ~$99 / location / mo | Invoice matching + savings (the system-of-record) | This plan |
+| 2 — Practice (paid) | ~$149 / location / mo | Invoice matching + savings (the system-of-record) | This plan |
 
 **Never meter scans.** The scan is the free lure, costs ~$0 (indexed read), and metering
 a chore is anti-aligned. Competitor reality: Alara + the distributors give scanning and
@@ -43,7 +43,7 @@ A founder test card proves the plumbing, not WTP.
 |---|---|---|
 | Approach | Thin paid path (not full funnel, not concierge) | Prove WTP before building the machine |
 | Gate scope | Gate ONLY invoice-match + savings/reports | Both built + cost real money; don't sell vapor (price alerts / audit export / multi-location are "coming soon") |
-| Pricing | Per-location, ~$99/mo entry (page says $199 — revisit) | Under Open Dental's anchor; per-location is the house axis |
+| Pricing | Per-location, $149/mo (marketing page says $199 — update to $149) | Within Open Dental's $129–179 band, ~Sowingo's floor; per-location is the house axis |
 | Entitlement | Stripe is source of truth + LIGHTER reconcile | Webhook-only = silent lockout; daily cron/cache = premature |
 | Reconcile | Portal-return read + manual admin re-sync + read-through on locked-but-paying; NO cron/cache | Kills the silent lockout without machinery you don't need at 0 customers |
 | Error posture | Fail CLOSED + alert on entitlement DB-read error | Deterministic enforcement; a hidden "everyone un-gated" bug is the silent failure to avoid |
@@ -126,7 +126,7 @@ needs an OpenAI API key (not configured).
 The eng-loop CANNOT do this — it requires account setup:
 - Create the Stripe account; generate test + live secret keys.
 - Set the webhook signing secret.
-- Create the `$99` per-location price; note the price id.
+- Create the `$149` per-location price; note the price id.
 - Use Stripe TEST mode to validate the money path in prod before flipping `BILLING_ENFORCE`.
 
 Until this is done, only #519 and #520 (which need no Stripe) are workable.
