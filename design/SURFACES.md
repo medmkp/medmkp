@@ -22,7 +22,8 @@ code file, and issue references. Don't reintroduce numbered frame names.
    frame is kept for layout/visual reference only.
 4. **Compare before calling it done** — screenshot your view beside the frame and close
    the deltas (layout, spacing, type weight/size, color, radius, density, hierarchy).
-   The long-form protocol for autonomous runs is in `scripts/eng-loop/loop-prompt.md`.
+   The long-form protocol for autonomous runs lives in the standalone eng-loop repo:
+   [`demuizon/eng-loop` → `projects/tracedds/loop-prompt.md`](https://github.com/demuizon/eng-loop/blob/main/projects/tracedds/loop-prompt.md).
 
 ## Conventions
 

@@ -24,7 +24,8 @@ time you build or modify a screen, drawer, panel, or component:
    screenshot beside it and close the deltas (layout, spacing, type
    weight/size, color, radius, density, hierarchy).
 
-The detailed "Visual fidelity" protocol in `scripts/eng-loop/loop-prompt.md` is
+The detailed "Visual fidelity" protocol in the standalone eng-loop repo
+([`demuizon/eng-loop` → `projects/tracedds/loop-prompt.md`](https://github.com/demuizon/eng-loop/blob/main/projects/tracedds/loop-prompt.md)) is
 the long form of this rule for autonomous runs; the three steps above are the
 broadly-applicable version for every session.
 
