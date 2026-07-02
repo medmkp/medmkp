@@ -46,8 +46,10 @@ async function main() {
     try {
       await client.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY medmkp_category_catalog_listing`)
     } catch (error: any) {
-      // 55000 = object_not_in_prerequisite_state ("not populated").
-      if (error?.code !== "55000") throw error
+      // Postgres raises 0A000 (feature_not_supported, "CONCURRENTLY cannot be
+      // used when the materialized view is not populated"); 55000
+      // (object_not_in_prerequisite_state) kept for safety across versions.
+      if (error?.code !== "0A000" && error?.code !== "55000") throw error
       await client.query(`REFRESH MATERIALIZED VIEW medmkp_category_catalog_listing`)
     }
     await client.query(`SET work_mem = '64MB'`)

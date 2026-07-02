@@ -1102,7 +1102,7 @@ describe("identity matching (golden pairs from production data)", () => {
     // two distinct models.
     expect(result.clusters).toHaveLength(4)
     expect(clusterModels).toEqual([["GS1126B"], ["GS1126W"], ["WS3130B"], ["WS3130W"]])
-    expect(result.reviewPairs).toHaveLength(0)
+    expect(result.pairStats.reviewCount).toBe(0)
   })
 
   it("does not merge distinct PDT Amazing Gracey instrument models", () => {
