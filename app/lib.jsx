@@ -1054,6 +1054,10 @@ export function traceErrorMessage(err, fallback) {
 
 export const traceApi = {
   listLocations: () => traceFetch("/api/locations"),
+  // The practice-wide Needs Attention worklist: { stats, snapshot, issues, recent }
+  // derived from real inventory evidence (expired / expiring / unidentified /
+  // missing lot+expiry).
+  getNeedsAttention: () => traceFetch("/api/needs-attention"),
   createLocation: (body) => traceFetch("/api/locations", jsonBody("POST", body)),
   getLocation: (id) => traceFetch(`/api/locations/${encodeURIComponent(id)}`),
   updateLocation: (id, body) => traceFetch(`/api/locations/${encodeURIComponent(id)}`, jsonBody("PATCH", body)),

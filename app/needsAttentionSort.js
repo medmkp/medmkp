@@ -1,4 +1,6 @@
-const COMPLIANCE_ISSUE_TYPES = new Set(["expiring", "missing_proof", "recall"]);
+// Compliance / traceability issues are worked before reorder issues, so within a
+// severity tier they sort first (the wireframe's "compliance outranks reorder").
+const COMPLIANCE_ISSUE_TYPES = new Set(["expired", "expiring", "missing_trace", "unidentified"]);
 
 function issueTypeRank(issue) {
   return COMPLIANCE_ISSUE_TYPES.has(issue.type) ? 0 : 1;

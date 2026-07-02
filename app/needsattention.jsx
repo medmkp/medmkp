@@ -3,28 +3,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { MobileHeader } from "./ui";
-import { initials } from "./lib";
+import { daysUntil, formatTraceDate, traceApi, traceErrorMessage } from "./lib";
 import s from "./needsattention.module.css";
 import { sortNeedsAttentionIssues } from "./needsAttentionSort";
 
-// Dashboard — the operational worklist. Every open item or issue that
-// needs a human to look at it: low/out-of-stock, expiring lots, and missing
-// compliance proof, pulled together from the same signals that drive the
-// Locations, Reorder, and Evidence surfaces. This is the "what do I do next"
-// home an office manager lands on.
+// Needs Attention — the operational worklist. Every lot that needs a human to
+// look at it, rolled across the whole practice from the same evidence the
+// Locations board counts: expired lots, lots expiring soon, unidentified scans
+// (no catalog match yet), and lots missing the lot/expiry an audit requires.
+// This is the "what do I do next" home an office manager lands on.
 //
-// FE-first slice: everything renders off the MOCK below, so it maps 1:1 onto
-// the future per-practice issues feed (each row is one open issue). Filters,
-// search, and pagination are real client-side behavior; the row actions
-// (Review / Add proof / Reorder) are honest stubs that toast rather than fake a
-// write, because the issue-resolution workflow isn't wired up yet.
+// Wired to real data via GET /api/needs-attention. The reorder / recall / SDS-proof
+// queues in the wireframe aren't backed yet (no live on-hand census, recall feed,
+// or per-item SDS link), so they're intentionally absent rather than faked. Each
+// row action deep-links to the lot's location, where the pull / identify / edit
+// controls already live; the kebab menu and advanced filters are honest stubs.
 
-// Issue type: the badge + the small thumbnail glyph/tint that anchors each row.
+// Issue type (backend `reason`): the badge + the small thumbnail glyph/tint that
+// anchors each row.
 const ISSUE_TYPES = {
-  low_stock: { label: "Low stock", tint: "amber", icon: "icon-package", action: "Review" },
-  expiring: { label: "Expiring soon", tint: "blue", icon: "icon-clock", action: "Review" },
-  missing_proof: { label: "Missing proof", tint: "violet", icon: "icon-file-text", action: "Add proof" },
-  needs_reorder: { label: "Needs reorder", tint: "green", icon: "icon-cart", action: "Reorder" },
+  expired: { label: "Expired", tint: "red", icon: "icon-alert-triangle", action: "Review lot" },
+  expiring: { label: "Expiring soon", tint: "amber", icon: "icon-clock", action: "Review lot" },
+  unidentified: { label: "Unidentified", tint: "violet", icon: "icon-x-circle", action: "Identify" },
+  missing_trace: { label: "Missing lot/expiry", tint: "blue", icon: "icon-file-text", action: "Add details" },
 };
 
 // Severity drives the pill color and the default sort weight.
@@ -37,62 +38,58 @@ const SEVERITY = {
 
 const PER_PAGE = 10;
 
-export const NEEDS_ATTENTION_MOCK = {
-  // Headline KPI cards. Independent counts across the whole practice — the table
-  // below is the prioritized worklist, not the same population.
-  stats: [
-    { key: "urgent", icon: "icon-alert-triangle", tint: "red", label: "Urgent issues", value: 14, sub: "Require immediate action" },
-    { key: "expiring", icon: "icon-clock", tint: "amber", label: "Expiring soon", value: 23, sub: "Within 30 days" },
-    { key: "missing", icon: "icon-file-text", tint: "violet", label: "Missing proof", value: 17, sub: "Proof not uploaded" },
-    { key: "reorder", icon: "icon-cart", tint: "green", label: "Needs reorder", value: 24, sub: "Low or out of stock" },
-  ],
-  // Right-rail "Today's snapshot" — the time-boxed cut of the same data.
-  snapshot: [
-    { icon: "icon-alert-triangle", tone: "red", value: 3, label: "Items due today" },
-    { icon: "icon-clock", tone: "amber", value: 7, label: "Overdue items" },
-    { icon: "icon-clock", tone: "amber", value: 15, label: "Expiring this week" },
-    { icon: "icon-file-text", tone: "violet", value: 9, label: "Missing proof" },
-  ],
-  recent: [
-    { id: "a1", item: "Prophy Angles, Soft", action: "Marked expiring soon", who: "Lisa Patel", ago: "2h ago", tone: "amber" },
-    { id: "a2", item: "Sterilization Pouch, 3.5\" x 9\"", action: "Proof requested", who: "James Lee", ago: "3h ago", tone: "violet" },
-    { id: "a3", item: "Composite Tips, Black", action: "Reorder initiated", who: "Henry Schein", ago: "5h ago", tone: "green" },
-    { id: "a4", item: "Nitrile Exam Gloves, Medium", action: "Low stock alert", who: "System", ago: "6h ago", tone: "red" },
-    { id: "a5", item: "Surface Disinfectant Wipes", action: "Stock updated", who: "Emily Carter", ago: "1d ago", tone: "blue" },
-  ],
-  // The worklist. One row = one open issue. `dueTone: "bad"` flags a due-today /
-  // overdue date so it reads red.
-  issues: [
-    { id: "i1", item: "Nitrile Exam Gloves, Medium", sku: "GLV-NTR-M", type: "low_stock", location: "Main Office", severity: "urgent", detail: "Only 2 boxes on hand", detailSub: "Min level: 5 boxes", due: "Due today", dueTone: "bad", lastSeen: "May 16, 2024", assignee: "Henry Schein" },
-    { id: "i2", item: "Prophy Angles, Soft", sku: "PRO-ANG-SFT", type: "expiring", location: "Hygiene Room", severity: "high", detail: "Expires in 18 days", detailSub: "Lot: LOT-2404-12", due: "May 28, 2024", lastSeen: "May 10, 2024", assignee: "Lisa Patel" },
-    { id: "i3", item: "Sterilization Pouch, 3.5\" x 9\"", sku: "PCH-3.5X9", type: "missing_proof", location: "Sterilization Room", severity: "high", detail: "Proof required", detailSub: "Last proof: Apr 30", due: "Due today", dueTone: "bad", lastSeen: "May 12, 2024", assignee: "James Lee" },
-    { id: "i4", item: "Face Masks, Earloop", sku: "MSK-EL-BLU", type: "low_stock", location: "Main Office", severity: "medium", detail: "4 boxes on hand", detailSub: "Min level: 8 boxes", due: "May 20, 2024", lastSeen: "May 16, 2024", assignee: "Lisa Patel" },
-    { id: "i5", item: "Composite Tips, Black", sku: "CMP-TIP-BLK", type: "needs_reorder", location: "Operatory 1", severity: "medium", detail: "Out of stock", detailSub: "Min level: 1 bag", due: "May 21, 2024", lastSeen: "May 13, 2024", assignee: "Henry Schein" },
-    { id: "i6", item: "Surface Disinfectant Wipes", sku: "WIP-SRF-160", type: "low_stock", location: "Operatory 2", severity: "medium", detail: "1 canister on hand", detailSub: "Min level: 3 canisters", due: "May 23, 2024", lastSeen: "May 14, 2024", assignee: "Emily Carter" },
-    { id: "i7", item: "Septocaine 4% w/ Epinephrine", sku: "SEP-4-1100K", type: "expiring", location: "Main Office", severity: "low", detail: "Expires in 29 days", detailSub: "Lot: LOT-2403-08", due: "Jun 6, 2024", lastSeen: "May 15, 2024", assignee: "James Lee" },
-    { id: "i8", item: "Patient Bibs, Blue", sku: "BIB-BLU-500", type: "low_stock", location: "Hygiene Room", severity: "low", detail: "12 on hand", detailSub: "Min level: 20", due: "May 27, 2024", lastSeen: "May 16, 2024", assignee: "Emily Carter" },
-    { id: "i9", item: "Tray Covers, Plastic", sku: "TRC-PL-500", type: "needs_reorder", location: "Operatory 1", severity: "low", detail: "Only 1 pack on hand", detailSub: "Min level: 3 packs", due: "Jun 1, 2024", lastSeen: "May 13, 2024", assignee: "Henry Schein" },
-    { id: "i10", item: "Round Burs #2", sku: "BUR-ROUND-2", type: "low_stock", location: "Operatory 2", severity: "low", detail: "6 on hand", detailSub: "Min level: 10", due: "May 30, 2024", lastSeen: "May 14, 2024", assignee: "Lisa Patel" },
-    { id: "i11", item: "Fluoride Varnish, Bubblegum", sku: "FLV-BG-200", type: "expiring", location: "Hygiene Room", severity: "medium", detail: "Expires in 24 days", detailSub: "Lot: LOT-2404-19", due: "Jun 3, 2024", lastSeen: "May 15, 2024", assignee: "Lisa Patel" },
-    { id: "i12", item: "Saliva Ejectors, Clear", sku: "SAL-EJ-CLR", type: "needs_reorder", location: "Operatory 2", severity: "medium", detail: "Out of stock", detailSub: "Min level: 2 bags", due: "May 24, 2024", lastSeen: "May 13, 2024", assignee: "Henry Schein" },
-    { id: "i13", item: "Autoclave Spore Test", sku: "SPR-TST-WK", type: "missing_proof", location: "Sterilization Room", severity: "high", detail: "Weekly log not uploaded", detailSub: "Last proof: May 6", due: "Due today", dueTone: "bad", lastSeen: "May 14, 2024", assignee: "James Lee" },
-    { id: "i14", item: "Cotton Rolls, #2 Medium", sku: "COT-RL-2M", type: "low_stock", location: "Storage", severity: "low", detail: "3 bags on hand", detailSub: "Min level: 6 bags", due: "Jun 2, 2024", lastSeen: "May 12, 2024", assignee: "Emily Carter" },
-  ],
-};
-
-// Nav badge = number of open issues on the worklist.
-export const NEEDS_ATTENTION_BADGE = NEEDS_ATTENTION_MOCK.issues.length;
-
-// Deterministic avatar color per person so names stay visually stable.
-const AVATAR_TINTS = ["blue", "green", "violet", "amber", "teal"];
-function avatarTint(name) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return AVATAR_TINTS[h % AVATAR_TINTS.length];
+// "2h ago" / "3d ago" stamp for the recent-activity feed (last_counted_at is the
+// only real event stream we have — the scanner touching a lot).
+function relativeTime(iso) {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
 }
 
-function Avatar({ name }) {
-  return <span className={`${s.avatar} ${s[`avatar_${avatarTint(name)}`]}`}>{initials(name)}</span>;
+// Severity is derived, not stored: an expired lot is urgent, an unidentified scan
+// blocks trust (high), an expiring lot escalates as its date nears, and a missing
+// lot/expiry is a low-priority paperwork gap.
+function severityFor(reason, days) {
+  if (reason === "expired") return "urgent";
+  if (reason === "unidentified") return "high";
+  if (reason === "expiring") return days != null && days <= 7 ? "high" : "medium";
+  return "low"; // missing_trace
+}
+
+// The "Details / Reason" cell text, built from the raw lot fields.
+function buildDetail(iss, days) {
+  switch (iss.reason) {
+    case "expired": {
+      const n = days != null ? Math.abs(days) : null;
+      return {
+        detail: n != null ? `Expired ${n} day${n === 1 ? "" : "s"} ago` : "Past expiration",
+        detailSub: iss.lot_number ? `Lot ${iss.lot_number}` : "No lot recorded",
+      };
+    }
+    case "expiring":
+      return {
+        detail: days != null ? `Expires in ${days} day${days === 1 ? "" : "s"}` : "Expiring soon",
+        detailSub: iss.lot_number ? `Lot ${iss.lot_number}` : "Lot not recorded",
+      };
+    case "unidentified":
+      return {
+        detail: "Scanned, not yet identified",
+        detailSub: iss.barcode ? `Code ${iss.barcode}` : "No barcode captured",
+      };
+    case "missing_trace": {
+      const missing = [!iss.lot_number && "lot", !iss.expiration_date && "expiry"].filter(Boolean).join(" & ");
+      return { detail: `Missing ${missing || "trace"}`, detailSub: "Required for audit trail" };
+    }
+    default:
+      return { detail: "", detailSub: "" };
+  }
 }
 
 function StatCard({ icon, label, value, sub, tint }) {
@@ -164,67 +161,154 @@ function Select({ label, value, onChange, options }) {
   );
 }
 
-export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNavigate }) {
+// Build the four KPI cards from the real counts.
+function statCards(stats) {
+  return [
+    { key: "expired", icon: "icon-alert-triangle", tint: "red", label: "Expired", value: stats.expired, sub: "Past expiration" },
+    { key: "expiring", icon: "icon-clock", tint: "amber", label: "Expiring soon", value: stats.expiring, sub: "Within 30 days" },
+    { key: "unidentified", icon: "icon-x-circle", tint: "violet", label: "Unidentified", value: stats.unidentified, sub: "Scanned, not matched" },
+    { key: "missing_trace", icon: "icon-file-text", tint: "blue", label: "Missing lot/expiry", value: stats.missing_trace, sub: "Trace incomplete" },
+  ];
+}
+
+function snapshotRows(snapshot) {
+  return [
+    { icon: "icon-alert-triangle", tone: "red", value: snapshot.expired, label: "Expired — act now" },
+    { icon: "icon-clock", tone: "amber", value: snapshot.expiringThisWeek, label: "Expiring this week" },
+    { icon: "icon-x-circle", tone: "violet", value: snapshot.unidentified, label: "Unidentified items" },
+    { icon: "icon-file-text", tone: "blue", value: snapshot.missing_trace, label: "Missing lot/expiry" },
+  ];
+}
+
+export function NeedsAttentionView({ onToast, onNavigate }) {
   // On a phone the app topbar is hidden, so this view (reached from the scanner
   // hub) carries its own back affordance — matching the Locations/Reorder
   // mobile headers — otherwise it dead-ends.
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => { setIsMobile(window.matchMedia("(max-width: 767px)").matches); }, []);
+
+  const [summary, setSummary] = useState(null);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    traceApi.getNeedsAttention()
+      .then((res) => {
+        if (!alive) return;
+        setSummary(res);
+        setLoadError("");
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setLoadError(traceErrorMessage(err, "Couldn't load your worklist."));
+      });
+    return () => { alive = false; };
+  }, []);
+
   const [query, setQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [page, setPage] = useState(1);
 
+  // Transform the raw issue feed into display rows (derive severity + detail text
+  // once, so filtering, sorting and rendering all read the same shape).
+  const rows = useMemo(() => (summary?.issues || []).map((iss) => {
+    const days = daysUntil(iss.expiration_date);
+    const { detail, detailSub } = buildDetail(iss, days);
+    const dated = iss.reason === "expired" || iss.reason === "expiring";
+    return {
+      id: iss.id,
+      item: iss.name,
+      sku: iss.sku,
+      type: iss.reason,
+      location: iss.location_name,
+      locationId: iss.location_id,
+      severity: severityFor(iss.reason, days),
+      detail,
+      detailSub,
+      due: dated && iss.expiration_date ? formatTraceDate(iss.expiration_date) : "—",
+      dueTone: iss.reason === "expired" ? "bad" : "",
+      lastSeen: iss.last_counted_at ? formatTraceDate(iss.last_counted_at) : "—",
+    };
+  }), [summary]);
+
   const locations = useMemo(
-    () => Array.from(new Set(data.issues.map((i) => i.location))).sort(),
-    [data.issues],
-  );
-  const assignees = useMemo(
-    () => Array.from(new Set(data.issues.map((i) => i.assignee))).sort(),
-    [data.issues],
+    () => Array.from(new Set(rows.map((i) => i.location))).sort(),
+    [rows],
   );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const matches = data.issues.filter((i) => {
+    const matches = rows.filter((i) => {
       if (severityFilter !== "all" && i.severity !== severityFilter) return false;
       if (locationFilter !== "all" && i.location !== locationFilter) return false;
       if (typeFilter !== "all" && i.type !== typeFilter) return false;
-      if (assigneeFilter !== "all" && i.assignee !== assigneeFilter) return false;
       if (q && !(`${i.item} ${i.sku} ${i.detail} ${i.detailSub} ${i.location}`.toLowerCase().includes(q))) return false;
       return true;
     });
     return sortNeedsAttentionIssues(matches, SEVERITY);
-  }, [data.issues, query, severityFilter, locationFilter, typeFilter, assigneeFilter]);
+  }, [rows, query, severityFilter, locationFilter, typeFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const current = Math.min(page, pageCount);
   const start = (current - 1) * PER_PAGE;
-  const rows = filtered.slice(start, start + PER_PAGE);
+  const pageRows = filtered.slice(start, start + PER_PAGE);
 
   // Any filter change drops us back to the first page.
   function resetFilter(setter) {
     return (value) => { setter(value); setPage(1); };
   }
 
-  // No issue-resolution backend in this FE-first slice — be honest, don't fake it.
+  // Honest stubs for the affordances with no backend yet.
   const soon = (what) => onToast?.(`${what} connects when issue workflows are wired up.`);
+  // Row action: take the user to the lot's location, where pull / identify / edit
+  // already live.
+  const openLocation = (row) => {
+    if (row.locationId) onNavigate?.(`/app/locations/${row.locationId}`);
+    else soon("This item");
+  };
 
-  return (
-    <div className={s.page}>
+  const header = (
+    <>
       {isMobile && <MobileHeader onBack={() => onNavigate?.("/app")} />}
       <header className={s.head}>
         <h1 className={s.title}>Needs Attention</h1>
         <p className={s.subtitle}>Items and issues that require your review and action to keep operations running smoothly.</p>
       </header>
+    </>
+  );
+
+  if (loadError) {
+    return (
+      <div className={s.page}>
+        {header}
+        <div className={s.tableCard}><p className={s.tableEmpty}>{loadError}</p></div>
+      </div>
+    );
+  }
+  if (!summary) {
+    return (
+      <div className={s.page}>
+        {header}
+        <div className={s.tableCard}><p className={s.tableEmpty}>Loading your worklist…</p></div>
+      </div>
+    );
+  }
+
+  const cards = statCards(summary.stats);
+  const snapshot = snapshotRows(summary.snapshot);
+  const recent = summary.recent || [];
+
+  return (
+    <div className={s.page}>
+      {header}
 
       <div className={s.main}>
         <div className={s.left}>
           {/* Headline KPI cards */}
           <section className={s.stats}>
-            {data.stats.map(({ key, ...stat }) => <StatCard key={key} {...stat} />)}
+            {cards.map(({ key, ...stat }) => <StatCard key={key} {...stat} />)}
           </section>
 
           <section className={s.tableCard}>
@@ -257,12 +341,6 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
                 onChange={resetFilter(setTypeFilter)}
                 options={[{ value: "all", label: "All types" }, ...Object.entries(ISSUE_TYPES).map(([v, m]) => ({ value: v, label: m.label }))]}
               />
-              <Select
-                label="Assignee"
-                value={assigneeFilter}
-                onChange={resetFilter(setAssigneeFilter)}
-                options={[{ value: "all", label: "All assignees" }, ...assignees.map((a) => ({ value: a, label: a }))]}
-              />
               <button type="button" className={s.filtersBtn} onClick={() => soon("Advanced filters")}>
                 <Icon name="icon-filter" />Filters
               </button>
@@ -278,14 +356,17 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
                     <th>Severity</th>
                     <th>Details / Reason</th>
                     <th>Due date / Last seen</th>
-                    <th>Assignee</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length === 0 ? (
-                    <tr><td colSpan={8} className={s.tableEmpty}>No issues match these filters.</td></tr>
-                  ) : rows.map((issue) => {
+                  {pageRows.length === 0 ? (
+                    <tr><td colSpan={7} className={s.tableEmpty}>
+                      {rows.length === 0
+                        ? "You're all caught up — nothing needs attention."
+                        : "No issues match these filters."}
+                    </td></tr>
+                  ) : pageRows.map((issue) => {
                     const type = ISSUE_TYPES[issue.type];
                     const sev = SEVERITY[issue.severity];
                     return (
@@ -295,7 +376,9 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
                             <span className={`${s.thumb} ${s[`tint_${type.tint}`]}`}><Icon name={type.icon} /></span>
                             <span className={s.itemText}>
                               <span className={s.itemName}>{issue.item}</span>
-                              <span className={s.itemSku}>SKU: {issue.sku}</span>
+                              {issue.sku
+                                ? <span className={s.itemSku}>SKU: {issue.sku}</span>
+                                : <span className={s.itemSku}>{issue.location}</span>}
                             </span>
                           </span>
                         </td>
@@ -315,14 +398,8 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
                           </span>
                         </td>
                         <td>
-                          <span className={s.assignee}>
-                            <Avatar name={issue.assignee} />
-                            <span className={s.assigneeName}>{issue.assignee}</span>
-                          </span>
-                        </td>
-                        <td>
                           <span className={s.actions}>
-                            <button type="button" className={s.btnOutlineSm} onClick={() => soon(type.action)}>{type.action}</button>
+                            <button type="button" className={s.btnOutlineSm} onClick={() => openLocation(issue)}>{type.action}</button>
                             <button type="button" className={s.kebab} aria-label="More actions" onClick={() => soon("More actions")}>
                               <Icon name="icon-more-vertical" />
                             </button>
@@ -339,7 +416,7 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
               <span className={s.pageInfo}>
                 {filtered.length === 0
                   ? "No issues"
-                  : `Showing ${start + 1} to ${start + rows.length} of ${filtered.length} issues`}
+                  : `Showing ${start + 1} to ${start + pageRows.length} of ${filtered.length} issues`}
               </span>
               <div className={s.pager}>
                 <button type="button" className={s.pageBtn} aria-label="Previous" disabled={current <= 1} onClick={() => setPage(current - 1)}>
@@ -368,7 +445,7 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
           <div className={s.railCard}>
             <h3 className={s.railTitle}><Icon name="icon-clock" />Today&rsquo;s snapshot</h3>
             <div className={s.snapList}>
-              {data.snapshot.map((row, i) => (
+              {snapshot.map((row, i) => (
                 <div className={s.snapRow} key={i}>
                   <span className={`${s.snapIcon} ${s[`tint_${row.tone}`]}`}><Icon name={row.icon} /></span>
                   <strong className={s.snapValue}>{row.value}</strong>
@@ -381,24 +458,24 @@ export function NeedsAttentionView({ data = NEEDS_ATTENTION_MOCK, onToast, onNav
           <div className={s.railCard}>
             <div className={s.railHeadRow}>
               <h3 className={s.railTitle}><Icon name="icon-bolt" />Recent activity</h3>
-              <button type="button" className={s.railLink} onClick={() => soon("Activity log")}>View all</button>
             </div>
-            <div className={s.actList}>
-              {data.recent.map((a) => (
-                <div className={s.actRow} key={a.id}>
-                  <span className={`${s.actDot} ${s[`dot_${a.tone}`]}`} />
-                  <div className={s.actBody}>
-                    <span className={s.actItem}>{a.item}</span>
-                    <span className={s.actAction}>{a.action}</span>
-                    <span className={s.actWho}>{a.who}</span>
+            {recent.length === 0 ? (
+              <p className={s.tableEmpty}>No recent captures yet.</p>
+            ) : (
+              <div className={s.actList}>
+                {recent.map((a) => (
+                  <div className={s.actRow} key={a.id}>
+                    <span className={`${s.actDot} ${s.dot_green}`} />
+                    <div className={s.actBody}>
+                      <span className={s.actItem}>{a.name}</span>
+                      <span className={s.actAction}>Captured</span>
+                      <span className={s.actWho}>{a.location_name}</span>
+                    </div>
+                    <span className={s.actAgo}>{relativeTime(a.last_counted_at)}</span>
                   </div>
-                  <span className={s.actAgo}>{a.ago}</span>
-                </div>
-              ))}
-            </div>
-            <button type="button" className={s.railFootLink} onClick={() => soon("Activity log")}>
-              View all activity <Icon name="icon-arrow-right" />
-            </button>
+                ))}
+              </div>
+            )}
           </div>
         </aside>
       </div>

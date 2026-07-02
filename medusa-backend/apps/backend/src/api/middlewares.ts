@@ -51,6 +51,12 @@ export default defineMiddlewares({
       matcher: "/medmkp/scans*",
       middlewares: [authenticate("customer", ["bearer", "session"])],
     },
+    // Practice-wide Needs Attention worklist — rolls the same practice-scoped
+    // inventory evidence into one feed, so it's gated like the locations subtree.
+    {
+      matcher: "/medmkp/needs-attention",
+      middlewares: [authenticate("customer", ["bearer", "session"])],
+    },
     // Evidence Library document metadata routes — practice-scoped (base path plus
     // /:id), gated across all methods like the locations subtree.
     {
