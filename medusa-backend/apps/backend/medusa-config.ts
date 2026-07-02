@@ -46,6 +46,14 @@ module.exports = defineConfig({
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
   },
+  admin: {
+    // Hosting the admin dashboard in the API process needs ~2GB RAM (Medusa's
+    // own requirement); on the 512MB Render instance that tips `medusa start`
+    // into a heap OOM. Disable it in prod via DISABLE_ADMIN=true. Only the /app
+    // dashboard UI is dropped — the /admin/* REST API is unaffected — and local
+    // dev (no env var) keeps the dashboard.
+    disable: process.env.DISABLE_ADMIN === "true",
+  },
   modules: [
     {
       resolve: "./src/modules/medmkp",
