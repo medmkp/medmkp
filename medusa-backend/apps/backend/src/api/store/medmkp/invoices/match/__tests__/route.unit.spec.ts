@@ -1,11 +1,8 @@
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { POST } from "../route"
 
-// Verifies the paid-tier gate is wired into the invoice-match POST: with
-// BILLING_ENFORCE off the request passes the gate and reaches body validation
-// (REGRESSION guard — matching must stay free for authed callers while dark);
-// with the flag on an unentitled practice gets a 402 before any matching runs.
-// Auth itself (anon → 401) is enforced by middleware and covered separately.
+// Invoice matching is a free authed feature: entitlement moved to cart-builds,
+// while auth itself remains enforced by the /medmkp/invoices* middleware.
 
 function makeService(sub?: { status: string }) {
   return { listPracticeSubscriptions: jest.fn(async () => (sub ? [sub] : [])) }
@@ -42,26 +39,31 @@ function makeRes() {
   return res
 }
 
-describe("POST /medmkp/invoices/match — paid-tier gate", () => {
+describe("POST /medmkp/invoices/match — free authed matching", () => {
   const prev = process.env.BILLING_ENFORCE
   afterEach(() => {
     if (prev === undefined) delete process.env.BILLING_ENFORCE
     else process.env.BILLING_ENFORCE = prev
   })
 
-  it("with BILLING_ENFORCE off, passes the gate and validates the body (free while dark)", async () => {
-    delete process.env.BILLING_ENFORCE
+  it("with BILLING_ENFORCE on, proceeds for an unentitled practice and validates the body", async () => {
+    process.env.BILLING_ENFORCE = "true"
+    const service = makeService()
     const res = makeRes()
     // Empty line_items → the handler's own 400, proving it got past the gate.
-    await POST(makeReq(makeService(), { body: { line_items: [] } }), res)
+    await POST(makeReq(service, { body: { line_items: [] } }), res)
     expect(res.statusCode).toBe(400)
     expect(res.body.error).toMatch(/line_items/)
+    expect(service.listPracticeSubscriptions).not.toHaveBeenCalled()
   })
 
-  it("with BILLING_ENFORCE on, 402s an unentitled practice before matching", async () => {
-    process.env.BILLING_ENFORCE = "true"
+  it("with BILLING_ENFORCE off, also proceeds to invoice-match validation", async () => {
+    delete process.env.BILLING_ENFORCE
+    const service = makeService()
     const res = makeRes()
-    await POST(makeReq(makeService(undefined), { body: { line_items: [] } }), res)
-    expect(res.statusCode).toBe(402)
+    await POST(makeReq(service, { body: { line_items: [] } }), res)
+    expect(res.statusCode).toBe(400)
+    expect(res.body.error).toMatch(/line_items/)
+    expect(service.listPracticeSubscriptions).not.toHaveBeenCalled()
   })
 })
