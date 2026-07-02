@@ -1296,14 +1296,25 @@
 }
 
 /* On phones the toolbar is just the action buttons (search + filters are
-   hidden), so let them fill the row and split it evenly (equal widths) instead
-   of clustering content-width on the right. Height goes auto/min so a label
-   that wraps to two lines isn't clipped by the fixed desktop height. */
+   hidden). There are more buttons than fit one phone-width row, so let the
+   group WRAP instead of overflowing off-screen: the view toggle takes its own
+   full-width row, then the actions fall into a two-up grid. Without the wrap
+   the nowrap row ran past the viewport, hiding Print QR codes / Office layout /
+   Start scan and forcing the whole page to scroll sideways. Height goes
+   auto/min so a label that wraps to two lines isn't clipped. */
 @media (max-width: 767px) {
-  .toolbarActions { margin-left: 0; }
+  .toolbarActions {
+    margin-left: 0;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .toolbarActions .viewToggle {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
   .toolbarActions .addBtn,
   .toolbarActions .scanBtn {
-    flex: 1 1 0;
+    flex: 1 1 calc(50% - 4px);
     min-width: 0;
     height: auto;
     min-height: 40px;
