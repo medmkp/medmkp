@@ -10114,19 +10114,19 @@ th {
 .cat-card-headtext { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cat-card-headtext strong { font-size: 15.5px; color: var(--ink); }
 .cat-card-headtext small { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
-.cat-tile { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; flex: 0 0 auto; }
+.cat-tile { display: grid; place-items: center; width: 69px; height: 69px; border-radius: 14px; flex: 0 0 auto; }
 .cat-tile.sm { width: 28px; height: 28px; border-radius: 8px; }
-.cat-tile.lg { width: 56px; height: 56px; border-radius: 15px; }
-/* Representative product photo variant: white card so the cut-out product photo
-   reads cleanly, replacing the abstract tinted icon tile. */
-.cat-tile.has-image { background: #fff; border: 1px solid var(--line); overflow: hidden; padding: 4px; }
+.cat-tile.lg { width: 84px; height: 84px; border-radius: 16px; }
+/* Representative product photo variant: borderless white tile so the cut-out
+   product photo reads cleanly, replacing the abstract tinted icon tile. */
+.cat-tile.has-image { background: #fff; overflow: hidden; padding: 2px; }
 .cat-tile.has-image img { width: 100%; height: 100%; object-fit: contain; }
 /* Monogram fallback when a category has no photo (or it fails to load): the
    tinted tile shows the category initials — never an icon. Color comes from the
    tint-* class. */
-.cat-tile.mono { font-weight: 600; font-size: 16px; letter-spacing: 0.02em; }
+.cat-tile.mono { font-weight: 600; font-size: 20px; letter-spacing: 0.02em; }
 .cat-tile.mono.sm { font-size: 11px; }
-.cat-tile.mono.lg { font-size: 20px; }
+.cat-tile.mono.lg { font-size: 26px; }
 .cat-card-count { margin: 0; font-size: 13px; font-weight: 600; color: var(--blue); }
 .cat-card-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .cat-chip { display: inline-flex; align-items: center; padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: #46536d; font-size: 12px; font-weight: 500; }
@@ -10156,9 +10156,12 @@ th {
 .cat-supplier-list, .cat-recent-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .cat-supplier-list li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 7px 0; }
 .cat-supplier-list li + li { border-top: 1px solid var(--line); }
-.cat-supplier-avatar { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); color: var(--muted); font-size: 10px; font-weight: 600; }
+.cat-supplier-avatar { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); color: var(--muted); font-size: 10px; font-weight: 600; flex: 0 0 auto; }
 .cat-supplier-avatar.has-img { background: #fff; border: 1px solid var(--line); overflow: hidden; }
 .cat-supplier-avatar img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+/* Larger variant for the browse-by-supplier page header. */
+.cat-supplier-avatar.lg { width: 64px; height: 64px; border-radius: 14px; font-size: 18px; }
+.cat-supplier-avatar.lg img { padding: 8px; }
 .cat-supplier-name { font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cat-supplier-list em { font-style: normal; font-size: 12px; color: var(--muted); }
 /* Clickable "Browse by supplier" row: spans the li grid, keeps the avatar/name layout. */

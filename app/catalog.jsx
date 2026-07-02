@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Icon } from "./icons";
-import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, canonPackUnit, cap, catMoney, compactSizeLabel, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierInitials, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
+import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, canonPackUnit, cap, catMoney, compactSizeLabel, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
 import { CatalogSupplierAvatar, QtyStepper } from "./ui";
 import { bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
 
@@ -567,12 +567,17 @@ export function CatalogSupplierView({ supplierId, onNavigate }) {
         <Icon name="icon-chevron-right" className="cat-crumb-sep" />
         <strong>{name}</strong>
       </nav>
-      <h1 className="cat-title">{name}</h1>
-      <p className="cat-lede">
-        {status === "ready"
-          ? `${total.toLocaleString()} product${total === 1 ? "" : "s"} from ${name}, ranked by best price.`
-          : `Loading ${name}'s catalog…`}
-      </p>
+      <div className="cat-cat-head">
+        <CatalogSupplierAvatar name={name} size="lg" />
+        <div>
+          <h1 className="cat-title">{name}</h1>
+          <p className="cat-lede">
+            {status === "ready"
+              ? `${total.toLocaleString()} product${total === 1 ? "" : "s"} from ${name}, ranked by best price.`
+              : `Loading ${name}'s catalog…`}
+          </p>
+        </div>
+      </div>
 
       {products.length > 0 && (
         <div className="cat-section-head cat-products-head">
@@ -721,16 +726,39 @@ export function CatalogCategoryView({ slug, onNavigate }) {
 
   // Pick a representative photo for a subcategory from the department gallery by
   // matching its curated name pattern; fall back to the department's first photo.
-  const subImage = (option) => {
-    try {
-      const re = new RegExp(option.match, "i");
-      const hit = gallery.find((p) => re.test(p.name));
-      if (hit) return hit.image_url;
-    } catch {
-      // malformed pattern — fall back below
-    }
-    return category?.image || "";
-  };
+  // Assign each subcategory its own photo from the department gallery — no two
+  // cards share one. First pass gives every subcategory the first unused photo
+  // whose product name matches its curated pattern; a second pass hands the
+  // still-empty ones the remaining unused photos in rank order. Only when the
+  // gallery runs dry does a card fall back to the category's curated image.
+  const subImages = useMemo(() => {
+    const used = new Set();
+    const map = {};
+    const subs = category?.subcategories || [];
+    subs.forEach((option) => {
+      try {
+        const re = new RegExp(option.match, "i");
+        const hit = gallery.find((p) => !used.has(p.id) && re.test(p.name));
+        if (hit) {
+          used.add(hit.id);
+          map[option.name] = hit.image_url;
+        }
+      } catch {
+        // malformed pattern — filled by the second pass
+      }
+    });
+    subs.forEach((option) => {
+      if (map[option.name]) return;
+      const hit = gallery.find((p) => !used.has(p.id));
+      if (hit) {
+        used.add(hit.id);
+        map[option.name] = hit.image_url;
+      } else {
+        map[option.name] = category?.image || "";
+      }
+    });
+    return map;
+  }, [gallery, category]);
 
   // Remember this category for the landing page's "Recently viewed" rail, and
   // load the rail's own recent list (excluding the current category).
@@ -925,7 +953,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                 key={option.name}
                 onClick={() => browseSub(option.name)}
               >
-                <CatTile image={subImage(option)} label={option.name} tint={category.tint} />
+                <CatTile image={subImages[option.name]} label={option.name} tint={category.tint} />
                 <span className="cat-card-headtext">
                   <strong>{option.name}</strong>
                   <small>{option.blurb}</small>
@@ -1071,7 +1099,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
               <ul className="cat-supplier-list">
                 {topSuppliers.slice(0, 5).map((supplier) => (
                   <li key={supplier.id}>
-                    <span className="cat-supplier-avatar">{supplierInitials(supplier.name)}</span>
+                    <CatalogSupplierAvatar name={supplier.name} />
                     <span className="cat-supplier-name">{supplier.name}</span>
                     <em>{(supplier.product_count || 0).toLocaleString()}</em>
                   </li>
