@@ -267,6 +267,43 @@ proven-adapter suppliers weekly by running `supplier:ingest:db --commit` per
 supplier with tuned concurrency flags. Henry Schein has a dedicated
 `henry_schein` DAG at 16:00 UTC that runs `henryschein:ingest --commit`,
 including public web-price enrichment.
+
+### Catalog read models (materialized views)
+
+The storefront catalog/browse routes read a set of `medmkp_*` materialized views
+(current price, per-category priced count, supplier/category listings) rather
+than the live base tables. Those matviews only change when explicitly refreshed.
+
+**Cadence:** the `match_products` DAG in the same file runs nightly at **23:00**
+on the NUC (after the day's crawls land) and, after matching, runs
+`npm run catalog:refresh-read-models` (`refresh_read_models` task) to rebuild
+every read model. That daily job is the single refresh point — there is no
+separate schedule. `catalog:refresh-read-models` must run from the NUC, off-peak
+versus ingestion; do **not** run heavy refreshes from the Render deploy path.
+
+**Never-populated failure mode:** every read model is created `WITH NO DATA`, so
+a matview added by a new migration returns *no rows and raises* until its first
+refresh — reads then silently fall back to the slow live query. The refresh
+script already bootstraps a first-populate (tries `REFRESH ... CONCURRENTLY`,
+falls back to a plain `REFRESH` on the never-populated error), but that only
+helps once the nightly DAG actually runs after the migration deploys. If the
+`match_products` DAG is paused, failing, or hasn't run since a matview migration,
+that view degrades quietly. This bit `medmkp_category_catalog_listing` after its
+2026-07-01 migration (issue #608).
+
+**Health signal:** `GET /medmkp/health` now reports a `matviews` block and flips
+top-level `ok` to `false` when any `medmkp_*` matview is unpopulated:
+
+```jsonc
+// healthy
+{ "ok": true,  "matviews": { "ok": true,  "unpopulated": [], "checked": 7 } }
+// deployed-but-never-refreshed
+{ "ok": false, "matviews": { "ok": false, "unpopulated": ["medmkp_category_catalog_listing"], "checked": 7 } }
+```
+
+The eng-loop health pipeline can alert on `matviews.ok === false`. To clear it,
+run the nightly refresh (or `npm run catalog:refresh-read-models` once from the
+NUC) so the matview populates.
 The DAGs need the `medmkp_backend_dir` Airflow Variable and an env file with the
 target `DATABASE_URL` (Render Postgres: `DB_SSL=true`) — set the
 `medmkp_env_file` Variable to `.env.production` on hosts that target the remote
