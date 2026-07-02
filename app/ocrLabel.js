@@ -376,6 +376,10 @@ export function parseLotExpiry(text, { barcode } = {}) {
   // "USE BEFORE 09/26" loses its expiry entirely. The EXP stem likewise matches the
   // bare verb forms "EXPIRE" / "EXPIRED" (imported cartons stamp "EXPIRE DATE …"),
   // not just EXPIRY / EXPIRES / EXPIRATION — the "E" / "ED" endings after "EXPIR".
+  // "VALID UNTIL" / "VALID TO" is the validity-window phrasing sterilization pouches
+  // and imported goods stamp for the same date; kept tight to UNTIL/TO so a "VALID
+  // FOR 24 MONTHS" (no date) can't match. normalizeExpiry still gates every capture,
+  // so a marker word not followed by a real date leaves the expiry blank.
   // The value window is wide enough for a fully-spelled month *with* a day and a
   // 4-digit year ("SEPTEMBER 15, 2027" / "15 SEPTEMBER 2027" are 18/17 chars);
   // normalizeExpiry still finds the date inside, so a longer capture just gives it
@@ -393,7 +397,7 @@ export function parseLotExpiry(text, { barcode } = {}) {
   // rather than grabbing the lot/Mfg date that sits right after the header. shortYear
   // lets this trusted, keyword-vouched path read a 2-digit-year MM/YY ("09/21") that
   // the bare fallback deliberately won't.
-  const expKw = flat.match(/\b(?:EXP(?:IR(?:Y|ES|ED|E|ATION))?|USE (?:BY|BEFORE)|BEST (?:BEFORE|BY)|BB)\b[\s:.]*(?:DATE\b[\s:.]*(?=\d{1,2}\s*[-/.]))?([0-9A-Z][0-9A-Z\-/., ]{4,18})/);
+  const expKw = flat.match(/\b(?:EXP(?:IR(?:Y|ES|ED|E|ATION))?|USE (?:BY|BEFORE)|BEST (?:BEFORE|BY)|VALID (?:UNTIL|TO)|BB)\b[\s:.]*(?:DATE\b[\s:.]*(?=\d{1,2}\s*[-/.]))?([0-9A-Z][0-9A-Z\-/., ]{4,18})/);
   if (expKw) expiry = normalizeExpiry(expKw[1], { shortYear: true });
   if (!expiry) {
     const aiExp = flat.match(/\(17\)\s*(\d{6})\b/);

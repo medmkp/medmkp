@@ -38,7 +38,11 @@ const FIXTURES = {
   // Real dual-PSM OCR (SPARSE) of a rendered sterilization-pouch label whose expiry
   // is stamped "EXPIRE DATE" (the bare verb, not EXPIRY/EXPIRES) with a compact
   // MM/YY date. Ground truth: LOT KX10998, expiry 09/26 → 2026-09-30.
-  "expireDateCompactExpiry": "SafeSeal Sterilization Pouch\n\nEXPIRE DATE 09/26\n\nLOT KX10998\n"
+  "expireDateCompactExpiry": "SafeSeal Sterilization Pouch\n\nEXPIRE DATE 09/26\n\nLOT KX10998\n",
+  // Real dual-PSM OCR (SPARSE) of a rendered sterilization-pouch label whose expiry
+  // is stamped "VALID UNTIL" (the validity-window phrasing) with a compact MM/YY
+  // date. Ground truth: LOT G44821, expiry 09/26 → 2026-09-30.
+  "validUntilCompactExpiry": "SteriPouch Self-Seal\n\nREORDER 1204\n\nVALID UNTIL 09/26\n\nLOT G44821\n"
 };
 
 test("reads a bare numeric lot when OCR drops the boxed LOT marker (HS gloves, 24015414)", () => {
@@ -181,6 +185,18 @@ test("expiry: reads the EXPIRE / EXPIRED verb forms of the marker (compact MM/YY
   // The already-supported forms are unaffected.
   assert.equal(parseLotExpiry("EXPIRY 09/26").expiry, "2026-09-30");
   assert.equal(parseLotExpiry("EXPIRES 09/26").expiry, "2026-09-30");
+});
+
+test("expiry: reads the VALID UNTIL / VALID TO validity-window marker (compact MM/YY)", () => {
+  // Sterilization pouches / imported goods stamp the shelf-life date as "VALID
+  // UNTIL"; the marker must read it, while staying tight enough that a "VALID FOR
+  // 24 MONTHS" (no date) doesn't produce a bogus expiry.
+  const r = parseLotExpiry(FIXTURES.validUntilCompactExpiry);
+  assert.equal(r.lot, "G44821");
+  assert.equal(r.expiry, "2026-09-30");
+  assert.equal(parseLotExpiry("VALID TO 09/26").expiry, "2026-09-30");
+  // A non-date validity phrase must not fabricate an expiry.
+  assert.equal(parseLotExpiry("VALID FOR 24 MONTHS").expiry, undefined);
 });
 
 test("expiry: keyword path is trusted, even when the date is in the past", () => {
