@@ -922,13 +922,14 @@ export function CatalogCategoryView({ slug, onNavigate }) {
           merged.push(product);
         });
       });
-      // Bias the gallery toward products that have an image — a grid of
-      // placeholder icons reads as broken — with price as the tiebreaker. The
-      // "Best price" stat and badge below derive from the true cheapest offer,
-      // so they stay correct regardless of this display order.
+      // Each source is server-ranked by popularity (supplier count, most first;
+      // only ≥2-supplier products are returned). Re-rank the cross-source merge
+      // the same way, with price as the tiebreaker. The "Best price" stat and
+      // badge below derive from the true cheapest offer, so they stay correct
+      // regardless of this display order.
       merged.sort((a, b) => {
-        const imgDelta = (a.image_url ? 0 : 1) - (b.image_url ? 0 : 1);
-        if (imgDelta !== 0) return imgDelta;
+        const popDelta = (b.offer_count || 0) - (a.offer_count || 0);
+        if (popDelta !== 0) return popDelta;
         return (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity);
       });
       setProducts(merged);
@@ -1005,12 +1006,14 @@ export function CatalogCategoryView({ slug, onNavigate }) {
               batch.push(product);
             });
           });
-          // Each source returns its next page cheapest-first; order the appended
-          // batch by best price so the growing list stays roughly price-ranked.
-          batch.sort(
-            (a, b) =>
-              (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity)
-          );
+          // Each source returns its next page most-suppliers-first; order the
+          // appended batch the same way (price tiebreak) so the growing list
+          // stays roughly popularity-ranked.
+          batch.sort((a, b) => {
+            const popDelta = (b.offer_count || 0) - (a.offer_count || 0);
+            if (popDelta !== 0) return popDelta;
+            return (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity);
+          });
           return [...prev, ...batch];
         });
       })
