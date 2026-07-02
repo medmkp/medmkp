@@ -24,7 +24,12 @@ const LOGIN_URL = "https://www.darbydental.com/customer/account/login/";
 const CART_URL = "https://www.darbydental.com/checkout/cart/";
 
 const SEL = {
+  // The login PAGE form uses Magento's stock names (login[username] /
+  // login[password]) — verified live 2026-07-02. The bare username/password
+  // names also exist but belong to the HIDDEN header dropdown form, which
+  // fails the visibility check, so the page-form selectors must come first.
   email: [
+    'input[name="login[username]"]',
     "#form-login-username",
     '#login-form input[name="username"]',
     '#header-form-login-username',
@@ -32,12 +37,15 @@ const SEL = {
     'input[type="email"]',
   ],
   password: [
+    'input[name="login[password]"]',
     "#form-login-password",
     '#login-form input[name="password"]',
     "#header-form-login-password",
     'input[name="password"]',
   ],
   loginSubmit: [
+    'button.action.login[type="submit"]',
+    '.login-container button[type="submit"]',
     '#login-form button[name="send"]',
     '#login-form button[type="submit"]',
     'button:has-text("Sign In")',

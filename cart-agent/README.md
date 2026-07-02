@@ -26,7 +26,7 @@ cd cart-agent
 npm install
 npx playwright install chromium
 
-export TRACEDDS_BACKEND_URL="https://tracedds-medusa.onrender.com"
+export MEDMKP_BACKEND_URL="https://medmkp-medusa.onrender.com"
 export CART_AGENT_TOKEN="<same secret as the backend env>"
 
 npm start          # daemon: drains the queue, then polls every 15s

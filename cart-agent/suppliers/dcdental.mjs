@@ -14,7 +14,11 @@
 // first run (SCA themes vary). They're isolated here so tuning one supplier
 // never touches the runner. Each is tried in order; the first match wins.
 
-const LOGIN_URL = "https://www.dcdental.com/login-register";
+// /login-register 404s (stale, verified 2026-07-02); the live SCA login view is
+// the checkout.ssp login route, linked from every PDP's "LogIn or Register to
+// see price." — DC Dental gates BOTH price and add-to-cart behind login, so the
+// PDP add selectors below only render for an authenticated session.
+const LOGIN_URL = "https://www.dcdental.com/dc-dental/checkout.ssp?is=login&login=T";
 const CART_URL = "https://www.dcdental.com/cart";
 
 const SEL = {
