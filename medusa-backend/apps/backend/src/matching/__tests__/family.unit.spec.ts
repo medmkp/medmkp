@@ -43,10 +43,10 @@ function familiesByName(rows: SupplierProductRow[]) {
   return { result, byRepName }
 }
 
-function familyCluster(key: number, name: string, packSize: string): Cluster {
+function familyCluster(key: number, name: string, packSize: string, brand = "Aurelia"): Cluster {
   const members = [
-    normalizeProduct(product({ brand: "Aurelia", name, pack_size: packSize, supplier_id: "msup_a_com" })),
-    normalizeProduct(product({ brand: "Aurelia", name, pack_size: packSize, supplier_id: "msup_b_com" })),
+    normalizeProduct(product({ brand, name, pack_size: packSize, supplier_id: "msup_a_com" })),
+    normalizeProduct(product({ brand, name, pack_size: packSize, supplier_id: "msup_b_com" })),
   ]
   return {
     key,
@@ -329,6 +329,28 @@ describe("variant families", () => {
     expect([...blueId][0]).not.toEqual([...purpleId][0])
     expect(new Set(blue.map((f) => f?.variantLabel))).toEqual(new Set(["Small", "Large"]))
     expect(new Set(purple.map((f) => f?.variantLabel))).toEqual(new Set(["Small", "Large"]))
+  })
+
+  it("does not family unbranded generic hash-number stems", () => {
+    const clusters = [
+      familyCluster(1, "Carbide Burs FG #2 100/Pk", "100/Pk", ""),
+      familyCluster(2, "Carbide Burs FG #4 100/Pk", "100/Pk", ""),
+    ]
+
+    expect(assignFamilies(clusters).size).toBe(0)
+  })
+
+  it("does not bridge an unknown-brand orphan into a branded family", () => {
+    const clusters = [
+      familyCluster(1, "Aurelia Sonic Nitrile Gloves Small 100/Box", "100/Box"),
+      familyCluster(2, "Aurelia Sonic Nitrile Gloves Large 100/Box", "100/Box"),
+      familyCluster(3, "Sonic Nitrile Gloves Textured Medium 100/Box", "100/Box", ""),
+    ]
+    const families = assignFamilies(clusters)
+
+    const brandedIds = [families.get(1)?.familyId, families.get(2)?.familyId]
+    expect(new Set(brandedIds).size).toBe(1)
+    expect(families.get(3)).toBeUndefined()
   })
 })
 
