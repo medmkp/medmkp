@@ -7,6 +7,18 @@ import { writeReports } from "../matching/report"
 import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 import { resolveDatabaseUrl } from "../utils/database-url"
 
+/**
+ * Heap breadcrumbs for the nightly Airflow log: the matcher runs under a hard
+ * --max-old-space-size cap on the NUC, and catalog growth pushed it past the
+ * cap once already (exit 134, every night 2026-06-22 → 2026-07-01). Per-phase
+ * numbers make the next creep visible in the task log before it kills the run.
+ */
+function logHeap(label: string) {
+  const usage = process.memoryUsage()
+  const mb = (n: number) => `${Math.round(n / 1024 / 1024)}MB`
+  console.log(`[heap] ${label}: used=${mb(usage.heapUsed)} total=${mb(usage.heapTotal)} rss=${mb(usage.rss)}`)
+}
+
 async function main() {
   const commit = process.argv.includes("--commit")
   const outputDir = path.resolve(__dirname, "../../.medmkp/matching/latest")
@@ -33,14 +45,17 @@ async function main() {
     console.log("Loading supplier products and latest prices...")
     const rows = await loadSupplierProducts(client)
     console.log(`Loaded ${rows.length} supplier products`)
+    logHeap("after load")
 
     console.log("Normalizing...")
     const products = rows.map(normalizeProduct)
+    logHeap("after normalize")
 
     console.log("Matching...")
     const startedAt = Date.now()
     const result = runMatching(products)
     console.log(`Matching finished in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`)
+    logHeap("after matching")
 
     const summary = writeReports(result, outputDir)
     console.log(JSON.stringify(summary, null, 2))
@@ -50,6 +65,7 @@ async function main() {
       console.log("Committing matches to Postgres...")
       await commitMatchRun(client, result)
       console.log("Commit complete")
+      logHeap("after commit")
     } else {
       console.log("Dry run (no DB writes). Re-run with --commit to persist matches.")
     }

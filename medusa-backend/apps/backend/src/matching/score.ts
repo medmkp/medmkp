@@ -16,35 +16,51 @@ export function jaccard(a: Iterable<string>, b: Iterable<string>): number {
   return shared / (setA.size + setB.size - shared)
 }
 
-const trigramCache = new WeakMap<NormalizedProduct, Set<string>>()
+// Trigrams are packed into numbers (three ASCII char codes) and cached as a
+// sorted deduped Uint32Array per product. The cache is hot for the whole match
+// run and most of the catalog flows through it, so a Set<string> per product
+// (~5KB each) multiplied by a 400k-product catalog was gigabytes of heap — the
+// packed form is ~10x smaller and intersects faster (issue: nightly OOM at 2GB).
+const trigramCache = new WeakMap<NormalizedProduct, Uint32Array>()
 
-export function trigramsOf(product: NormalizedProduct): Set<string> {
+function trigramCodesOf(product: NormalizedProduct): Uint32Array {
   const cached = trigramCache.get(product)
   if (cached) {
     return cached
   }
   const text = `  ${product.nameTokens.join(" ")} `
-  const grams = new Set<string>()
+  const codes = new Set<number>()
   for (let i = 0; i < text.length - 2; i++) {
-    grams.add(text.slice(i, i + 3))
+    codes.add(
+      (text.charCodeAt(i) << 16) | (text.charCodeAt(i + 1) << 8) | text.charCodeAt(i + 2)
+    )
   }
-  trigramCache.set(product, grams)
-  return grams
+  const packed = Uint32Array.from(codes).sort()
+  trigramCache.set(product, packed)
+  return packed
 }
 
 export function trigramDice(a: NormalizedProduct, b: NormalizedProduct): number {
-  const gramsA = trigramsOf(a)
-  const gramsB = trigramsOf(b)
-  if (!gramsA.size || !gramsB.size) {
+  const gramsA = trigramCodesOf(a)
+  const gramsB = trigramCodesOf(b)
+  if (!gramsA.length || !gramsB.length) {
     return 0
   }
   let shared = 0
-  for (const gram of gramsA) {
-    if (gramsB.has(gram)) {
+  let i = 0
+  let j = 0
+  while (i < gramsA.length && j < gramsB.length) {
+    if (gramsA[i] === gramsB[j]) {
       shared += 1
+      i += 1
+      j += 1
+    } else if (gramsA[i] < gramsB[j]) {
+      i += 1
+    } else {
+      j += 1
     }
   }
-  return (2 * shared) / (gramsA.size + gramsB.size)
+  return (2 * shared) / (gramsA.length + gramsB.length)
 }
 
 type NumericComparison = {
