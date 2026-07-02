@@ -9873,7 +9873,7 @@ th {
 .pdp-variants-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .pdp-variants-label strong { color: var(--ink); font-size: 13px; text-transform: none; letter-spacing: 0; }
 .pdp-variant-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 6px; max-height: 188px; overflow-y: auto; }
-.pdp-variant-options--inline { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: 1fr; max-height: none; overflow-y: visible; }
+.pdp-variant-options--inline { display: flex; flex-wrap: wrap; max-height: none; overflow-y: visible; }
 .pdp-variant { padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 500; text-align: center; cursor: pointer; transition: border-color 0.12s, background 0.12s, color 0.12s; }
 .pdp-variant:hover { border-color: var(--blue); }
 .pdp-variant.active { border-color: var(--blue); background: var(--blue); color: #fff; }
