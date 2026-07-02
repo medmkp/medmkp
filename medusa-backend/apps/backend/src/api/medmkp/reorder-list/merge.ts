@@ -75,13 +75,57 @@ export function mergeDraftItems(
   return [...active, ...tombstones]
 }
 
-// Additive union by id — never lose docs/saved-lists/handoffs because one device
-// was stale. Incoming wins on id collision so edits still flow through.
+// Additive union by id — never lose docs/handoffs because one device was
+// stale. Incoming wins on id collision so edits still flow through.
 export function unionById<T extends { id?: unknown }>(existing: T[] = [], incoming: T[] = []): T[] {
   const byId = new Map<unknown, T>()
   for (const x of existing) byId.set(x.id, x)
   for (const x of incoming) byId.set(x.id, x)
   return [...byId.values()]
+}
+
+// Saved lists get the same tombstone treatment as items, keyed by id: a plain
+// union can never delete (a removed entry resurrects from the other side) and
+// blindly lets a stale copy clobber a rename. Deleting/reopening writes
+// `deleted:true` + updatedAt; the fresher copy of an id wins, a tie prefers the
+// tombstone. MUST stay equivalent to mergeArchivedLists in the web client's
+// app/reorderMerge.js.
+export const MAX_LIST_TOMBSTONES = 50
+
+const archivedListTs = (list: Item): number => Number(list?.updatedAt) || 0
+
+const pickArchivedSurvivor = (a: Item, b: Item): Item => {
+  const ta = archivedListTs(a)
+  const tb = archivedListTs(b)
+  if (ta !== tb) return ta > tb ? a : b
+  const aDeleted = a.deleted === true
+  const bDeleted = b.deleted === true
+  if (aDeleted !== bDeleted) return aDeleted ? a : b
+  return b
+}
+
+export function mergeArchivedLists(
+  existing: Item[] = [],
+  incoming: Item[] = [],
+  now: number = Date.now(),
+): Item[] {
+  const byId = new Map<unknown, Item>()
+  for (const list of [...existing, ...incoming]) {
+    if (!list || list.id == null) continue
+    const current = byId.get(list.id)
+    byId.set(list.id, current ? pickArchivedSurvivor(current, list) : list)
+  }
+  const cutoff = now - TOMBSTONE_TTL_MS
+  const merged = [...byId.values()]
+  const kept = merged.filter((list) => list.deleted !== true)
+  const tombstones = merged
+    .filter((list) => list.deleted === true && (archivedListTs(list) === 0 || archivedListTs(list) >= cutoff))
+    .sort((a, b) => archivedListTs(b) - archivedListTs(a))
+    .slice(0, MAX_LIST_TOMBSTONES)
+    // A tombstone only needs identity + recency; drop the snapshot payload
+    // (rows/sourceItems/sourceDocs) so deleted lists stop weighing the blob.
+    .map((list) => ({ id: list.id, deleted: true, updatedAt: archivedListTs(list) }))
+  return [...kept, ...tombstones]
 }
 
 const asArray = (value: unknown): Item[] => (Array.isArray(value) ? (value as Item[]) : [])
@@ -98,7 +142,7 @@ export function mergeReorderState(
     ...incoming,
     draftItems: mergeDraftItems(asArray(existing.draftItems), asArray(incoming.draftItems), now),
     uploadedDocs: unionById(asArray(existing.uploadedDocs), asArray(incoming.uploadedDocs)),
-    archivedLists: unionById(asArray(existing.archivedLists), asArray(incoming.archivedLists)),
+    archivedLists: mergeArchivedLists(asArray(existing.archivedLists), asArray(incoming.archivedLists), now),
     handoffs: unionById(asArray(existing.handoffs), asArray(incoming.handoffs)),
   }
 }

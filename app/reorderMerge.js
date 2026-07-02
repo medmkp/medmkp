@@ -13,8 +13,10 @@ const REORDER_MAX_TOMBSTONES = 100;
 
 // Identity on lifecycle-stable fields only. `product` is excluded: matching an
 // unmatched scan fills it in, which would change the key mid-life and split one
-// item into two.
-const reorderItemKey = (item) => (item && (item.barcode || item.extractedFrom || item.sku || item.id)) || "";
+// item into two. Exported so list-replacing flows (reopen/duplicate) can tell
+// which outgoing items need a tombstone vs. which buckets the incoming items
+// already occupy.
+export const reorderItemKey = (item) => (item && (item.barcode || item.extractedFrom || item.sku || item.id)) || "";
 const reorderItemTs = (item) => Number(item && item.updatedAt) || 0;
 
 // Higher updatedAt wins; on a TIE a tombstone (included:false) wins, so a
@@ -54,20 +56,59 @@ function reorderUnionById(existing = [], incoming = []) {
   return [...byId.values()];
 }
 
+// Saved lists get the same tombstone treatment as items, keyed by id: a plain
+// union can never delete (a removed entry resurrects from the other side) and
+// blindly lets a stale copy clobber a rename. Deleting/reopening writes
+// `deleted:true` + updatedAt; the fresher copy of an id wins, a tie prefers the
+// tombstone. Mirrors MAX_TOMBSTONES-style GC so deletions can't bloat the blob.
+const REORDER_MAX_LIST_TOMBSTONES = 50;
+
+const archivedListTs = (list) => Number(list && list.updatedAt) || 0;
+
+function pickArchivedSurvivor(a, b) {
+  const ta = archivedListTs(a);
+  const tb = archivedListTs(b);
+  if (ta !== tb) return ta > tb ? a : b;
+  const aDeleted = a.deleted === true;
+  const bDeleted = b.deleted === true;
+  if (aDeleted !== bDeleted) return aDeleted ? a : b;
+  return b;
+}
+
+export function mergeArchivedLists(existing = [], incoming = [], now = Date.now()) {
+  const byId = new Map();
+  for (const list of [...(existing || []), ...(incoming || [])]) {
+    if (!list || list.id == null) continue;
+    const current = byId.get(list.id);
+    byId.set(list.id, current ? pickArchivedSurvivor(current, list) : list);
+  }
+  const cutoff = now - REORDER_TOMBSTONE_TTL_MS;
+  const merged = [...byId.values()];
+  const kept = merged.filter((list) => list.deleted !== true);
+  const tombstones = merged
+    .filter((list) => list.deleted === true && (archivedListTs(list) === 0 || archivedListTs(list) >= cutoff))
+    .sort((a, b) => archivedListTs(b) - archivedListTs(a))
+    .slice(0, REORDER_MAX_LIST_TOMBSTONES)
+    // A tombstone only needs identity + recency; drop the snapshot payload
+    // (rows/sourceItems/sourceDocs) so deleted lists stop weighing the blob.
+    .map((list) => ({ id: list.id, deleted: true, updatedAt: archivedListTs(list) }));
+  return [...kept, ...tombstones];
+}
+
 // Merge two full app-state blobs into one. `base` supplies the scalars/working
 // prefs (list name, buying prefs, stage); only the data collections are
 // reconciled. Pass the SERVER state as `base` on the authoritative initial load;
 // pass LOCAL as `base` on a live poll so a 3s tick can't reset an in-progress
 // edit. The item merge is commutative, so which side is `base` only affects
 // which scalars win, never which items survive.
-export function mergeDraftState(base, incoming) {
+export function mergeDraftState(base, incoming, now = Date.now()) {
   const b = base || {};
   const inc = incoming || {};
   return {
     ...b,
-    draftItems: mergeDraftItems(b.draftItems || [], inc.draftItems || []),
+    draftItems: mergeDraftItems(b.draftItems || [], inc.draftItems || [], now),
     uploadedDocs: reorderUnionById(b.uploadedDocs, inc.uploadedDocs),
-    archivedLists: reorderUnionById(b.archivedLists, inc.archivedLists),
+    archivedLists: mergeArchivedLists(b.archivedLists, inc.archivedLists, now),
     handoffs: reorderUnionById(b.handoffs, inc.handoffs),
     listTouched: Boolean(b.listTouched) || Boolean(inc.listTouched),
   };

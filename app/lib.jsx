@@ -743,7 +743,7 @@ export function newItemId() { return `li_${Date.now().toString(36)}_${(itemIdSeq
 // can be unit-tested directly; re-exported here so callers keep importing it
 // from "./lib". It is the single reconciliation rule, mirrored by the server
 // merge in medusa-backend/.../reorder-list/merge.ts.
-export { mergeDraftState, mergeDraftItems } from "./reorderMerge";
+export { mergeDraftState, mergeDraftItems, mergeArchivedLists, reorderItemKey } from "./reorderMerge";
 
 // Identity for a supplier offer within an item's offer list. Mirrors the
 // supplier|sku|price dedupe key used when offers are built in

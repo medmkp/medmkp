@@ -187,4 +187,69 @@ describe("reorder-list merge", () => {
     expect(merged.listName).toBe("New")
     expect(merged.listStage).toBe("review")
   })
+
+  // Saved lists (reorder history) get item-style tombstones, keyed by id. A
+  // plain union could never delete: the entry a buyer removed or reopened kept
+  // resurrecting from whichever side still had it. MUST stay equivalent to
+  // mergeArchivedLists in app/reorderMerge.js.
+  describe("archived-list tombstones", () => {
+    const saved = (over: Record<string, any> = {}) => ({
+      id: over.id ?? "L1",
+      name: over.name ?? "June Restock",
+      rows: [{ id: "r1" }],
+      sourceItems: [{ id: "li_1", barcode: "b1" }],
+      updatedAt: T,
+      ...over,
+    })
+    const gone = (id: string, updatedAt: number) => ({ id, deleted: true, updatedAt })
+    const live = (lists: any[]) => lists.filter((l) => l.deleted !== true).map((l) => l.id).sort()
+
+    it("a deletion beats a stale device's active copy, in both merge orders", () => {
+      const deleted = { archivedLists: [gone("L1", T + 1000)] }
+      const stale = { archivedLists: [saved()] }
+      expect(live((mergeReorderState(stale, deleted, T + 2000) as any).archivedLists)).toEqual([])
+      expect(live((mergeReorderState(deleted, stale, T + 2000) as any).archivedLists)).toEqual([])
+    })
+
+    it("absence is not deletion — a blob that never saw a list cannot wipe it", () => {
+      const existing = { archivedLists: [saved()] }
+      const incoming = { archivedLists: [] }
+      expect(live((mergeReorderState(existing, incoming, T) as any).archivedLists)).toEqual(["L1"])
+    })
+
+    it("a tombstone beats a legacy copy saved before updatedAt existed", () => {
+      const legacy = { archivedLists: [saved({ updatedAt: undefined })] }
+      const deleted = { archivedLists: [gone("L1", T)] }
+      expect(live((mergeReorderState(legacy, deleted, T) as any).archivedLists)).toEqual([])
+    })
+
+    it("the fresher rename wins over a stale copy in either direction", () => {
+      const renamed = { archivedLists: [saved({ name: "Renamed", updatedAt: T + 500 })] }
+      const stale = { archivedLists: [saved()] }
+      expect((mergeReorderState(stale, renamed, T + 1000) as any).archivedLists[0].name).toBe("Renamed")
+      expect((mergeReorderState(renamed, stale, T + 1000) as any).archivedLists[0].name).toBe("Renamed")
+    })
+
+    it("slims tombstones to id + deleted + updatedAt so deletions can't bloat the blob", () => {
+      const fat = { archivedLists: [{ ...saved(), deleted: true, updatedAt: T }] }
+      const merged = (mergeReorderState(fat, { archivedLists: [] }, T) as any).archivedLists
+      expect(merged).toEqual([{ id: "L1", deleted: true, updatedAt: T }])
+    })
+
+    it("GCs tombstones past the TTL and caps their count", () => {
+      const lists = [
+        saved({ id: "keep" }),
+        gone("fresh", T - 1000),
+        gone("expired", T - TOMBSTONE_TTL_MS - 1000),
+      ]
+      const merged = (mergeReorderState({ archivedLists: lists }, { archivedLists: [] }, T) as any).archivedLists
+      expect(merged.map((l: any) => l.id).sort()).toEqual(["fresh", "keep"])
+
+      const many = Array.from({ length: 80 }, (_, i) => gone(`L${i}`, T - i))
+      const capped = (mergeReorderState({ archivedLists: many }, { archivedLists: [] }, T) as any).archivedLists
+      expect(capped).toHaveLength(50)
+      expect(capped.some((l: any) => l.id === "L0")).toBe(true)
+      expect(capped.some((l: any) => l.id === "L79")).toBe(false)
+    })
+  })
 })
