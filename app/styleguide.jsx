@@ -382,10 +382,11 @@ export default function StyleGuide() {
       <section className={styles.section}>
         <h2>KPI cards &amp; metric tiles</h2>
         <p className={styles.sectionNote}>
-          The header band of every dashboard. A row of four <strong>stat
-          cards</strong> — a tinted icon chip + label + big 700 value + caption.
-          The chip carries the semantic tint; the value stays ink, except money,
-          which goes green. JSX reference: <code>StatCard</code> in evidence.jsx.
+          The header band of the Needs Attention dashboard — the only surface
+          that keeps a KPI row. A row of four <strong>stat cards</strong> — a
+          tinted icon chip + label + big 700 value + caption. The chip carries
+          the semantic tint; the value stays ink, except money, which goes
+          green. JSX reference: <code>StatCard</code> in needsattention.jsx.
         </p>
         <div className={styles.kpiRow}>
           <div className={styles.kpiCard}>

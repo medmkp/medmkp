@@ -75,8 +75,8 @@ reorder timing**, *not* perpetual inventory:
 
 | Slug | Frame | Code | Baseline | Status / drift |
 |---|---|---|---|---|
-| `location-board` | `location-board.png` | `app/locations.jsx` | — | shipped |
-| `location-detail` | `location-detail.png` | `app/locations.jsx` | — | shipped |
+| `location-board` | `location-board.png` | `app/locations.jsx` | — | shipped — intentional divergence: no KPI stat row (KPI rows live only on Needs Attention) |
+| `location-detail` | `location-detail.png` | `app/locations.jsx` | — | shipped — intentional divergence: no KPI stat row (KPI rows live only on Needs Attention) |
 | `location-edit` | `location-edit.png` | `app/locations.jsx` | — | shipped |
 | `lot-detail` | `lot-detail.png` | `app/locations.jsx` (drawer) | — | greenfield — the "source of truth" frame: one record per lot per location (not per package); shows product, lot, last-verified, expiry, lifecycle, evidence, recall/expiry issues |
 | `office-layout` | `office-layout.png` | `app/officelayout.jsx` | — | shipped — markers (centered glyph + name on a dotted snap-grid) and the right detail rail (close, stat rows, chevron action list) match the frame in tokens (#329), with a bottom "Your office at a glance" summary bar. Intentional divergence: no left type-palette, no zoom control; placement uses an Unplaced tray + header Add/Save/Reset, and the rail exposes the two shipped actions (Open location, Start scan) |
@@ -86,14 +86,14 @@ reorder timing**, *not* perpetual inventory:
 
 | Slug | Frame | Code | Baseline | Status / drift |
 |---|---|---|---|---|
-| `evidence-library` | `evidence-library.png` | `app/evidence.jsx` | `evidence-library.png` | partial |
+| `evidence-library` | `evidence-library.png` | `app/evidence.jsx` | `evidence-library.png` | partial — intentional divergence: no KPI stat row (KPI rows live only on Needs Attention) |
 | `evidence-detail` | `evidence-detail.png` | `app/evidence.jsx` (drawer) | — | partial |
 | `evidence-upload` | `evidence-upload.png` | _greenfield_ | — | greenfield |
 | `evidence-match-review` | `evidence-match-review.png` | _greenfield_ | — | greenfield |
 | `evidence-redline` | `evidence-redline.png` | `app/evidence.jsx` (`RedlineView`) | — | built (frame-26) — compliance update review: before/after identity, field-level change list (changed/added/removed), section redline, reviewer comment + action footer. FE-first fixture (`REDLINE_MOCK`); actions are honest stubs. Reached via the Evidence Library "newer version" banner → `/app/evidence/redline` |
 | `evidence-viewer` | `evidence-viewer.png` | `app/evidenceviewer.jsx` | — | partial — read-only on-site presentation mode (mobile); context-filtered (location/item/lot/doc) with a type-grouped filing list of evidence cards. Drift: the shipped "Filed evidence" list is richer than the frame's flat "Open files" stub (per #345). |
 | `compliance-binder` | `compliance-binder.png` | `app/evidence.jsx` (export) | — | partial — Export = `window.print` |
-| `scan-report` | `scan-report.png` | _greenfield_ | — | greenfield — supply scan report |
+| `scan-report` | `scan-report.png` | `app/reports.jsx` | — | partial — session-less rolling report adapted from the frame. Intentional divergence: no KPI stat row (KPI rows live only on Needs Attention) |
 
 ## Mobile scan flow
 
