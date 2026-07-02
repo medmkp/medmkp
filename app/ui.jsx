@@ -406,10 +406,10 @@ export function QtyStepper({ qty, setQty }) {
 }
 
 
-export function CatalogSupplierAvatar({ name }) {
+export function CatalogSupplierAvatar({ name, size }) {
   const logo = supplierLogoSrc(name);
   return (
-    <span className={`cat-supplier-avatar ${logo ? "has-img" : ""}`}>
+    <span className={`cat-supplier-avatar ${logo ? "has-img" : ""}${size ? ` ${size}` : ""}`}>
       {logo ? <img src={logo} alt="" /> : supplierInitials(name)}
     </span>
   );
