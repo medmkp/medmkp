@@ -9,26 +9,15 @@ import { parseGs1 } from "../../../../matching/gs1"
 import { parseHibc } from "../../../../matching/hibc"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
 import { isMarketplaceSupplierId } from "../../../../ingestion/marketplace/suppliers"
+import {
+  latestPriceSnapshotsByProduct,
+  type LatestPriceSnapshot,
+} from "../../../../utils/latest-price-snapshots"
 
 // Live product lookup for the search box (fuzzy text) and the scanner
 // (exact SKU). Reuses the offline matching engine's tokenizer so ranking stays
 // consistent with how invoices are matched, and resolves hits to canonical
 // products so the UI can compare prices across suppliers.
-
-type Snapshot = Awaited<ReturnType<MedMKPModuleService["listSupplierPriceSnapshots"]>>[number]
-
-function latestSnapshotsByProduct(snapshots: Snapshot[]) {
-  return snapshots.reduce((acc, snapshot) => {
-    const existing = acc.get(snapshot.supplier_product_id)
-    if (
-      !existing ||
-      new Date(snapshot.captured_at).getTime() > new Date(existing.captured_at).getTime()
-    ) {
-      acc.set(snapshot.supplier_product_id, snapshot)
-    }
-    return acc
-  }, new Map<string, Snapshot>())
-}
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -171,15 +160,13 @@ async function enrichWithOffers(medmkp: MedMKPModuleService, canonicals: Canonic
   const matches = await medmkp.listCanonicalProductMatches({ canonical_product_id: ids })
   const supplierProductIds = [...new Set(matches.map((match) => match.supplier_product_id))]
 
-  const [supplierProducts, snapshots, suppliers] = supplierProductIds.length
+  const [supplierProducts, latest, suppliers] = supplierProductIds.length
     ? await Promise.all([
         medmkp.listSupplierProducts({ id: supplierProductIds }),
-        medmkp.listSupplierPriceSnapshots({ supplier_product_id: supplierProductIds }),
+        latestPriceSnapshotsByProduct(supplierProductIds),
         medmkp.listSuppliers(),
       ])
-    : [[], [], []]
-
-  const latest = latestSnapshotsByProduct(snapshots)
+    : [[], new Map<string, LatestPriceSnapshot>(), []]
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]))
   const supplierProductById = new Map(supplierProducts.map((product) => [product.id, product]))
 
@@ -286,10 +273,7 @@ async function resolveHitsToProducts(
 
   if (!products.length) {
     // Supplier product exists but has no canonical match; surface it directly.
-    const snapshots = await medmkp.listSupplierPriceSnapshots({
-      supplier_product_id: hits.map((hit) => hit.id),
-    })
-    const latest = latestSnapshotsByProduct(snapshots)
+    const latest = await latestPriceSnapshotsByProduct(hits.map((hit) => hit.id))
     const suppliers = await medmkp.listSuppliers()
     const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]))
     products = hits.map((hit) => {
