@@ -1,4 +1,10 @@
-import { cleanProductName, decodeHtml, decodeHtmlEntities, normalizeText } from "../html"
+import {
+  cleanProductName,
+  decodeHtml,
+  decodeHtmlEntities,
+  isJunkProductName,
+  normalizeText,
+} from "../html"
 
 describe("decodeHtmlEntities", () => {
   it("decodes the named entities the old decoder already handled", () => {
@@ -103,5 +109,39 @@ describe("cleanProductName", () => {
   it("is idempotent on already-clean names", () => {
     const clean = "HSB - Nitrile Gloves, Blue, X-Large 100/Bx"
     expect(cleanProductName(clean)).toBe(clean)
+  })
+})
+
+describe("isJunkProductName", () => {
+  it("rejects the exact scraper artifacts that leaked into the catalog (#606)", () => {
+    expect(isJunkProductName("Debug info copied.")).toBe(true)
+    expect(isJunkProductName("Ea")).toBe(true)
+  })
+
+  it("rejects empty / too-short names", () => {
+    expect(isJunkProductName("")).toBe(true)
+    expect(isJunkProductName("   ")).toBe(true)
+    expect(isJunkProductName("Bx")).toBe(true)
+    expect(isJunkProductName("KT")).toBe(true)
+    expect(isJunkProductName("Kit")).toBe(true)
+  })
+
+  it("rejects bare unit-of-measure / packaging tokens", () => {
+    expect(isJunkProductName("Each")).toBe(true)
+    expect(isJunkProductName("each")).toBe(true)
+    expect(isJunkProductName("Box")).toBe(true)
+    expect(isJunkProductName("Pkg")).toBe(true)
+    expect(isJunkProductName("Pack")).toBe(true)
+    expect(isJunkProductName("Case")).toBe(true)
+  })
+
+  it("keeps real product names", () => {
+    expect(isJunkProductName("Cotton Gauze Sponge 4x4")).toBe(false)
+    expect(isJunkProductName("Floss")).toBe(false)
+    expect(isJunkProductName("HSB - Nitrile Gloves, Blue, X-Large 100/Bx")).toBe(
+      false
+    )
+    // A real name that merely ends in a UOM token is not junk.
+    expect(isJunkProductName("Prophy Paste Each")).toBe(false)
   })
 })
