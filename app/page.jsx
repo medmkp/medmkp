@@ -8,8 +8,7 @@ import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, NAV_COLLAPSED_KEY, 
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { OfficeLayoutRoute } from "./officelayout";
 import { QrLabelView } from "./qrlabels";
-import { ScannerView } from "./scansessions";
-import { MobilePublicScan, MobileReorderScan } from "./scanmobile";
+import { MobilePublicScan, MobileReorderScan, MobileScanStart } from "./scanmobile";
 import { getScanAudioCtx, loadMatchChime, playMatchChime, vibrateNoMatch } from "./scanSound";
 import { EvidenceView, EvidenceBinderView, EvidenceMatchReview, RedlineView } from "./evidence";
 import { EvidenceMobileViewer } from "./evidenceviewer";
@@ -56,7 +55,6 @@ export default function Home() {
   const [categorySlug, setCategorySlug] = useState(null);
   const [supplierId, setSupplierId] = useState(null);
   const [locationId, setLocationId] = useState(null);
-  const [scanLocationId, setScanLocationId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [evidenceContext, setEvidenceContext] = useState(null);
   const [evidenceSample, setEvidenceSample] = useState("");
@@ -482,7 +480,6 @@ export default function Home() {
       setCategorySlug(nextRoute.categorySlug || null);
       setSupplierId(nextRoute.supplierId || null);
       setLocationId(nextRoute.locationId || null);
-      setScanLocationId(nextRoute.scanLocationId || "");
       setSearchQuery(nextRoute.searchQuery || "");
       setEvidenceContext(nextRoute.evidenceContext || null);
       setEvidenceSample(nextRoute.evidenceSample || "");
@@ -883,7 +880,6 @@ export default function Home() {
     setCategorySlug(next.categorySlug || null);
     setSupplierId(next.supplierId || null);
     setLocationId(next.locationId || null);
-    setScanLocationId(next.scanLocationId || "");
     setSearchQuery(next.searchQuery || "");
     setEvidenceContext(next.evidenceContext || null);
     setEvidenceSample(next.evidenceSample || "");
@@ -909,10 +905,10 @@ export default function Home() {
     navigate(pathForView(nextView));
   }
 
-  // Drop into the scanner. With a location, scan straight onto it (Shelf Audit);
-  // without one, the scanner opens its choose-a-location start screen.
+  // Drop into the launch scanner. Location-scoped evidence scanning is dormant,
+  // so legacy location ids are intentionally ignored and scans add to the list.
   function startScan(locId) {
-    navigate(locId ? `/app/scan-session?location=${encodeURIComponent(locId)}` : "/app/scan-session");
+    navigate("/app/scan");
   }
 
   function handleScanComplete(code) {
@@ -1648,16 +1644,30 @@ export default function Home() {
     ["settings", "icon-settings", "Settings"],
   ].filter(([target]) => isLive(target));
 
-  // The scanner — scan-first mobile home (`/app`) and the `/app/scan-session`
-  // route both render it. With a location it scans straight onto it; without one
-  // it shows the choose-a-location start screen. Defined once, reused in both.
+  // The launch scanner — mobile home (`/app`) starts the scan-to-list flow, while
+  // `/app/scan` and legacy `/app/scan-session?...` render the active camera. No
+  // location or Needs Attention data is loaded from these surfaces.
   const scanStartEl = (
-    <ScannerView
-      startLocationId={scanLocationId}
+    <MobileScanStart
+      onStart={() => navigate("/app/scan")}
       onNavigate={navigate}
-      onToast={showToast}
       account={{ name: buyerName, email: me?.customer?.email || "", practice: practiceName, initials: buyerInitials }}
       onSignOut={handleLogout}
+    />
+  );
+
+  const mobileReorderScanEl = (
+    <MobileReorderScan
+      active
+      scanResult={scanResult}
+      scanCount={activeDraftItems.length}
+      onScan={handleScanComplete}
+      onClearScanResult={() => setScanResult(null)}
+      onApplyDetails={applyScanDetails}
+      onSearchAdd={addSearchedScanProduct}
+      onCaptureLabel={() => showToast("Label capture is coming soon")}
+      onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
+      onBack={() => { setScanResult(null); navigate("/app/reorder-list"); }}
     />
   );
 
@@ -1961,18 +1971,7 @@ export default function Home() {
           {isMobile && MANAGEMENT_VIEWS.has(view) && <DesktopOnlyHint onBack={() => navigate("/app")} />}
           {view === "home" && (
             mobileAddItemRoute ? (
-              <MobileReorderScan
-                active
-                scanResult={scanResult}
-                scanCount={activeDraftItems.length}
-                onScan={handleScanComplete}
-                onClearScanResult={() => setScanResult(null)}
-                onApplyDetails={applyScanDetails}
-                onSearchAdd={addSearchedScanProduct}
-                onCaptureLabel={() => showToast("Label capture is coming soon")}
-                onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
-                onBack={() => { setScanResult(null); navigate("/app/reorder-list"); }}
-              />
+              mobileReorderScanEl
             ) : isMobile ? (
               // Mobile home (`/app`) = the scanner start screen (scan-first).
               // Locations / Reorder / More are their own routes via the bottom nav;
@@ -2026,7 +2025,7 @@ export default function Home() {
             />
           )}
 
-          {view === "scanner" && scanStartEl}
+          {view === "scanner" && mobileReorderScanEl}
 
           {view === "evidence" && (
             <EvidenceView

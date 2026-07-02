@@ -105,11 +105,11 @@ export function viewFromPath(pathname = "/") {
   if (path === "/app/needs-attention") return authRoute({ view: "dashboard", isLoggedIn: true });
   if (path === "/app/reorder-list") return authRoute({ view: "reorderList", isLoggedIn: true });
   if (path === "/app/scan") return authRoute({ view: "home", isLoggedIn: true, mobileAddItemRoute: true });
-  // The session-less scanner. /app/scan-session is canonical; /app/scan-sessions
-  // (and any legacy /app/scan-sessions/:id deep link) resolve to the same surface.
+  // Legacy shelf-audit scanner links now open the launch scan-to-reorder-list
+  // flow. Printed placards may still carry ?location=<id>; ignore it gracefully.
   if (path === "/app/scan-session" || path === "/app/scan-sessions")
-    return authRoute({ view: "scanner", isLoggedIn: true, scanLocationId: query.get("location") || "", scanMode: query.get("mode") || "" });
-  if (path.startsWith("/app/scan-sessions/")) return authRoute({ view: "scanner", isLoggedIn: true });
+    return authRoute({ view: "home", isLoggedIn: true, mobileAddItemRoute: true });
+  if (path.startsWith("/app/scan-sessions/")) return authRoute({ view: "home", isLoggedIn: true, mobileAddItemRoute: true });
   // Read-only on-site presentation mode. Query params filter the viewer to one
   // context: a location, a tracked item (optionally a lot), or a single document.
   // No params = the whole-practice view. Unknown ids fall through to an honest
