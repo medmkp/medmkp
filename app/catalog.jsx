@@ -717,12 +717,29 @@ export function CatalogCategoryView({ slug, onNavigate }) {
   const [sub, setSub] = useState("");
   const [productLayout, setProductLayout] = useState("grid");
   const [showAllProducts, setShowAllProducts] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [recent, setRecent] = useState([]);
   // Department-wide product photos (image-bearing only), used to front the
   // header + each subcategory card. Kept separate from `products` so it stays
   // stable while the visible listing is filtered by subcategory.
   const [gallery, setGallery] = useState([]);
   const productsRef = useRef(null);
+  // Per-source paging cursors for the department listing: how many product
+  // families we've fetched from each source category, and each source's total
+  // count, so "Load more" can offset-page every source up to the real
+  // productCount (the grid used to stop at the single page it first fetched).
+  const sourceCursors = useRef({});
+  const sourceCounts = useRef({});
+  const PAGE = 48;
+
+  // The subcategory drill-down sends the curated `match` regex (e.g.
+  // "scaler|curette") rather than the chip's plural/compound display label,
+  // which rarely appears verbatim in product names. Shared by the initial load
+  // and loadMore so both page the same filtered set.
+  const subPattern = () => {
+    const subMeta = sub ? category?.subcategories.find((s) => s.name === sub) : null;
+    return subMeta?.match || sub;
+  };
 
   // Pick a representative photo for a subcategory from the department gallery by
   // matching its curated name pattern; fall back to the department's first photo.
@@ -832,31 +849,37 @@ export function CatalogCategoryView({ slug, onNavigate }) {
     const controller = new AbortController();
     setStatus("loading");
     setShowAllProducts(false);
+    sourceCursors.current = {};
+    sourceCounts.current = {};
     // A curated category can own several supplier-named source categories
     // (e.g. Burs & Rotary = "Burs & Diamonds" + "Burs"); fetch each, merge,
     // dedupe, and rank by best offer so the grid spans the whole department.
-    // Subcategory filter: send the curated `match` regex (e.g. "scaler|curette")
-    // rather than the chip's display label. The label is a plural/compound term
-    // ("Scalers & Curettes") that rarely appears verbatim in product names, so a
-    // literal substring match returned nothing; the regex matches the real names.
-    const subMeta = sub ? category.subcategories.find((s) => s.name === sub) : null;
-    const subPattern = subMeta?.match || sub;
+    // We keep every family the first page returns (PAGE per source) and record
+    // each source's cursor + total so loadMore can offset-page to productCount.
+    const pattern = subPattern();
     Promise.all(
       category.sources.map((source) => {
-        const params = new URLSearchParams({ category: source, limit: "24" });
-        if (sub) params.set("pattern", subPattern);
+        const params = new URLSearchParams({ category: source, limit: String(PAGE) });
+        if (sub) params.set("pattern", pattern);
         return fetch(`/api/canonical-products?${params}`, { signal: controller.signal })
           .then((r) => r.json())
-          .catch(() => ({ canonical_products: [], count: 0 }));
+          // Spread body first so our per-source key wins: the Next route stamps
+          // its own `source: "medusa"` onto the body, which would otherwise clobber
+          // the source category we key cursors/counts on.
+          .then((body) => ({ ...body, source }))
+          .catch(() => ({ canonical_products: [], count: 0, source }));
       })
     ).then((responses) => {
       if (controller.signal.aborted) return;
       const seen = new Set();
       const merged = [];
       let total = 0;
-      responses.forEach(({ canonical_products, count }) => {
+      responses.forEach(({ source, canonical_products, count }) => {
         total += count || 0;
-        (canonical_products || []).forEach((product) => {
+        sourceCounts.current[source] = count || 0;
+        const list = canonical_products || [];
+        sourceCursors.current[source] = list.length;
+        list.forEach((product) => {
           if (seen.has(product.id)) return;
           seen.add(product.id);
           merged.push(product);
@@ -871,7 +894,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
         if (imgDelta !== 0) return imgDelta;
         return (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity);
       });
-      setProducts(merged.slice(0, 24));
+      setProducts(merged);
       setProductCount(total);
       setStatus("ready");
     });
@@ -897,6 +920,55 @@ export function CatalogCategoryView({ slug, onNavigate }) {
     setSub((prev) => (prev === name ? "" : name));
     requestAnimationFrame(scrollToProducts);
   };
+  // Offset-page the next batch from every source that still has more, append it
+  // (deduped) to the grid, and advance each source's cursor — mirrors
+  // CatalogSupplierView's loadMore, but fans out across the department's sources.
+  const loadMore = () => {
+    if (!category || loadingMore) return;
+    const remainingSources = category.sources.filter(
+      (source) => (sourceCursors.current[source] || 0) < (sourceCounts.current[source] || 0)
+    );
+    if (!remainingSources.length) return;
+    setLoadingMore(true);
+    const pattern = subPattern();
+    Promise.all(
+      remainingSources.map((source) => {
+        const params = new URLSearchParams({
+          category: source,
+          limit: String(PAGE),
+          offset: String(sourceCursors.current[source] || 0),
+        });
+        if (sub) params.set("pattern", pattern);
+        return fetch(`/api/canonical-products?${params}`)
+          .then((r) => r.json())
+          .then((body) => ({ ...body, source }))
+          .catch(() => ({ canonical_products: [], source }));
+      })
+    )
+      .then((responses) => {
+        setProducts((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const batch = [];
+          responses.forEach(({ source, canonical_products }) => {
+            const list = canonical_products || [];
+            sourceCursors.current[source] = (sourceCursors.current[source] || 0) + list.length;
+            list.forEach((product) => {
+              if (seen.has(product.id)) return;
+              seen.add(product.id);
+              batch.push(product);
+            });
+          });
+          // Each source returns its next page cheapest-first; order the appended
+          // batch by best price so the growing list stays roughly price-ranked.
+          batch.sort(
+            (a, b) =>
+              (a.best_offer?.price_cents ?? Infinity) - (b.best_offer?.price_cents ?? Infinity)
+          );
+          return [...prev, ...batch];
+        });
+      })
+      .finally(() => setLoadingMore(false));
+  };
   const visibleProducts = showAllProducts ? products : products.slice(0, 8);
   // The grid is image-biased, so the first card isn't necessarily the cheapest.
   // Derive the lowest offer explicitly for the "Best price" card badge.
@@ -907,9 +979,18 @@ export function CatalogCategoryView({ slug, onNavigate }) {
   }, null);
   const productsTitle = sub ? `Products in ${sub}` : `Popular products in ${category.name}`;
   const fmt = (value) => (typeof value === "number" ? value.toLocaleString() : "—");
-  const viewAllBtn = !showAllProducts && products.length > 8 ? (
+  // Products still unfetched beyond what's loaded. The listing pages the full
+  // department: first "View all N" reveals the loaded page, then "Load more"
+  // offset-fetches the rest until the grid reaches the real productCount.
+  const remaining = typeof productCount === "number" ? Math.max(productCount - products.length, 0) : 0;
+  const moreBtn = !showAllProducts && products.length > 8 ? (
     <button type="button" className="cat-pt-all" onClick={() => setShowAllProducts(true)}>
       View all {fmt(productCount)} products in {category.name}
+      <Icon name="icon-chevron-right" className="button-icon" />
+    </button>
+  ) : showAllProducts && remaining > 0 ? (
+    <button type="button" className="cat-pt-all" onClick={loadMore} disabled={loadingMore}>
+      {loadingMore ? "Loading…" : `Load more (${fmt(remaining)} more)`}
       <Icon name="icon-chevron-right" className="button-icon" />
     </button>
   ) : null;
@@ -1013,7 +1094,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                   );
                 })}
               </div>
-              {viewAllBtn}
+              {moreBtn}
             </div>
             ) : (
             <div className="cat-ptable-wrap">
@@ -1063,7 +1144,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                   })}
                 </tbody>
               </table>
-              {viewAllBtn}
+              {moreBtn}
             </div>
             )
           ) : (
