@@ -73,6 +73,7 @@ test("live authenticated paths resolve as before", () => {
 
 test("legacy aliases still resolve before launch filtering", () => {
   assert.deepEqual(viewFromPath("/app/plan"), { view: "plan", isLoggedIn: true });
-  assert.deepEqual(viewFromPath("/app/scan-sessions"), { view: "scanner", isLoggedIn: true, scanLocationId: "", scanMode: "" });
-  assert.deepEqual(viewFromPath("/app/scan-sessions/old"), { view: "scanner", isLoggedIn: true });
+  assert.deepEqual(viewFromPath("/app/scan-sessions"), { view: "home", isLoggedIn: true, mobileAddItemRoute: true });
+  assert.deepEqual(viewFromPath("/app/scan-session?location=cabinet-1"), { view: "home", isLoggedIn: true, mobileAddItemRoute: true });
+  assert.deepEqual(viewFromPath("/app/scan-sessions/old"), { view: "home", isLoggedIn: true, mobileAddItemRoute: true });
 });

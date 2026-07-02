@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrandLogoMark, Icon, QrScanGlyph } from "./icons";
 import { formatExpiryDate, isQrUrl, parseLocationQr } from "./lib";
 import { ProductSearchResults, useBarcodeScanner, useProductSearch } from "./ui";
 import s from "./scanmobile.module.css";
 
-// Mobile scan flow. One scanner, no modes: pick a location, then scan. Each scan
-// files to that location — a lot not yet on the shelf is received, a lot already
-// on file is confirmed present (the backend infers which; the post-scan drawer
-// labels it). Running low? That's the reorder scanner at /app/scan, reached from
-// the reorder list — a separate surface, not a mode here. Desktop keeps its
-// two-column layout in scansessions.jsx; this module is the phone surface those
-// views hand off to.
+// Mobile scan flows. The launch scanner is scan-to-reorder-list: no location
+// picker and no evidence writes. The older shelf-audit camera remains here for
+// dormant desktop/location surfaces, but mobile app entry points use
+// MobileReorderScan below.
 
 const TYPE_META = {
   operatory: { icon: "icon-dental-chair", tint: s.tBlue },
@@ -115,69 +112,11 @@ function AccountMenu({ account, onSignOut, onNavigate }) {
   );
 }
 
-// ── Screens 1 + 2: Start scan / Choose location ──────────────────────
+// ── Mobile scanner home ───────────────────────────────────────────────
 
 export function MobileScanStart({
-  loading, locations, starting, startLocationId, needsAttention,
   onStart, onNavigate, account, onSignOut,
 }) {
-  // "home" | "choose-location"
-  const [step, setStep] = useState("home");
-
-  // Deep-link from a printed location QR: the URL carries the location id, so
-  // the flow starts scoped to that one location (no home, no location picker).
-  const scopedLocation = useMemo(
-    () => (startLocationId ? (locations || []).find((l) => l.id === startLocationId) : null),
-    [startLocationId, locations],
-  );
-  // Scanning a label drops straight into the camera: auto-start scanning for that
-  // location. Fire once.
-  const autoStarted = useRef(false);
-  useEffect(() => {
-    if (autoStarted.current) return;
-    if (startLocationId && scopedLocation) {
-      autoStarted.current = true;
-      onStart(scopedLocation);
-    }
-  }, [startLocationId, scopedLocation, onStart]);
-
-  const attnItems = needsAttention?.items || 0;
-  const attnLocs  = needsAttention?.locations || 0;
-
-  // ── Screen: deep-link from a printed QR — auto-starting into the camera ──
-  // Hold on a quiet loading screen while the shelf-audit session is created and
-  // we navigate into the scanner. A stale/deleted location id falls through to
-  // the normal start screen rather than dead-ending.
-  if (startLocationId && (scopedLocation || loading)) {
-    return (
-      <div className={s.screen}>
-        <div className={`${s.body} ${s.bodyTop}`}>
-          <div className={s.emptyNote}>{scopedLocation ? "Starting scan…" : "Loading…"}</div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Screen: choose location, then straight into the scanner ─────────
-  // No scan "mode" to pick first — scanning is scoped to one location, so the
-  // location is the first (and only) thing to choose before the camera opens.
-  if (step === "choose-location") {
-    return (
-      <MobileScanLocationGate
-        locations={locations}
-        starting={starting}
-        onPick={(loc) => onStart(loc)}
-        onReorder={() => onNavigate?.("/app/scan")}
-        onBack={() => setStep("home")}
-        onManage={() => onNavigate?.("/app/locations")}
-      />
-    );
-  }
-
-  // ── Screen: home ────────────────────────────────────────────────────
-  // A slim app bar carries the brand and the account menu — phones have no nav
-  // rail, so this is where identity and sign-out live. The H1 below is still the
-  // screen title.
   return (
     <div className={s.screen}>
       <header className={s.appbar}>
@@ -193,80 +132,24 @@ export function MobileScanStart({
       <div className={s.body}>
         <div className={s.intro}>
           <h1 className={s.h1}>Start scanning</h1>
-          <p className={s.sub}>Pick a location and scan its shelves — every scan is saved as you go.</p>
+          <p className={s.sub}>Scan a barcode to identify the product and add it to your reorder list.</p>
         </div>
 
-        {attnItems > 0 && (
-          <button type="button" className={s.attnCard} onClick={() => onNavigate?.("/app/needs-attention")}>
-            <span className={s.attnIcon}><Icon name="icon-alert-triangle" /></span>
-            <span className={s.attnBody}>
-              <span className={s.attnTitle}>{attnItems} item{attnItems === 1 ? "" : "s"} need{attnItems === 1 ? "s" : ""} attention</span>
-              <span className={s.attnSub}>Across {attnLocs} location{attnLocs === 1 ? "" : "s"} · expiring, low, or missing lot/expiry</span>
+        <div className={s.actionList}>
+          <button type="button" className={s.actionRow} onClick={() => onStart?.()}>
+            <span className={s.actionIcon}><Icon name="icon-scan" /></span>
+            <span className={s.actionText}>
+              <span className={s.actionTitle}>Start scanning</span>
+              <span className={s.actionSub}>Recognized products go straight onto the reorder list</span>
             </span>
-            <span className={s.attnChevron}><Icon name="icon-chevron-right" /></span>
+            <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
           </button>
-        )}
+        </div>
 
-        {loading ? (
-          <div className={s.emptyNote}>Loading…</div>
-        ) : (
-          <>
-            <div className={s.actionList}>
-              <button type="button" className={s.actionRow} onClick={() => setStep("choose-location")}>
-                <span className={s.actionIcon}><Icon name="icon-plus" /></span>
-                <span className={s.actionText}>
-                  <span className={s.actionTitle}>Scan a location</span>
-                  <span className={s.actionSub}>Pick a location and scan its shelves</span>
-                </span>
-                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
-              </button>
-            </div>
-
-            <div className={s.assurance}>
-              <Icon name="icon-shield-check" />
-              Exact matches land straight on the location; anything else waits in Needs Attention.
-            </div>
-
-            {/* On-site hub: the surfaces that matter while scanning. Full
-                management (catalog, reports, savings, evidence editing) lives
-                on desktop, so it's deliberately not listed here. */}
-            <div className={s.sectionLabel}>On-site</div>
-            <div className={s.actionList}>
-              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/locations")}>
-                <span className={s.actionIcon}><Icon name="icon-map-pin" /></span>
-                <span className={s.actionText}>
-                  <span className={s.actionTitle}>Locations</span>
-                  <span className={s.actionSub}>Browse and scan any location</span>
-                </span>
-                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
-              </button>
-              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/needs-attention")}>
-                <span className={s.actionIcon}><Icon name="icon-alert-triangle" /></span>
-                <span className={s.actionText}>
-                  <span className={s.actionTitle}>Needs attention</span>
-                  <span className={s.actionSub}>Expiring, low, or missing lot/expiry</span>
-                </span>
-                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
-              </button>
-              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/reorder-list")}>
-                <span className={s.actionIcon}><Icon name="icon-cart" /></span>
-                <span className={s.actionText}>
-                  <span className={s.actionTitle}>Reorder list</span>
-                  <span className={s.actionSub}>What you&rsquo;re restocking</span>
-                </span>
-                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
-              </button>
-              <button type="button" className={s.actionRow} onClick={() => onNavigate?.("/app/evidence/viewer")}>
-                <span className={s.actionIcon}><Icon name="icon-shield-check" /></span>
-                <span className={s.actionText}>
-                  <span className={s.actionTitle}>On-site evidence</span>
-                  <span className={s.actionSub}>Show filed evidence to an auditor</span>
-                </span>
-                <span className={s.actionChevron}><Icon name="icon-chevron-right" /></span>
-              </button>
-            </div>
-          </>
-        )}
+        <div className={s.assurance}>
+          <Icon name="icon-cart" />
+          Lot, expiry, and quantity stay on the reorder line for review.
+        </div>
       </div>
     </div>
   );

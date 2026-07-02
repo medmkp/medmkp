@@ -1,0 +1,6 @@
+[
+  {
+    "method": "GET",
+    "url": "http://localhost:3030/api/products/search?barcode=743842007546&limit=1"
+  }
+]
