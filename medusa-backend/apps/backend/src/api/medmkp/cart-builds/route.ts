@@ -1,7 +1,7 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../modules/medmkp"
 import type MedMKPModuleService from "../../../modules/medmkp/service"
-import { resolvePracticeId } from "../../../utils/practice"
+import { assertEntitled, resolvePracticeId } from "../../../utils/practice"
 import { encryptSecret, maskHint } from "../../../utils/secret-vault"
 
 const MAX_LINES = 60
@@ -31,6 +31,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     res.json({ jobs: [] })
     return
   }
+  if (!(await assertEntitled(req, res))) return
+
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
   const filter: Record<string, unknown> = { practice_id: practiceId }
   const id = (req.query.id as string) || ""
@@ -66,6 +68,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     res.status(404).json({ error: "No practice linked to this account." })
     return
   }
+  if (!(await assertEntitled(req, res))) return
 
   const body = (req.body ?? {}) as EnqueueBody
   const supplierId = (body.supplier_id ?? "").trim()
