@@ -18,46 +18,59 @@ function latestSnapshotsByProduct(snapshots: Awaited<ReturnType<MedMKPModuleServ
   }, new Map<string, (typeof snapshots)[number]>())
 }
 
+// Paged supplier-product inspector. This used to load the ENTIRE catalog —
+// every supplier product, every price snapshot, and every canonical match
+// (~1.4M rows) — to filter and join in memory, which allocates far more than
+// the V8 heap on any instance size we run: a single request reliably OOM'd
+// (exit 134) the production backend. Filter and page in the database instead,
+// and hydrate snapshots/matches for just the returned page.
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const medmkp = req.scope.resolve<MedMKPModuleService>(MEDMKP_MODULE)
   const url = new URL(req.url, "http://localhost")
   const supplierId = url.searchParams.get("supplier_id")
   const sourceCatalog = url.searchParams.get("source_catalog")
+  const limitParam = Number(url.searchParams.get("limit"))
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 50
+  const offsetParam = Number(url.searchParams.get("offset"))
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0
 
-  const [products, suppliers, priceSnapshots, matches] = await Promise.all([
-    medmkp.listSupplierProducts(),
-    medmkp.listSuppliers(),
-    medmkp.listSupplierPriceSnapshots(),
-    medmkp.listCanonicalProductMatches(),
-  ])
-  const latestPrices = latestSnapshotsByProduct(priceSnapshots)
+  const filters: Record<string, unknown> = {}
+  if (supplierId) {
+    filters.supplier_id = supplierId
+  }
+  if (sourceCatalog) {
+    filters.source_catalog = sourceCatalog
+  }
 
-  const filteredProducts = products.filter((product) => {
-    if (supplierId && product.supplier_id !== supplierId) {
-      return false
-    }
-
-    if (sourceCatalog && product.source_catalog !== sourceCatalog) {
-      return false
-    }
-
-    return true
+  const [products, count] = await medmkp.listAndCountSupplierProducts(filters, {
+    take: limit,
+    skip: offset,
   })
 
-  res.json({
-    count: filteredProducts.length,
-    supplier_products: filteredProducts.map((product) => {
-      const latest_price = latestPrices.get(product.id)
-      const match = matches.find(
-        (candidate) => candidate.supplier_product_id === product.id
-      )
+  const productIds = products.map((product) => product.id)
+  const [suppliers, priceSnapshots, matches] = productIds.length
+    ? await Promise.all([
+        medmkp.listSuppliers(),
+        medmkp.listSupplierPriceSnapshots({ supplier_product_id: productIds }),
+        medmkp.listCanonicalProductMatches({ supplier_product_id: productIds }),
+      ])
+    : [[], [], []]
+  const latestPrices = latestSnapshotsByProduct(priceSnapshots)
+  const matchByProduct = new Map<string, (typeof matches)[number]>()
+  for (const match of matches) {
+    if (!matchByProduct.has(match.supplier_product_id)) {
+      matchByProduct.set(match.supplier_product_id, match)
+    }
+  }
 
-      return {
-        ...product,
-        supplier: suppliers.find((supplier) => supplier.id === product.supplier_id),
-        latest_price,
-        canonical_match: match,
-      }
-    }),
+  res.json({
+    count,
+    supplier_products: products.map((product) => ({
+      ...product,
+      supplier: suppliers.find((supplier) => supplier.id === product.supplier_id),
+      latest_price: latestPrices.get(product.id),
+      canonical_match: matchByProduct.get(product.id),
+    })),
   })
 }
