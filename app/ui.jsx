@@ -390,14 +390,37 @@ export function ScanResultCard({ result, className = "", onClear, onEnterManuall
 // review button) drops back to the reorder list to adjust quantities.
 
 export function QtyStepper({ qty, setQty }) {
+  // Local text mirror of the field so the buyer can clear it mid-edit and retype.
+  // Clamping the empty string straight to 1 (the old onChange) made the field
+  // impossible to clear: it snapped back to "1", so typing a fresh number
+  // appended to it (clear → "1", type "6" → "16"). The parent `qty` stays a
+  // valid number ≥ 1 at all times for the price math; the draft carries the
+  // transient empty/partial state and blur backfills 1 if left blank.
+  const [draft, setDraft] = useState(String(qty));
+  useEffect(() => { setDraft(String(qty)); }, [qty]);
+
   return (
     <div className="pdp-stepper">
       <button type="button" onClick={() => setQty((value) => Math.max(1, value - 1))} aria-label="Decrease quantity">&minus;</button>
       <input
         type="number"
         min="1"
-        value={qty}
-        onChange={(event) => setQty(Math.max(1, Number(event.target.value) || 1))}
+        value={draft}
+        onChange={(event) => {
+          const text = event.target.value;
+          setDraft(text);
+          // Move the committed quantity for any real number; leave it untouched
+          // while the field is transiently empty (or a lone "-"/"0") so the buyer
+          // can finish typing.
+          const next = Math.floor(Number(text));
+          if (text !== "" && Number.isFinite(next) && next >= 1) setQty(next);
+        }}
+        onBlur={() => {
+          const next = Math.floor(Number(draft));
+          const clamped = Number.isFinite(next) && next >= 1 ? next : 1;
+          setQty(clamped);
+          setDraft(String(clamped));
+        }}
         aria-label="Quantity"
       />
       <button type="button" onClick={() => setQty((value) => value + 1)} aria-label="Increase quantity">+</button>
