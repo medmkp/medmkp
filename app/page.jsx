@@ -14,7 +14,7 @@ import { getScanAudioCtx, loadMatchChime, playMatchChime, vibrateNoMatch } from 
 import { EvidenceView, EvidenceBinderView, EvidenceMatchReview, RedlineView } from "./evidence";
 import { EvidenceMobileViewer } from "./evidenceviewer";
 import { ReportsView } from "./reports";
-import { NeedsAttentionView, NEEDS_ATTENTION_BADGE } from "./needsattention";
+import { NeedsAttentionView } from "./needsattention";
 import { AboutPage, ForgotPasswordPage, LoggedOutLanding, LoginPage, PricingPage, PublicProductView, PublicScanView, ResetPasswordPage, SampleReorderList, SignupPage } from "./marketing";
 import { CartBuilderModal, ProcurementPlanView, ReorderHistoryDetail, ReorderHistoryView, SupplierHandoffView } from "./procurement";
 import { CurrentReorderList, MobileItemDetail, SavingsView } from "./reorder";
@@ -66,6 +66,8 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  // Open-issue count for the Needs Attention nav badge (null = unknown → no badge).
+  const [naCount, setNaCount] = useState(null);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -171,6 +173,16 @@ export default function Home() {
     setBuyingPrefs(activeCount ? { ...DEFAULT_BUYING_PREFS, ...(saved.buyingPrefs || {}) } : savedDefaults);
     if (activeCount) setHasUploadedInvoice(true);
   };
+
+  // Keep the Needs Attention nav badge live with the real open-issue count.
+  useEffect(() => {
+    if (!isLoggedIn) { setNaCount(null); return undefined; }
+    let alive = true;
+    traceApi.getNeedsAttention()
+      .then((res) => { if (alive) setNaCount(res?.stats?.total ?? 0); })
+      .catch(() => { if (alive) setNaCount(null); });
+    return () => { alive = false; };
+  }, [isLoggedIn]);
 
   // Hydrate from localStorage first for an instant paint; the per-practice
   // server store (loaded below once auth is known) takes over for cross-device
@@ -1594,7 +1606,7 @@ export default function Home() {
   // but disabled until their phase lands. Catalog + reorder history stay live so nothing
   // from the old IA becomes unreachable (Savings is kept but demoted).
   const navItems = [
-    ["home", "icon-home", "Needs Attention", false, NEEDS_ATTENTION_BADGE],
+    ["home", "icon-home", "Needs Attention", false, naCount],
     ["reorderList", "icon-cart", "Reorder list"],
     ["locations", "icon-map-pin", "Locations"],
     ["savings", "icon-dollar-circle", "Savings"],
