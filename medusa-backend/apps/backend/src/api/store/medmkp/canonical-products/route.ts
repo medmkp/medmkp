@@ -191,6 +191,24 @@ type CategoryListResult = { count: number; canonical_products: CategoryListItem[
 // category (~15s) should be paid rarely. The Vercel edge serves stale-while-
 // revalidate on top, so this is just the background-revalidation cost.
 const CATEGORY_LIST_CACHE_TTL_MS = 15 * 60 * 1000
+// Cache keys include q/limit/offset, so a crawler paging through the catalog
+// (or infinite scroll) mints unbounded distinct keys — and expired entries were
+// never removed, only skipped on read. Evict oldest-first past a cap so the
+// cache can't ratchet the heap up on an instance that runs close to V8's limit.
+const LIST_CACHE_MAX_ENTRIES = 500
+function cacheListResult(
+  cache: Map<string, { loadedAt: number; result: CategoryListResult }>,
+  key: string,
+  result: CategoryListResult
+) {
+  if (!cache.has(key) && cache.size >= LIST_CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) {
+      cache.delete(oldest)
+    }
+  }
+  cache.set(key, { loadedAt: Date.now(), result })
+}
 const categoryListCache = new Map<string, { loadedAt: number; result: CategoryListResult }>()
 const categoryListPromises = new Map<string, Promise<CategoryListResult>>()
 
@@ -416,7 +434,7 @@ async function listCategoryProducts(
 
   try {
     const result = await promise
-    categoryListCache.set(key, { loadedAt: Date.now(), result })
+    cacheListResult(categoryListCache, key, result)
     return result
   } finally {
     categoryListPromises.delete(key)
@@ -494,7 +512,7 @@ async function listSupplierProducts(
 
   try {
     const result = await promise
-    supplierListCache.set(key, { loadedAt: Date.now(), result })
+    cacheListResult(supplierListCache, key, result)
     return result
   } finally {
     supplierListPromises.delete(key)
