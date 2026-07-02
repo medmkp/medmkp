@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogoMark, Icon, QrScanGlyph } from "./icons";
-import { formatExpiryDate, isQrUrl, parseLocationQr } from "./lib";
+import { formatExpiryDate, isQrUrl, money, parseLocationQr } from "./lib";
 import { ProductSearchResults, useBarcodeScanner, useProductSearch } from "./ui";
 import s from "./scanmobile.module.css";
 
@@ -515,7 +515,7 @@ export function MobileScanSession({
 
 export function MobileReorderScan({
   active = true, scanResult, scanCount = 0,
-  onScan, onClearScanResult, onApplyDetails, onSearchAdd, onCaptureLabel, onReview, onBack,
+  onScan, onClearScanResult, onApplyDetails, onSearchAdd, onCaptureLabel, onViewProduct, onReview, onBack,
 }) {
   const [sheet, setSheet] = useState(null); // manual (Enter code)
   const [captured, setCaptured] = useState(false);
@@ -648,6 +648,7 @@ export function MobileReorderScan({
             onApplyDetails?.(scanResult.item?.id, body);
             onClearScanResult?.();
           }}
+          onViewProduct={onViewProduct}
         />
       )}
 
@@ -838,29 +839,29 @@ function UnmatchedScanSheet({ onCaptureLabel, onSearch, onSkip }) {
   );
 }
 
-// Post-scan drawer for /app/scan: a compact, shallow sheet (≤ 1/3 of the screen)
-// showing only what was scanned — lot, expiry, location, scanned time. The
-// captured fields sit in a horizontal swipe strip so the sheet stays short even
-// when they don't all fit across; swipe right to reach the later fields. Lot and
-// expiry pre-fill from the GS1/HIBC data decoded off the barcode. Qty is set back
-// on the reorder list, not here.
+// Post-scan drawer for /app/scan and the public scanner: a compact frosted
+// sheet (≈ 2/5 of the screen) over the LIVE camera that leads with the answer —
+// the best supplier price for the item just scanned — beside a condensed
+// expiry / traceability card. Lot and expiry stay editable in place (tap the
+// value); both pre-fill from the GS1/HIBC data decoded off the barcode. Qty is
+// set back on the reorder list, not here.
 //
 // There are no confirm / undo buttons: the item is already on the reorder list
-// (added the moment it was scanned), so this drawer only captures lot / expiry /
-// location. It floats over a LIVE camera and doesn't block it: the next item can
-// be scanned right over the drawer (the new scan replaces it). Flicking the grip
-// down — or tapping it — dismisses, but that's optional; scanning the next item
-// is enough. Whatever's captured is persisted when the drawer is replaced or
-// dismissed, so a manually typed lot/expiry is never lost.
+// (added the moment it was scanned), so this drawer only captures details.
+// Scanning the next item replaces it (the keyed remount persists any edits);
+// Continue scanning or flicking the grip down dismisses it explicitly. Tapping
+// the product header ("N matches") opens the full supplier-price comparison.
 function ReorderScanSheet({ result, onPersist, onDismiss, onViewProduct }) {
   const item = result.item || {};
   const matched = result.status !== "Not found";
-  // When a match has a canonical handle and the host wants it (logged-out
-  // scanner), the product block becomes a tap target into the full supplier-
-  // price comparison. Logged-in passes no onViewProduct, so it stays static.
+  // When a match has a canonical handle and the host wants it, the product
+  // header becomes a tap target into the full supplier-price comparison.
   const handle = item.canonicalHandle || "";
   const supplierCount = new Set((item.offers || []).map((o) => o?.supplier).filter(Boolean)).size;
   const canView = matched && typeof onViewProduct === "function" && Boolean(handle);
+  // The best offer the catalog lookup attached — the immediate "what should I
+  // pay" answer. A price of 0 means no purchasable offer (price-gated supplier).
+  const best = item.bestOffer && item.bestOffer.price > 0 ? item.bestOffer : null;
   const initialLot = item.lot || "";
   const initialExp = item.expirationDate ? String(item.expirationDate).slice(0, 10) : "";
   const [lot, setLot] = useState(initialLot);
@@ -911,10 +912,34 @@ function ReorderScanSheet({ result, onPersist, onDismiss, onViewProduct }) {
   const name = item.product || item.canonicalName || item.extractedFrom || item.sku || "Unidentified item";
   const scannedAt = formatScanTime(item.updatedAt);
 
+  const head = (
+    <>
+      <span className={s.scanThumb}>
+        {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <Icon name="icon-package" />}
+      </span>
+      <div className={s.scanHeadInfo}>
+        <span className={s.scanName}>{name}</span>
+        {item.sku && <span className={s.modeSheetSku}>SKU: {item.sku}</span>}
+      </div>
+      <div className={s.scanHeadRight}>
+        <span className={`${s.badge} ${matched ? s.badgeGreen : s.badgeAmber}`}>
+          <Icon name={matched ? "icon-check-circle" : "icon-clock"} />
+          {matched ? "Exact" : "Review"}
+        </span>
+        {canView && (
+          <span className={s.scanMatches}>
+            {supplierCount > 0 ? `${supplierCount} match${supplierCount === 1 ? "" : "es"}` : "View product"}
+            <Icon name="icon-chevron-right" />
+          </span>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className={`${s.modeSheet} ${s.modeSheetLive}`}>
       <div
-        className={`${s.modeSheetPanel} ${s.reorderPanel}`}
+        className={`${s.modeSheetPanel} ${s.scanPanel}`}
         style={{ transform: dragY ? `translateY(${dragY}px)` : undefined, transition: dragging.current ? "none" : "transform .2s ease" }}
       >
         <button
@@ -928,55 +953,41 @@ function ReorderScanSheet({ result, onPersist, onDismiss, onViewProduct }) {
         >
           <span className={s.modeSheetGrip} aria-hidden="true" />
         </button>
-        {(() => {
-          const inner = (
-            <>
-              <span className={s.modeSheetThumb}>
-                {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <Icon name="icon-package" />}
-              </span>
-              <div className={s.modeSheetProductInfo}>
-                <span className={s.modeSheetProductName}>
-                  <span className={s.modeSheetProductNameText}>{name}</span>
-                </span>
-                {item.sku && <span className={s.modeSheetSku}>SKU: {item.sku}</span>}
-                <span className={`${s.badge} ${matched ? s.badgeGreen : s.badgeAmber}`}>
-                  <Icon name={matched ? "icon-check-circle" : "icon-clock"} />
-                  {matched ? "Exact match" : "Needs review"}
-                </span>
-                {canView && (
-                  <span className={s.modeSheetCompare}>
-                    {supplierCount >= 2 ? `Tap to compare ${supplierCount} supplier prices` : "Tap to see supplier prices"}
-                  </span>
-                )}
-              </div>
-              {canView && <span className={s.modeSheetViewChevron}><Icon name="icon-chevron-right" /></span>}
-            </>
-          );
-          return canView
-            ? (
-              <button
-                type="button"
-                className={`${s.modeSheetProduct} ${s.modeSheetProductTap}`}
-                onClick={() => onViewProduct(handle)}
-                aria-label="See all supplier prices for this product"
-              >
-                {inner}
-              </button>
-            )
-            : <div className={s.modeSheetProduct}>{inner}</div>;
-        })()}
 
-        <div className={s.reorderStrip}>
-          <div className={s.reorderField}>
-            <span className={s.reorderFieldLabel}><Icon name="icon-file-text" /> Lot number</span>
-            <div className={s.reorderFieldControl}>
-              <input className={s.reorderFieldInput} value={lot} onChange={(e) => setLot(e.target.value)} placeholder="e.g. A219" />
-            </div>
+        {canView
+          ? (
+            <button
+              type="button"
+              className={`${s.scanHead} ${s.scanHeadTap}`}
+              onClick={() => onViewProduct(handle)}
+              aria-label="See all supplier prices for this product"
+            >
+              {head}
+            </button>
+          )
+          : <div className={s.scanHead}>{head}</div>}
+
+        <div className={s.scanCards}>
+          <div className={s.scanCard}>
+            <span className={s.scanKicker}>Recommended supplier</span>
+            {best ? (
+              <>
+                <span className={s.scanPrice}>{money.format(best.price)}</span>
+                <span className={s.scanSupplier}>{best.supplier}</span>
+                {best.perUnit != null && (
+                  <span className={s.scanCardSub}>{money.format(best.perUnit)} / {best.baseUnit || item.unit || "ea"}</span>
+                )}
+              </>
+            ) : (
+              <span className={s.scanNoPrice}>No supplier price yet</span>
+            )}
           </div>
-          <div className={s.reorderField}>
-            <span className={s.reorderFieldLabel}><Icon name="icon-calendar" /> Expiration date</span>
-            <div className={s.reorderFieldControl}>
-              <span className={s.reorderFieldText}>{exp ? formatExpiryDate(exp) : "Select date"}</span>
+          <div className={s.scanCard}>
+            <span className={s.scanCardLabel}><Icon name="icon-calendar" /> Expires</span>
+            <div className={s.scanExpiryWrap}>
+              <span className={`${s.scanExpiry} ${exp ? "" : s.scanExpiryEmpty}`}>
+                {exp ? formatShortDate(exp) : "Add date"}
+              </span>
               <input
                 type="date"
                 className={s.dateOverlay}
@@ -985,14 +996,26 @@ function ReorderScanSheet({ result, onPersist, onDismiss, onViewProduct }) {
                 aria-label="Expiration date"
               />
             </div>
-          </div>
-          <div className={s.reorderField}>
-            <span className={s.reorderFieldLabel}><Icon name="icon-clock" /> Last verified</span>
-            <div className={s.reorderFieldControl}>
-              <span className={s.reorderFieldText}>{scannedAt}</span>
-            </div>
+            {exp && <span className={s.scanCardSub}>{formatTimeLeft(exp)}</span>}
+            <span className={s.scanCardDivider} aria-hidden="true" />
+            <span className={s.scanCardLabel}><Icon name="icon-shield-check" /> Traceability</span>
+            <label className={s.scanLotRow}>
+              Lot
+              <input
+                className={s.scanLotInput}
+                value={lot}
+                onChange={(e) => setLot(e.target.value)}
+                placeholder="Add"
+                aria-label="Lot number"
+              />
+            </label>
+            <span className={s.scanCardSub}>Scanned {scannedAt}</span>
           </div>
         </div>
+
+        <button type="button" className={s.scanContinue} onClick={dismiss}>
+          <QrScanGlyph className={s.scanContinueGlyph} /> Continue scanning
+        </button>
       </div>
     </div>
   );
@@ -1272,6 +1295,30 @@ function formatLongDate(iso) {
   const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
   if (!y || !m || !d) return String(iso);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+// "2028-12-04" -> "Dec 4, 2028" for the condensed expiry card. Built from parts
+// so a YYYY-MM-DD string is read as a local date (see formatLongDate).
+function formatShortDate(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return String(iso);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// Compact time-until-expiry under the expiry date: "2y 11mo left", "8mo left",
+// "12d left", "Expires today", or "Expired".
+function formatTimeLeft(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((new Date(y, m - 1, d) - today) / 86_400_000);
+  if (days < 0) return "Expired";
+  if (days === 0) return "Expires today";
+  const months = Math.floor(days / 30.44);
+  if (months >= 12) return `${Math.floor(months / 12)}y ${months % 12}mo left`;
+  if (months >= 1) return `${months}mo left`;
+  return `${days}d left`;
 }
 
 // When the item was scanned, for the post-scan drawer's read-only "Last verified"
