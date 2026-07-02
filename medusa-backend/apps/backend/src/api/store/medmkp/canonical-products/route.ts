@@ -449,7 +449,6 @@ async function querySupplierProducts(
     SELECT
       l.grp AS id, l.variant_count, l.family_id, l.family_handle, l.family_name,
       l.any_handle, l.any_name, l.any_category,
-      l.variant_count AS offer_count,
       l.price_cents AS best_price, l.unit_price_cents AS best_unit_price,
       l.best_sp_id,
       sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
@@ -469,7 +468,32 @@ async function querySupplierProducts(
     [supplier, qLike, limit, offset]
   )
 
-  const canonical_products = rows.map(listRowToItem)
+  // offer_count everywhere else means "distinct direct suppliers carrying this
+  // family" (category CTE + PDP). The supplier read model has no such column, so
+  // this listing used to alias the supplier's OWN pack-listing count
+  // (l.variant_count) as offer_count — a single-supplier number masquerading as
+  // "N suppliers" (e.g. net32 claimed 7, Amazon 1, for a family carried by 6
+  // suppliers). Since the read model holds exactly one row per (supplier, family),
+  // the true cross-supplier count is just COUNT(*) per grp; batch it for the page's
+  // families so every surface's "N suppliers" means the same thing.
+  const grps = rows.map((row) => row.id)
+  const offerCountByGrp = new Map<string, number>()
+  if (grps.length) {
+    const { rows: counts } = await pool.query(
+      `SELECT grp, COUNT(*)::int AS offer_count
+       FROM medmkp_supplier_catalog_listing
+       WHERE grp = ANY($1)
+       GROUP BY grp`,
+      [grps]
+    )
+    for (const row of counts) {
+      offerCountByGrp.set(row.grp, Number(row.offer_count))
+    }
+  }
+
+  const canonical_products = rows.map((row) =>
+    listRowToItem({ ...row, offer_count: offerCountByGrp.get(row.id) ?? 1 })
+  )
 
   return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
 }
