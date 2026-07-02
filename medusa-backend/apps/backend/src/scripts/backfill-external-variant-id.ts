@@ -8,12 +8,14 @@ import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 // directly (see ingestion/supplier-catalog.ts). DRY-RUN by default.
 //
 //   npm run catalog:backfill-variant-ids                      # dry-run (no writes)
-//   npm run catalog:backfill-variant-ids -- --commit          # write (local)
-//   ALLOW_REMOTE_DB_DESTRUCTIVE=true npm run catalog:backfill-variant-ids -- --commit   # write (remote)
+//   VARIANT_BACKFILL_COMMIT=true npm run catalog:backfill-variant-ids                   # write (local)
+//   VARIANT_BACKFILL_COMMIT=true ALLOW_REMOTE_DB_DESTRUCTIVE=true npm run catalog:backfill-variant-ids   # write (remote)
 export default async function backfillExternalVariantId({ container, args }: { container: any; args: string[] }) {
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
   const knex = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
-  const commit = (args || []).includes("--commit")
+  // Env var, not argv: `medusa exec` doesn't reliably forward `--` args (same
+  // reason pack:backfill commits via PACK_BACKFILL_COMMIT).
+  const commit = process.env.VARIANT_BACKFILL_COMMIT === "true" || (args || []).includes("--commit")
   const dbUrl = process.env.DATABASE_URL || ""
   const host = (() => { try { return new URL(dbUrl).hostname } catch { return "?" } })()
 
@@ -31,9 +33,11 @@ export default async function backfillExternalVariantId({ container, args }: { c
     // Extract in SQL so raw_text never crosses the wire; the LIKE prefilter
     // keeps each batch to rows that can actually match. Handles both numeric
     // ("variant_id":51368978121025) and string ("variant_id":"513...") forms.
+    // The regex's optional quote is written \\? — knex.raw treats a bare ? as
+    // a bind placeholder and would mangle the pattern.
     const rows: Array<{ id: string; vid: string | null }> = await knex("medmkp_supplier_product")
       .select("id")
-      .select(knex.raw(`substring(raw_text from '"variant_id":\\s*"?([0-9]+)') as vid`))
+      .select(knex.raw(`substring(raw_text from '"variant_id":\\s*"\\?([0-9]+)') as vid`))
       .where("id", ">", lastId)
       .whereNull("external_variant_id")
       .whereNull("deleted_at")
