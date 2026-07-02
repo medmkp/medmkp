@@ -139,6 +139,12 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
   const result = state.result;
   const isAmazon = state.status === "ready" && result?.kind === "amazon-cart";
   const isPrefill = state.status === "ready" && (result?.kind === "shopify-cart" || isAmazon);
+  // Per-item add links (Pearson): each link adds its line to the supplier's
+  // session cart, so "open" here means "add" — same tabs, real cart at the end.
+  const isAddLinks = state.status === "ready" && result?.kind === "add-pages";
+  const addUrlByProduct = isAddLinks
+    ? new Map((result.items || []).map((item) => [item.productUrl, item.addUrl]))
+    : null;
 
   // Best-effort multi-tab open for the page-by-page path. Browsers block all but
   // the first pop-up, so we nudge the buyer to allow them (per-item links below
@@ -146,7 +152,8 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
   function openAll() {
     let opened = 0;
     for (const row of linkable) {
-      if (window.open(row.productUrl, "_blank", "noopener")) opened += 1;
+      const url = addUrlByProduct?.get(row.productUrl) || row.productUrl;
+      if (window.open(url, "_blank", "noopener")) opened += 1;
     }
     if (opened < linkable.length) onToast("Allow pop-ups to open every product page at once");
   }
@@ -159,6 +166,8 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
             <h3 id="cartModalTitle">Build cart · {group.supplier}</h3>
             <p>{isPrefill
               ? "We can prefill this supplier’s cart in one click — quantities included."
+              : isAddLinks
+              ? "Each link below adds its item straight to the supplier’s cart — quantities included."
               : "Open each product on the supplier’s site and add it to your cart."}</p>
           </div>
           <button className="crl-modal-close" type="button" aria-label="Close" onClick={onClose}><Icon name="icon-x" className="button-icon" /></button>
@@ -261,7 +270,21 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
             </div>
           )}
 
-          {(state.status === "error" || (state.status === "ready" && !isPrefill && !result?.stock?.length)) && linkable.length > 0 && (
+          {isAddLinks && (
+            <div className="cart-prefill">
+              <div className="cart-prefill-icon"><Icon name="icon-cart" /></div>
+              <strong>Fill your {group.supplier} cart</strong>
+              <small>{result.count} item{result.count === 1 ? "" : "s"} with quantities — each opened link drops its item into the same {group.supplier} cart.</small>
+              <button className="primary-action compact" type="button" onClick={openAll}>
+                <Icon name="icon-cart" className="button-icon" />Add all {result.count} item{result.count === 1 ? "" : "s"} to cart
+              </button>
+              <a className="crl-ghost-btn" href={result.cartUrl} target="_blank" rel="noreferrer">
+                <Icon name="icon-link" className="button-icon" />View your {group.supplier} cart
+              </a>
+            </div>
+          )}
+
+          {(state.status === "error" || (state.status === "ready" && !isPrefill && !isAddLinks && !result?.stock?.length)) && linkable.length > 0 && (
             <button className="primary-action compact cart-openall" type="button" onClick={openAll}>
               <Icon name="icon-link" className="button-icon" />Open all {linkable.length} product page{linkable.length === 1 ? "" : "s"}
             </button>
@@ -298,6 +321,8 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
                       </button>
                     ) : liveOutOfStock ? (
                       <span className="cart-item-nolink">Unavailable</span>
+                    ) : addUrlByProduct?.get(row.productUrl) ? (
+                      <a className="crl-ghost-btn cart-item-open" href={addUrlByProduct.get(row.productUrl)} target="_blank" rel="noreferrer"><Icon name="icon-cart" className="button-icon" />Add to cart</a>
                     ) : row.productUrl ? (
                       <a className="crl-ghost-btn cart-item-open" href={row.productUrl} target="_blank" rel="noreferrer"><Icon name="icon-link" className="button-icon" />Open</a>
                     ) : (
