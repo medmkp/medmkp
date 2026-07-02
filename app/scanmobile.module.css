@@ -473,6 +473,9 @@
 }
 .camRetry svg { width: 16px; height: 16px; }
 
+/* Glassy translucent band: the header reads as chrome over the live camera
+   (status bar + brand row share one dark frosted strip) instead of floating
+   controls on bare video. */
 .camTop {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -482,6 +485,10 @@
   gap: 10px;
   padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
   z-index: 3;
+  background: rgba(9, 13, 20, 0.42);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .camCircle {
   display: inline-flex;
@@ -580,7 +587,7 @@
    under the header so it survives the post-scan sheet rising underneath it. */
 .contextStrip {
   position: absolute;
-  top: calc(60px + env(safe-area-inset-top));
+  top: calc(74px + env(safe-area-inset-top));
   left: 0; right: 0;
   display: flex;
   flex-direction: column;
@@ -1133,24 +1140,6 @@
 .modeSheetProduct {
   display: flex; align-items: flex-start; gap: 10px;
 }
-/* Logged-out scanner: the product block taps through to the supplier-price
-   comparison. Full-width button reset, with a trailing chevron + compare hint. */
-.modeSheetProductTap {
-  width: 100%; text-align: left; border: 0; background: none;
-  padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent;
-}
-.modeSheetProductTap:active { opacity: 0.7; }
-.modeSheetCompare {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; font-weight: 600; color: var(--blue);
-}
-.modeSheetViewChevron {
-  align-self: center; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--blue-2); color: var(--blue);
-}
-.modeSheetViewChevron svg { width: 16px; height: 16px; }
 .modeSheetThumb {
   width: 44px; height: 44px; border-radius: 8px;
   background: #f3f5f8; display: flex; align-items: center; justify-content: center;
@@ -1272,19 +1261,99 @@
   background: #eef3ff; border: 0; border-radius: 999px; padding: 5px 12px; cursor: pointer;
 }
 
-/* ── Reorder-scan drawer (/app/scan) ────────────────────────────────────
+/* ── Location-scan capture drawer ───────────────────────────────────────
    Compact post-scan sheet, capped near a third of the screen. The captured
    fields sit in a horizontal swipe strip so the sheet stays shallow even when
    they don't all fit across — overrides .modeSheetPanel's tall layout. */
 .reorderPanel { max-height: 34dvh; gap: 12px; }
 
+/* ── Post-scan price drawer (/app/scan + public scan) ───────────────────
+   Price-first frosted sheet: product header (thumb, name, Exact badge, "N
+   matches" tap-through), a two-up card row — recommended supplier price beside
+   condensed expiry / traceability — then a full-width Continue scanning
+   action. Content-sized to roughly 2/5 of the screen; the camera keeps running
+   behind it. */
+.scanPanel { max-height: 58dvh; gap: 12px; border-radius: 22px 22px 0 0; }
+.scanHead { display: flex; align-items: flex-start; gap: 11px; width: 100%; }
+.scanHeadTap {
+  border: 0; background: none; padding: 0; margin: 0;
+  text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.scanHeadTap:active { opacity: 0.7; }
+.scanThumb {
+  width: 56px; height: 56px; border-radius: 12px; flex-shrink: 0; overflow: hidden;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(20, 32, 46, 0.06);
+  display: flex; align-items: center; justify-content: center;
+}
+.scanThumb img { width: 100%; height: 100%; object-fit: contain; }
+.scanThumb svg { width: 24px; height: 24px; color: #8d9aab; }
+.scanHeadInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.scanName {
+  font-size: 15.5px; font-weight: 600; color: var(--ink); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.scanHeadRight { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex-shrink: 0; }
+.scanHeadRight .badge { align-self: flex-end; }
+.scanMatches {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 13px; font-weight: 600; color: var(--blue); white-space: nowrap;
+}
+.scanMatches svg { width: 15px; height: 15px; }
+
+.scanCards { display: grid; grid-template-columns: 1fr 1.08fr; gap: 10px; align-items: stretch; }
+.scanCard {
+  min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  border: 1px solid rgba(20, 32, 46, 0.07); border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  padding: 12px 13px;
+}
+.scanKicker { font-size: 12px; font-weight: 600; color: #0a8553; margin-bottom: 3px; }
+.scanPrice { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); line-height: 1.1; }
+.scanSupplier { font-size: 13.5px; font-weight: 500; color: var(--ink); margin-top: 3px; }
+.scanNoPrice { font-size: 13px; font-weight: 400; color: var(--muted); line-height: 1.4; }
+.scanCardLabel {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; color: var(--muted);
+}
+.scanCardLabel svg { width: 14px; height: 14px; color: var(--blue); }
+.scanExpiryWrap { position: relative; display: flex; align-items: center; }
+.scanExpiry { font-size: 16.5px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.scanExpiryEmpty { color: var(--blue); font-size: 13.5px; font-weight: 500; }
+.scanCardSub { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.scanCardDivider { align-self: stretch; height: 1px; background: rgba(20, 32, 46, 0.08); margin: 7px 0; }
+.scanLotRow {
+  display: flex; align-items: baseline; gap: 5px; width: 100%;
+  font-size: 13px; font-weight: 500; color: var(--ink);
+}
+.scanLotInput {
+  flex: 1; min-width: 0; border: 0; background: transparent; padding: 0;
+  font-size: 13px; font-weight: 500; color: var(--ink); outline: none;
+}
+.scanLotInput::placeholder { color: var(--blue); font-weight: 500; }
+
+.scanContinue {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  height: 52px; flex-shrink: 0;
+  border: 0; border-radius: 14px;
+  background: #2F5BD6; color: #fff;
+  font-size: 16px; font-weight: 600; cursor: pointer;
+}
+.scanContinue:active { background: #2449b3; }
+.scanContinueGlyph { width: 19px; height: 19px; }
+
 /* The matched drawer floats over a LIVE camera: no dimming backdrop, and the
    container lets touches above the panel pass through to the camera so the next
    item can be aimed and scanned without dismissing first. A shadow lifts the
-   panel off the live feed; the panel itself stays interactive. */
+   panel off the live feed; the panel itself stays interactive. Frosted glass —
+   slightly translucent over a blur — so the viewfinder still reads through it. */
 .modeSheetLive { pointer-events: none; background: transparent; }
 .modeSheetLive .modeSheetPanel {
   pointer-events: auto;
+  background: rgba(247, 250, 254, 0.86);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
   box-shadow: 0 -10px 34px rgba(5, 7, 11, 0.32);
 }
 /* Drag handle for flick-down dismiss — full-width hit area, the visual grip
@@ -1353,7 +1422,7 @@
    up, anchored just under the header logo (this scanner has no location strip). */
 .scanAddedBadge {
   position: absolute;
-  top: calc(62px + env(safe-area-inset-top));
+  top: calc(76px + env(safe-area-inset-top));
   left: 50%; transform: translateX(-50%);
   max-width: calc(100vw - 32px);
   display: inline-flex; align-items: center; gap: 6px;

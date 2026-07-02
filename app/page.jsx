@@ -1961,18 +1961,44 @@ export default function Home() {
           {isMobile && MANAGEMENT_VIEWS.has(view) && <DesktopOnlyHint onBack={() => navigate("/app")} />}
           {view === "home" && (
             mobileAddItemRoute ? (
-              <MobileReorderScan
-                active
-                scanResult={scanResult}
-                scanCount={activeDraftItems.length}
-                onScan={handleScanComplete}
-                onClearScanResult={() => setScanResult(null)}
-                onApplyDetails={applyScanDetails}
-                onSearchAdd={addSearchedScanProduct}
-                onCaptureLabel={() => showToast("Label capture is coming soon")}
-                onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
-                onBack={() => { setScanResult(null); navigate("/app/reorder-list"); }}
-              />
+              <>
+                <MobileReorderScan
+                  active
+                  scanResult={scanResult}
+                  scanCount={activeDraftItems.length}
+                  onScan={handleScanComplete}
+                  onClearScanResult={() => setScanResult(null)}
+                  onApplyDetails={applyScanDetails}
+                  onSearchAdd={addSearchedScanProduct}
+                  onCaptureLabel={() => showToast("Label capture is coming soon")}
+                  onViewProduct={() => {
+                    const item = scanResult?.item;
+                    if (!item) return;
+                    const [matchRow] = deriveMatchRows([item], buyingPrefs);
+                    if (matchRow) setScanMatchRow(matchRow);
+                  }}
+                  onReview={() => { setScanResult(null); navigate("/app/reorder-list"); }}
+                  onBack={() => { setScanResult(null); navigate("/app/reorder-list"); }}
+                />
+                {scanMatchRow && (
+                  <div className="scan-match-fs">
+                    <MobileItemDetail
+                      rows={[scanMatchRow]}
+                      row={scanMatchRow}
+                      mode="view"
+                      onClose={() => setScanMatchRow(null)}
+                      onOpenRow={() => {}}
+                      onToast={showToast}
+                      onConfirmMatch={applyMatchDecision}
+                      onLinkProduct={linkProductToItem}
+                      onRemoveItem={removeDraftItem}
+                      onNavigate={(to) => { setScanMatchRow(null); navigate(to); }}
+                      supplierShipping={supplierShipping}
+                      shipToState={me?.practice?.ship_state || ""}
+                    />
+                  </div>
+                )}
+              </>
             ) : isMobile ? (
               // Mobile home (`/app`) = the scanner start screen (scan-first).
               // Locations / Reorder / More are their own routes via the bottom nav;
