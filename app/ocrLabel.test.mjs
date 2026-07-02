@@ -34,7 +34,11 @@ const FIXTURES = {
   // Real dual-PSM OCR (SPARSE) of a rendered fluoride-varnish carton stamped "BEST
   // BY" (not "BEST BEFORE") with a compact MM/YY date. Ground truth: LOT 8842AA,
   // expiry 09/26 → 2026-09-30.
-  "bestByCompactExpiry": "OralGuard Fluoride Varnish\n\nREORDER 5567-A\n\nBEST BY 09/26\n\nLOT 8842AA\n"
+  "bestByCompactExpiry": "OralGuard Fluoride Varnish\n\nREORDER 5567-A\n\nBEST BY 09/26\n\nLOT 8842AA\n",
+  // Real dual-PSM OCR (SPARSE) of a rendered sterilization-pouch label whose expiry
+  // is stamped "EXPIRE DATE" (the bare verb, not EXPIRY/EXPIRES) with a compact
+  // MM/YY date. Ground truth: LOT KX10998, expiry 09/26 → 2026-09-30.
+  "expireDateCompactExpiry": "SafeSeal Sterilization Pouch\n\nEXPIRE DATE 09/26\n\nLOT KX10998\n"
 };
 
 test("reads a bare numeric lot when OCR drops the boxed LOT marker (HS gloves, 24015414)", () => {
@@ -165,6 +169,18 @@ test("expiry: reads the USE BEFORE / BEST BY shelf-life markers (compact MM/YY)"
   // The original spellings still read.
   assert.equal(parseLotExpiry("USE BY 09/26").expiry, "2026-09-30");
   assert.equal(parseLotExpiry("BEST BEFORE 09/26").expiry, "2026-09-30");
+});
+
+test("expiry: reads the EXPIRE / EXPIRED verb forms of the marker (compact MM/YY)", () => {
+  // Imported cartons stamp "EXPIRE DATE …" (bare verb), not EXPIRY/EXPIRES; the
+  // EXP stem must match the "E"/"ED" endings so the compact date reads.
+  const r = parseLotExpiry(FIXTURES.expireDateCompactExpiry);
+  assert.equal(r.lot, "KX10998");
+  assert.equal(r.expiry, "2026-09-30");
+  assert.equal(parseLotExpiry("EXPIRED 09/26").expiry, "2026-09-30");
+  // The already-supported forms are unaffected.
+  assert.equal(parseLotExpiry("EXPIRY 09/26").expiry, "2026-09-30");
+  assert.equal(parseLotExpiry("EXPIRES 09/26").expiry, "2026-09-30");
 });
 
 test("expiry: keyword path is trusted, even when the date is in the past", () => {
