@@ -5,6 +5,7 @@ import { Icon } from "./icons";
 import { CATALOG_RECENT_KEY, availabilityInfo, brandLogoSrc, canonPackUnit, cap, catMoney, compactSizeLabel, formatPackLabel, initials, money, normalizePackText, parseAttributes, supplierLogoSrc, titleCase, variantAxisLabel, variantOptionList } from "./lib";
 import { CatalogSupplierAvatar, QtyStepper } from "./ui";
 import { bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
+import { pickComparables } from "./comparables";
 
 export function SearchResults({ results, query = "", loading, onNavigate }) {
   const headerLabel = loading && !results.length
@@ -1280,27 +1281,21 @@ export function ProductDetail({ handle, onNavigate, onToast, onAddToList, listNa
         setStatus("ready");
 
         // Comparable products: surface same-type substitutes from a different
-        // family. Scope strictly to the product's own category — a substitute is
-        // a same-category product, never a cross-category item. (The old query
-        // fed the family name's first word into a substring search, so a "Halo"
-        // glove matched "Halo"gen bulbs.) The client then drops the current
-        // product and its own family below.
+        // family, found by name similarity (the scanner's substitute scorer;
+        // retrieval=multi so every distinctive word of the name seeds the
+        // candidate pool). The previous source — the category listing — is
+        // ranked cheapest-first over an entire department, so every product in
+        // e.g. Endodontics showed the same three cheapest consumables.
+        // pickComparables keeps same-category priced candidates above a
+        // similarity floor, one per family.
         const base = list[idx];
         const ownFamilyId = familyInfo?.family_id || base.family_id || null;
-        if (base.category) {
-          fetch(`/api/canonical-products?category=${encodeURIComponent(base.category)}&limit=8`)
+        if (base.name) {
+          fetch(`/api/products/search?q=${encodeURIComponent(base.name)}&retrieval=multi&limit=12`)
             .then((response) => response.json())
             .then(({ canonical_products: related }) => {
               if (!live) return;
-              setSubs(
-                (related || [])
-                  .filter(
-                    (entry) =>
-                      entry.handle !== base.handle &&
-                      (!ownFamilyId || entry.family_id !== ownFamilyId)
-                  )
-                  .slice(0, 3)
-              );
+              setSubs(pickComparables(base, ownFamilyId, related));
             })
             .catch(() => live && setSubs([]));
         }
