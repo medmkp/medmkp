@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { mapWithConcurrency, resolveShopifyVariant, shopifyProduct } from "../../../lib/shopify.mjs";
 import { amazonAsin, amazonCartUrl } from "../../../lib/amazon.mjs";
+import { PEARSON_CART_URL, pearsonAddUrl } from "../../../lib/pearson.mjs";
 import { MEDUSA_URL } from "../../../lib/medusaAuth";
 
 // Turn one supplier's order lines into the best available "build cart" target.
@@ -13,6 +14,9 @@ import { MEDUSA_URL } from "../../../lib/medusaAuth";
 //     check, fetched server-side to dodge the browser's CORS block.
 //   • Amazon takes the whole order as GET params on its add-to-cart endpoint
 //     (the buyer may pass through an Amazon sign-in first).
+//   • Pearson's legacy cart adds one item per GET (oadd.asp) — no single
+//     permalink, but each link lands the item in the same session cart, so we
+//     hand back per-item add links plus the cart URL.
 //   • Everyone else (NetSuite, ASP, BigCommerce, …) has no reliable GET-based
 //     cart prefill, so we hand back the product pages for the buyer to open and
 //     add to the supplier's own cart.
@@ -78,6 +82,30 @@ export async function POST(request) {
       url: amazonCartUrl(amazon.map((entry) => ({ asin: entry.asin, qty: entry.item.qty }))),
       count: amazon.length,
       leftovers,
+      stock: [],
+    });
+  }
+
+  // Pearson: one add-to-cart GET per item, all landing in one session cart.
+  const pearson = withUrls
+    .map((item) => ({ item, addUrl: pearsonAddUrl(item.productUrl, item.qty) }))
+    .filter((entry) => entry.addUrl);
+  if (pearson.length) {
+    const leftovers = withUrls
+      .filter((item) => !pearson.some((entry) => entry.item === item))
+      .map((item) => ({ name: item.name || "", qty: item.qty, productUrl: item.productUrl }));
+    return NextResponse.json({
+      kind: "add-pages",
+      cartUrl: PEARSON_CART_URL,
+      items: pearson.map((entry) => ({
+        name: entry.item.name || "",
+        qty: entry.item.qty,
+        productUrl: entry.item.productUrl,
+        addUrl: entry.addUrl,
+      })),
+      count: pearson.length,
+      leftovers,
+      missing: items.length - withUrls.length,
       stock: [],
     });
   }
