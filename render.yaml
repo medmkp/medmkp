@@ -5,7 +5,9 @@ services:
     repo: https://github.com/tracedds/tracedds
     branch: main
     rootDir: medusa-backend/apps/backend
-    plan: starter
+    # Starter (512MB) kept heap-OOMing at runtime even with the admin dashboard
+    # disabled (exit 134 ~4min after boot, Node heap capped at ~256MB default).
+    plan: standard
     buildCommand: npm install --include=dev --no-audit --no-fund --loglevel=info --foreground-scripts && npm run build
     preDeployCommand: npm run db:migrate
     startCommand: npm start
@@ -15,8 +17,8 @@ services:
         value: production
       - key: MEDUSA_ADMIN_ONBOARDING_TYPE
         value: default
-      # Admin dashboard needs ~2GB RAM to build/serve; keep it off this 512MB
-      # Starter instance so `medusa start` doesn't heap-OOM. /admin/* API stays up.
+      # Admin dashboard needs ~2GB RAM to build/serve; keep it disabled until
+      # re-enabling is verified on the 2GB instance. /admin/* API stays up.
       - key: DISABLE_ADMIN
         value: "true"
       - key: DATABASE_URL
