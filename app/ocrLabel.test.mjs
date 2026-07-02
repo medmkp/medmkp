@@ -26,7 +26,23 @@ const FIXTURES = {
   // batch run would, so without a serial-marker exclusion the numeric fallback
   // surfaced it as the lot — a fabricated batch. "Mfg Date 2025-03" is a
   // manufacture date, never an expiry.
-  "deviceSerialNoLot": "DentCure LED\n\nCordless Curing Light\n\nMODEL: DC-800\n\nREF 660360\n\nSN 20451178\n\nMfg Date 2025-03\n\nKerr Corporation Orange, CA USA\n"
+  "deviceSerialNoLot": "DentCure LED\n\nCordless Curing Light\n\nMODEL: DC-800\n\nREF 660360\n\nSN 20451178\n\nMfg Date 2025-03\n\nKerr Corporation Orange, CA USA\n",
+  // Real dual-PSM OCR (SPARSE) of a rendered anesthetic carton whose shelf-life is
+  // stamped "USE BEFORE" (not "USE BY") with a compact MM/YY date. Ground truth by
+  // eye: LOT AB12345, expiry 09/26 → 2026-09-30.
+  "useBeforeCompactExpiry": "ACME Dental Anesthetic\n\nLidocaine HCl 2%\n\nLOT AB12345\n\nUSE BEFORE 09/26\n",
+  // Real dual-PSM OCR (SPARSE) of a rendered fluoride-varnish carton stamped "BEST
+  // BY" (not "BEST BEFORE") with a compact MM/YY date. Ground truth: LOT 8842AA,
+  // expiry 09/26 → 2026-09-30.
+  "bestByCompactExpiry": "OralGuard Fluoride Varnish\n\nREORDER 5567-A\n\nBEST BY 09/26\n\nLOT 8842AA\n",
+  // Real dual-PSM OCR (SPARSE) of a rendered sterilization-pouch label whose expiry
+  // is stamped "EXPIRE DATE" (the bare verb, not EXPIRY/EXPIRES) with a compact
+  // MM/YY date. Ground truth: LOT KX10998, expiry 09/26 → 2026-09-30.
+  "expireDateCompactExpiry": "SafeSeal Sterilization Pouch\n\nEXPIRE DATE 09/26\n\nLOT KX10998\n",
+  // Real dual-PSM OCR (SPARSE) of a rendered sterilization-pouch label whose expiry
+  // is stamped "VALID UNTIL" (the validity-window phrasing) with a compact MM/YY
+  // date. Ground truth: LOT G44821, expiry 09/26 → 2026-09-30.
+  "validUntilCompactExpiry": "SteriPouch Self-Seal\n\nREORDER 1204\n\nVALID UNTIL 09/26\n\nLOT G44821\n"
 };
 
 test("reads a bare numeric lot when OCR drops the boxed LOT marker (HS gloves, 24015414)", () => {
@@ -142,6 +158,45 @@ test("expiry: real bare expiries still read (Pulpdent 2028-02-12, gloves 2029-10
   // the GS1 expiry 2029-10-19 — the latest surviving date wins over a mfg date.
   assert.equal(parseLotExpiry(FIXTURES.pulpdentBoxedLot).expiry, "2028-02-12");
   assert.equal(parseLotExpiry(FIXTURES.glovesNumericNoMarker).expiry, "2029-10-19");
+});
+
+test("expiry: reads the USE BEFORE / BEST BY shelf-life markers (compact MM/YY)", () => {
+  // "USE BEFORE" and "BEST BY" are the everyday phrasings a carton stamps instead
+  // of "USE BY" / "BEST BEFORE"; their compact 2-digit-year date only the keyword
+  // path reads, so the marker must recognize them.
+  const ub = parseLotExpiry(FIXTURES.useBeforeCompactExpiry);
+  assert.equal(ub.lot, "AB12345");
+  assert.equal(ub.expiry, "2026-09-30");
+  const bb = parseLotExpiry(FIXTURES.bestByCompactExpiry);
+  assert.equal(bb.lot, "8842AA");
+  assert.equal(bb.expiry, "2026-09-30");
+  // The original spellings still read.
+  assert.equal(parseLotExpiry("USE BY 09/26").expiry, "2026-09-30");
+  assert.equal(parseLotExpiry("BEST BEFORE 09/26").expiry, "2026-09-30");
+});
+
+test("expiry: reads the EXPIRE / EXPIRED verb forms of the marker (compact MM/YY)", () => {
+  // Imported cartons stamp "EXPIRE DATE …" (bare verb), not EXPIRY/EXPIRES; the
+  // EXP stem must match the "E"/"ED" endings so the compact date reads.
+  const r = parseLotExpiry(FIXTURES.expireDateCompactExpiry);
+  assert.equal(r.lot, "KX10998");
+  assert.equal(r.expiry, "2026-09-30");
+  assert.equal(parseLotExpiry("EXPIRED 09/26").expiry, "2026-09-30");
+  // The already-supported forms are unaffected.
+  assert.equal(parseLotExpiry("EXPIRY 09/26").expiry, "2026-09-30");
+  assert.equal(parseLotExpiry("EXPIRES 09/26").expiry, "2026-09-30");
+});
+
+test("expiry: reads the VALID UNTIL / VALID TO validity-window marker (compact MM/YY)", () => {
+  // Sterilization pouches / imported goods stamp the shelf-life date as "VALID
+  // UNTIL"; the marker must read it, while staying tight enough that a "VALID FOR
+  // 24 MONTHS" (no date) doesn't produce a bogus expiry.
+  const r = parseLotExpiry(FIXTURES.validUntilCompactExpiry);
+  assert.equal(r.lot, "G44821");
+  assert.equal(r.expiry, "2026-09-30");
+  assert.equal(parseLotExpiry("VALID TO 09/26").expiry, "2026-09-30");
+  // A non-date validity phrase must not fabricate an expiry.
+  assert.equal(parseLotExpiry("VALID FOR 24 MONTHS").expiry, undefined);
 });
 
 test("expiry: keyword path is trusted, even when the date is in the past", () => {
