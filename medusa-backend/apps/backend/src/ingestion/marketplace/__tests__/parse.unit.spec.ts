@@ -9,7 +9,7 @@ import {
   titleOverlapConfidence,
 } from "../parse"
 import { ALIBABA_DETAIL_PATTERN } from "../providers/alibaba"
-import { AMAZON_DETAIL_PATTERN } from "../providers/amazon"
+import { AMAZON_DETAIL_PATTERN, amazonTitleFromUrl } from "../providers/amazon"
 
 describe("parseSplitPriceSpans", () => {
   // Amazon's no-JS price markup, split across spans (no clean a-offscreen).
@@ -239,6 +239,49 @@ describe("parseProximityCards (Amazon shape)", () => {
       title: "Prophy Paste Medium Mint 200/Box",
       price_cents: 2795,
     })
+  })
+
+  it("recovers the real name from the /dp/ URL slug when the price link has no title/alt", () => {
+    // The common shape behind the 227 price-named Amazon canonicals: the /dp/
+    // link wraps only the split-span price and carries no title=/alt=, but the
+    // URL slug holds the real product name. Recover it instead of dropping.
+    const priceLinkWithSlug = `
+      <div data-asin="B00Q5EZRJO">
+        <a class="a-link-normal" href="/McKesson-Non-Sterile-Clear-Vinyl-Gloves/dp/B00Q5EZRJO/ref=sr_1_1"><span class="a-price-symbol">$</span><span class="a-price-whole">8<span class="a-price-decimal">.</span></span><span class="a-price-fraction">97</span><span class="a-size-base"> ( $0.09 /count)</span></a>
+      </div>
+    `
+    const results = parseProximityCards(priceLinkWithSlug, baseUrl, {
+      detailUrlPattern: AMAZON_DETAIL_PATTERN,
+      titleFromUrl: amazonTitleFromUrl,
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({
+      title: "McKesson Non Sterile Clear Vinyl Gloves",
+      price_cents: 897,
+    })
+  })
+})
+
+describe("amazonTitleFromUrl", () => {
+  it("turns a /<slug>/dp/<ASIN> URL into a product name", () => {
+    expect(
+      amazonTitleFromUrl(
+        "https://www.amazon.com/BeeSure-BE201-Saliva-Ejectors-Shape/dp/B07D79BWQ6/ref=sr_1_2"
+      )
+    ).toBe("BeeSure BE201 Saliva Ejectors Shape")
+  })
+
+  it("returns undefined for a bare /dp/<ASIN> with no slug", () => {
+    expect(
+      amazonTitleFromUrl("https://www.amazon.com/dp/B07D79BWQ6/ref=sr_1_2")
+    ).toBeUndefined()
+  })
+
+  it("rejects a slug with no real word (all-numeric)", () => {
+    expect(
+      amazonTitleFromUrl("https://www.amazon.com/12345-6789/dp/B07D79BWQ6")
+    ).toBeUndefined()
   })
 })
 

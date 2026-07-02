@@ -1,0 +1,18 @@
+Buyer-visible (priced) Amazon canonical products whose NAME is a captured price
+block, and the real name recovered from the /dp/ URL slug by the shipped
+amazonTitleFromUrl(). All 295 supplier rows (227 distinct canonical products)
+have a recoverable slug; 0 are unrecoverable.
+
+BEFORE (shipped name)                          AFTER (recovered from URL slug)
+---------------------------------------------  ------------------------------------------
+$8.97 $ 8 . 97 ( $0.09 /count) ...          →  McKesson Non Sterile Clear Vinyl Gloves
+$9.43 $ 9 . 43 ( $0.09 /count) ...          →  BeeSure BE201 Saliva Ejectors Shape
+$196.95 $ 196 . 95 ( $0.62 /ounce) ...      →  SUPPLEMENTS 330015 Natural Supplements 20 Pound
+$25.00 $ 25 . 00 ( $3.13 /ounce) ...        →  Maxi cure extra thick Bob Smith
+$12.98 $ 12 . 98 ( $1.85 /ounce) ...        →  EQ6032713 Quik Care Foam Aerosol oz
+$14.14 $ 14 . 14 ( $2.62 /ounce) ...        →  Fixodent Ultra Secure Denture Adhesive
+$9.89 $ 9 . 89 List: $12.99 ...             →  Titan Tools 15200 Precision Oiler
+$44.69 $ 44 . 69 List: $49.95 ...           →  Blazer Stingray Butane Torch Blue
+$7.21 $ 7 . 21 List: $8.38 ...              →  Modeling Wax Bone Color oz
+
+Counts (read-only prod query): distinct supplier rows 295 | recovered 295 | unrecoverable 0
