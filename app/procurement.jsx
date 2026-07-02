@@ -820,10 +820,31 @@ export function ReorderHistoryView({ onOpen, onReopen, onDuplicate, onDelete, ar
 
 export function ReorderHistoryDetail({ id, onBack, archivedLists = [], handoffs = [], onRename, onReopen, onDuplicate, onDelete, onViewHandoff }) {
   const lists = [...archivedLists, ...ARCHIVED_LISTS];
-  const list = lists.find((entry) => entry.id === id) || lists[0];
-  const rows = list?.rows || [];
+  const list = lists.find((entry) => entry.id === id);
+  // No silent fallback to another list: now that deletions propagate across
+  // devices, the entry being viewed can vanish mid-view (or its URL can be
+  // revisited later) — rendering a different list here would wire the rename
+  // input and Delete button to the wrong entry.
+  if (!list) {
+    return (
+      <div className="crl">
+        <header className="crl-header">
+          <div className="crl-title">
+            <button className="history-back" type="button" onClick={onBack}><Icon name="icon-chevron-left" className="button-icon" />Reorder history</button>
+            <h2>List not found</h2>
+          </div>
+        </header>
+        <p className="history-detail-note">This saved list is no longer available — it may have been deleted or reopened as the current list on another device.</p>
+      </div>
+    );
+  }
+  const rows = list.rows || [];
   // Renaming only persists for real archived entries (not the demo samples).
   const isReal = archivedLists.some((entry) => entry.id === list.id);
+  // Reopen/duplicate need the raw source items; demo samples (and lists saved
+  // before the snapshot carried them) can't offer either — same gating as the
+  // history rows, so the page never promises an action that dead-ends.
+  const canRestore = isReal && Boolean(list.sourceItems?.length);
   const linkedHandoff = list.handoffId ? handoffs.find((h) => h.id === list.handoffId) : null;
   return (
     <div className="crl">
@@ -884,12 +905,14 @@ export function ReorderHistoryDetail({ id, onBack, archivedLists = [], handoffs 
           })}
         </div>
       )}
-      <p className="history-detail-note">This saved list is read-only. {isReal ? "Reopen it to keep editing as your current list, or duplicate it" : "Duplicate it"} to start a fresh copy{linkedHandoff ? ", or revisit the supplier handoff" : ""}.</p>
+      <p className="history-detail-note">This saved list is read-only.{canRestore ? " Reopen it to keep editing as your current list, or duplicate it to start a fresh copy" : ""}{linkedHandoff ? `${canRestore ? ", or" : " You can"} revisit the supplier handoff` : ""}{canRestore || linkedHandoff ? "." : ""}</p>
       <div className="history-detail-actions">
-        {isReal && (
-          <button className="primary-action compact" type="button" onClick={() => onReopen?.(list)}><Icon name="icon-edit" className="button-icon" />Reopen as current list</button>
+        {canRestore && (
+          <>
+            <button className="primary-action compact" type="button" onClick={() => onReopen?.(list)}><Icon name="icon-edit" className="button-icon" />Reopen as current list</button>
+            <button className="secondary-action compact" type="button" onClick={() => onDuplicate?.(list)}><Icon name="icon-file-plus" className="button-icon" />Duplicate to new list</button>
+          </>
         )}
-        <button className="secondary-action compact" type="button" onClick={() => onDuplicate?.(list)}><Icon name="icon-file-plus" className="button-icon" />Duplicate to new list</button>
         {linkedHandoff && (
           <button className="secondary-action compact" type="button" onClick={() => onViewHandoff?.(list.handoffId)}><Icon name="icon-handshake" className="button-icon" />View handoff</button>
         )}

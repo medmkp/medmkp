@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { CatalogCategoryView, CatalogSearchView, CatalogSupplierView, CatalogView, ProductDetail, SearchSuggestions } from "./catalog";
 import { suggestSearchTerms } from "./searchSuggestions";
 import { BrandMark, Icon, IconSprite } from "./icons";
-import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
+import { APP_STATE_KEY, DEFAULT_BUYING_PREFS, FREE_SCAN_KEY, NAV_COLLAPSED_KEY, SHOPIFY_STOCK_MAX_ITEMS, SHOPIFY_STOCK_SESSION_KEY, UPLOAD_TIMEOUT_MS, applyLiveStock, buildShippingByName, computePlanTotals, deriveListStatus, deriveMatchRows, groupRowsBySupplier, isPlanIncluded, isQrUrl, makeScanDraftItem, mapSearchOffer, mergeDraftState, money, newItemId, parseAttributes, pathForView, reorderItemKey, scanLookup, shopifyStockKey, slimHandoffRow, statusFromItem, traceApi, viewFromPath } from "./lib";
 import { AddLocationView, LocationDetailView, LocationsBoardView } from "./locations";
 import { OfficeLayoutRoute } from "./officelayout";
 import { QrLabelView } from "./qrlabels";
@@ -319,10 +319,11 @@ export default function Home() {
           const merged = mergeDraftState(data.state, local);
           hydrateFromState(merged);
           lastServerVersionRef.current = data.updated_at || null;
-          // Push the union only when this device's cache had items, so any
-          // local-only work reaches the other devices. The server merge makes it
-          // a no-op when local added nothing; skip it entirely on a fresh device.
-          if (local && (local.draftItems || []).length) saveNow(merged);
+          // Push the union only when this device's cache had items or saved
+          // lists, so any local-only work (including an offline delete's
+          // tombstone) reaches the other devices. The server merge makes it a
+          // no-op when local added nothing; skip it entirely on a fresh device.
+          if (local && ((local.draftItems || []).length || (local.archivedLists || []).length)) saveNow(merged);
         } else if (local && (local.draftItems || []).some((it) => it.included !== false)) {
           // No server list yet — seed it from the local working list.
           saveNow(local);
@@ -650,6 +651,10 @@ export default function Home() {
 
   const visibleDraftItems = draftItems.filter((item) => item.documentIds.some((documentId) => uploadedDocs.some((doc) => doc.id === documentId)));
   const activeDraftItems = visibleDraftItems.filter((item) => item.included);
+  // Deleted/reopened saved lists stay in state as slim tombstones (so the
+  // removal survives the cross-device merge); every surface renders only the
+  // live entries.
+  const visibleArchivedLists = useMemo(() => archivedLists.filter((entry) => entry.deleted !== true), [archivedLists]);
   const activePlanItems = applyLiveStock(activeDraftItems, liveStockByUrl);
 
   const recordLiveStock = useCallback((entries) => {
@@ -1352,31 +1357,45 @@ export default function Home() {
 
   // Snapshot the current list into Saved lists, then clear it. Rows are stored
   // so the saved list stays readable, and the raw items so it can be reopened.
+  // Reads the latest committed state (latestBlobRef), not this render's closure:
+  // the confirm dialogs that call this can sit open across 3s poll merges, and
+  // an item that synced in meanwhile must land in the snapshot — the clear
+  // below tombstones it either way, and a tombstoned item missing from the
+  // snapshot would be durably deleted everywhere.
   function saveCurrentList() {
-    if (!activeDraftItems.length) {
+    const blob = latestBlobRef.current || {};
+    const docs = blob.uploadedDocs || uploadedDocs;
+    const items = (blob.draftItems || draftItems)
+      .filter((item) => item.documentIds.some((documentId) => docs.some((doc) => doc.id === documentId)))
+      .filter((item) => item.included);
+    if (!items.length) {
       showToast("Nothing to save yet");
       return;
     }
-    const rows = deriveMatchRows(activeDraftItems, buyingPrefs);
+    const prefs = blob.buyingPrefs || buyingPrefs;
+    const rows = deriveMatchRows(items, prefs);
     // Snapshot the landed total (items + estimated shipping) so reorder history matches
     // the Plan Preview the buyer saw when archiving.
     const totals = computePlanTotals(rows, supplierShipping);
     const now = new Date();
+    const handoffId = blob.currentHandoffId !== undefined ? blob.currentHandoffId : currentHandoffId;
     const entry = {
       id: `list_${now.getTime()}`,
-      name: listName || `${now.toLocaleString("en-US", { month: "long" })} Reorder List`,
+      name: blob.listName || listName || `${now.toLocaleString("en-US", { month: "long" })} Reorder List`,
       date: now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       items: rows.length,
       suppliers: totals.suppliers,
       total: money.format(totals.landedTotal),
       // Final lifecycle status + the handoff it was tied to, for the reorder history pill.
-      status: deriveListStatus(rows, Boolean(currentHandoffId), listStage, submittedSuppliers),
-      handoffId: currentHandoffId,
+      status: deriveListStatus(rows, Boolean(handoffId), blob.listStage || listStage, blob.submittedSuppliers || submittedSuppliers),
+      handoffId,
+      // Merge recency: the fresher copy of a saved list wins across devices.
+      updatedAt: now.getTime(),
       rows,
       // Raw inputs so Duplicate can rebuild a working, visible list (items are
       // only shown when their documentIds match a doc in uploadedDocs).
-      sourceItems: activeDraftItems,
-      sourceDocs: uploadedDocs,
+      sourceItems: items,
+      sourceDocs: docs,
     };
     setArchivedLists((lists) => [entry, ...lists]);
     tombstoneAllItems();
@@ -1519,9 +1538,19 @@ export default function Home() {
     showToast(`Reopened ${supplier} — order no longer marked submitted`);
   }
 
-  // Rename a saved list (live list renames via setListName).
+  // Rename a saved list (live list renames via setListName). Bumps updatedAt so
+  // the renamed copy wins the cross-device merge instead of being clobbered by
+  // a stale copy from the server poll.
   function renameArchivedList(id, name) {
-    setArchivedLists((lists) => lists.map((entry) => (entry.id === id ? { ...entry, name } : entry)));
+    setArchivedLists((lists) => lists.map((entry) => (entry.id === id ? { ...entry, name, updatedAt: Date.now() } : entry)));
+  }
+
+  // Remove a saved list from history by replacing it with a slim tombstone.
+  // Filtering it out of the array wouldn't stick: the sync merge treats absence
+  // as "this device hasn't seen it yet" and unions the server copy back in —
+  // only an explicit, fresher `deleted:true` propagates the removal everywhere.
+  function tombstoneArchivedList(id) {
+    setArchivedLists((lists) => lists.map((entry) => (entry.id === id ? { id: entry.id, deleted: true, updatedAt: Date.now() } : entry)));
   }
 
   // Reopening or duplicating a saved list replaces the current reorder list. If
@@ -1549,7 +1578,20 @@ export default function Home() {
   function loadSavedListAsCurrent(entry, { copy }) {
     // Fresh updatedAt so a reopened item beats any same-key tombstone left on
     // the server by an earlier clear of the current list.
-    setDraftItems(entry.sourceItems.map((item) => ({ ...item, id: newItemId(), included: true, updatedAt: Date.now() })));
+    const ts = Date.now();
+    const fresh = entry.sourceItems.map((item) => ({ ...item, id: newItemId(), included: true, updatedAt: ts }));
+    // Replacing the array wholesale would silently drop the outgoing items:
+    // with no local copy and no tombstone, the server's active copies win the
+    // next merge and leak back into the restored list. Tombstone them instead;
+    // buckets the restored items already occupy don't need one (the fresh
+    // active copy is the update for that key).
+    const freshKeys = new Set(fresh.map(reorderItemKey));
+    setDraftItems((items) => [
+      ...items
+        .filter((item) => !freshKeys.has(reorderItemKey(item)))
+        .map((item) => (item.included === false ? item : { ...item, included: false, updatedAt: ts })),
+      ...fresh,
+    ]);
     setUploadedDocs(entry.sourceDocs || []);
     setListName(copy ? `${entry.name} (copy)` : entry.name);
     setCurrentHandoffId(null);
@@ -1565,12 +1607,12 @@ export default function Home() {
   // lists — it's no longer a past list once it's live again.
   function reopenList(entry) {
     if (!entry?.sourceItems?.length) {
-      showToast("This sample list has no items to reopen");
+      showToast("This list has no saved items to reopen");
       return;
     }
     guardReplaceCurrentList("Reopen", entry.name, () => {
       loadSavedListAsCurrent(entry, { copy: false });
-      setArchivedLists((lists) => lists.filter((e) => e.id !== entry.id));
+      tombstoneArchivedList(entry.id);
       showToast(`Reopened "${entry.name}"`);
     });
   }
@@ -1578,7 +1620,7 @@ export default function Home() {
   // Copy a saved list into a fresh current list; the original stays saved.
   function duplicateList(entry) {
     if (!entry?.sourceItems?.length) {
-      showToast("This sample list has no items to duplicate");
+      showToast("This list has no saved items to duplicate");
       return;
     }
     guardReplaceCurrentList("Duplicate", entry.name, () => {
@@ -1595,7 +1637,7 @@ export default function Home() {
       confirmLabel: "Delete list",
       destructive: true,
       onConfirm: () => {
-        setArchivedLists((lists) => lists.filter((e) => e.id !== entry.id));
+        tombstoneArchivedList(entry.id);
         showToast(`Deleted "${entry.name}"`);
         if (view === "historyDetail") navigate("/app/history");
       },
@@ -2066,7 +2108,7 @@ export default function Home() {
 
           {view === "history" && (
             <ReorderHistoryView
-              archivedLists={archivedLists}
+              archivedLists={visibleArchivedLists}
               onOpen={(id) => navigate(`/app/history/${id}`)}
               onReopen={reopenList}
               onDuplicate={duplicateList}
@@ -2077,7 +2119,7 @@ export default function Home() {
           {view === "historyDetail" && (
             <ReorderHistoryDetail
               id={historyId}
-              archivedLists={archivedLists}
+              archivedLists={visibleArchivedLists}
               handoffs={handoffs}
               onBack={() => navigate("/app/history")}
               onRename={renameArchivedList}
@@ -2091,7 +2133,7 @@ export default function Home() {
           {view === "savings" && (
             <SavingsView
               rows={deriveMatchRows(activePlanItems, buyingPrefs)}
-              archivedLists={archivedLists}
+              archivedLists={visibleArchivedLists}
               onNavigate={navigate}
               onImportInvoice={() => { setAddMode("upload"); navigate("/app/reorder-list"); }}
               lapsed={lapsed}
