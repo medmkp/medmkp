@@ -92,7 +92,30 @@ describe("variant families", () => {
 
     expect(new Set(families.map((f) => f.familyId)).size).toBe(1)
     expect(new Set(families.map((f) => f.variantLabel))).toEqual(
-      new Set(["X-Small - 100/Box", "X-Small - 300/Box", "Small", "Medium"])
+      new Set(["X-Small · 100/Box", "X-Small · 300/Box", "Small", "Medium"])
+    )
+  })
+
+  it("disambiguates a two-axis family with the second axis's value (#604)", () => {
+    // Mirror covers vary by color AND size; the family selects on color, so both
+    // sizes of a color collapse to one indistinguishable "Orange" chip. Size is
+    // not a modeled axis, so the label is recovered from the name.
+    const rows = [
+      ...variantPair("Mirror Gear", "Mirror Gear Mirror Covers Orange Size 4", "MG-4-ORANGE"),
+      ...variantPair("Mirror Gear", "Mirror Gear Mirror Covers Orange Size 5", "MG-5-ORANGE"),
+      ...variantPair("Mirror Gear", "Mirror Gear Mirror Covers Yellow Size 4", "MG-4-YELLOW"),
+      ...variantPair("Mirror Gear", "Mirror Gear Mirror Covers Yellow Size 5", "MG-5-YELLOW"),
+    ]
+    const families = [...familiesByName(rows).byRepName.values()].filter(
+      (f): f is FamilyInfo => Boolean(f)
+    )
+    expect(new Set(families.map((f) => f.familyId)).size).toBe(1)
+    expect(families.every((f) => f.variantAxis === "color")).toBe(true)
+    // Every chip is distinct — no two share a label.
+    const labels = families.map((f) => f.variantLabel)
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(new Set(labels)).toEqual(
+      new Set(["Orange · Size 4", "Orange · Size 5", "Yellow · Size 4", "Yellow · Size 5"])
     )
   })
 
