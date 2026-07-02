@@ -1,4 +1,6 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { getPostgresPool } from "../../../utils/postgres"
+import { checkMatviewHealth } from "../../../utils/matview-health"
 
 // Classify the database this backend is *actually* connected to, so the frontend
 // DevBadge can show the real data source instead of guessing from which backend
@@ -21,5 +23,12 @@ function describeDatabase() {
 }
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
-  res.json({ ok: true, db: describeDatabase() })
+  // Flag any medmkp_* materialized view that was deployed by a migration but has
+  // never been refreshed. Those matviews are created `WITH NO DATA`, so until the
+  // NUC refresh job populates them the catalog/browse routes silently fall back
+  // to their slow live queries (seconds instead of ~60ms) with no visible error.
+  // Surfacing `matviews.ok = false` here lets the eng-loop health pipeline alert
+  // on a deployed-but-never-refreshed read model instead of it degrading quietly.
+  const matviews = await checkMatviewHealth(getPostgresPool())
+  res.json({ ok: matviews.ok, db: describeDatabase(), matviews })
 }
