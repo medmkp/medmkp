@@ -149,7 +149,9 @@ export function writeReports(result: MatchRunResult, outputDir: string): Record<
   writeCsv(
     path.join(outputDir, "needs-review-sample.csv"),
     ["supplier_a", "name_a", "sku_a", "supplier_b", "name_b", "sku_b", "confidence", "reason"],
-    sample(result.reviewPairs, 200).map((pair) => [
+    // Already a bounded reservoir sample — the engine no longer keeps the full
+    // needs-review pair list in memory.
+    result.reviewPairsSample.map((pair) => [
       pair.a.row.supplier_id,
       pair.a.row.name,
       pair.a.row.manufacturer_sku,
@@ -219,27 +221,14 @@ export function writeReports(result: MatchRunResult, outputDir: string): Record<
 
   writeHtmlReport(result, sampledClusters, comparisons, outputDir)
 
-  const supplierPairCounts: Record<string, number> = {}
-  for (const pair of result.acceptedPairs) {
-    if (pair.a.row.supplier_id !== pair.b.row.supplier_id) {
-      const key = [pair.a.row.supplier_id, pair.b.row.supplier_id].sort().join(" <> ")
-      supplierPairCounts[key] = (supplierPairCounts[key] ?? 0) + 1
-    }
-  }
-
-  const confidenceBuckets: Record<string, number> = {}
-  for (const pair of result.acceptedPairs) {
-    const bucket = `${Math.floor(pair.decision.confidence / 10) * 10}s`
-    confidenceBuckets[bucket] = (confidenceBuckets[bucket] ?? 0) + 1
-  }
-
   const reliable = comparisons.filter((comparison) => comparison.packCertainty !== "mixed")
   const spreads = reliable.map((comparison) => comparison.spread).sort((a, b) => a - b)
   const summary = {
     generated_at: new Date().toISOString(),
     total_products: result.products.length,
-    accepted_pairs: result.acceptedPairs.length,
-    needs_review_pairs: result.reviewPairs.length,
+    candidate_pairs: result.pairStats.candidatePairs,
+    accepted_pairs: result.pairStats.acceptedCount,
+    needs_review_pairs: result.pairStats.reviewCount,
     clusters_total: result.clusters.length,
     clusters_multi_supplier: multiSupplierClusters.length,
     products_in_multi_supplier_clusters: multiSupplierClusters.reduce(
@@ -250,8 +239,8 @@ export function writeReports(result: MatchRunResult, outputDir: string): Record<
     products_in_families: familyEntries.length,
     family_axis_counts: familyAxisCounts,
     substitute_candidates: result.substitutes.length,
-    accepted_pair_confidence_histogram: confidenceBuckets,
-    cross_supplier_pair_counts: supplierPairCounts,
+    accepted_pair_confidence_histogram: result.pairStats.confidenceBuckets,
+    cross_supplier_pair_counts: result.pairStats.crossSupplierPairCounts,
     price_comparisons: comparisons.length,
     price_comparisons_mixed_pack: comparisons.length - reliable.length,
     price_spread_median: spreads.length ? spreads[Math.floor(spreads.length / 2)].toFixed(2) : null,

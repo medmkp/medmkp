@@ -1,4 +1,13 @@
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+
+// The route reads current prices through one DISTINCT ON query (see
+// utils/latest-price-snapshots), not the module service — mock it to resolve
+// from each test service's stubbed snapshot rows so fixtures stay plain rows.
+jest.mock("../../../../../utils/latest-price-snapshots", () => ({
+  latestPriceSnapshotsByProduct: jest.fn(async () => new Map()),
+}))
+
+import { latestPriceSnapshotsByProduct } from "../../../../../utils/latest-price-snapshots"
 import { GET } from "../route"
 
 // Exercises the scan route's HIBC wiring end-to-end against a stubbed module
@@ -41,6 +50,12 @@ function makeService(overrides: Record<string, any> = {}) {
 }
 
 function run(service: any, query: string) {
+  ;(latestPriceSnapshotsByProduct as jest.Mock).mockImplementation(
+    async (ids: string[]) => {
+      const rows = await service.listSupplierPriceSnapshots({ supplier_product_id: ids })
+      return new Map(rows.map((row: any) => [row.supplier_product_id, row]))
+    }
+  )
   // The GUDID-reference fallback resolves the PG connection and calls knex.raw();
   // stub it so a barcode that misses every earlier path doesn't throw. All other
   // tokens (i.e. MEDMKP_MODULE) resolve to the module service mock.

@@ -2,24 +2,12 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { getPostgresPool } from "../../../../utils/postgres"
+import {
+  latestPriceSnapshotsByProduct,
+  type LatestPriceSnapshot,
+} from "../../../../utils/latest-price-snapshots"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
 import { MARKETPLACE_SUPPLIER_IDS } from "../../../../ingestion/marketplace/suppliers"
-
-function latestSnapshotsByProduct(snapshots: Awaited<ReturnType<MedMKPModuleService["listSupplierPriceSnapshots"]>>) {
-  return snapshots.reduce((acc, snapshot) => {
-    const existing = acc.get(snapshot.supplier_product_id)
-
-    if (
-      !existing ||
-      new Date(snapshot.captured_at).getTime() >
-        new Date(existing.captured_at).getTime()
-    ) {
-      acc.set(snapshot.supplier_product_id, snapshot)
-    }
-
-    return acc
-  }, new Map<string, (typeof snapshots)[number]>())
-}
 
 function normalize(value: string | null) {
   return value?.trim().toLowerCase() || ""
@@ -60,9 +48,9 @@ async function resolveSupplierProductPage(
   // the model id, not an added marker). Fall back to a stripped variant in case
   // a caller prepended the prefix to a bare id.
   const candidateIds = [handle, handle.slice("msp_".length)]
-  const [supplierProducts, snapshots, suppliers] = await Promise.all([
+  const [supplierProducts, latestPrices, suppliers] = await Promise.all([
     medmkp.listSupplierProducts({ id: candidateIds }),
-    medmkp.listSupplierPriceSnapshots({ supplier_product_id: candidateIds }),
+    latestPriceSnapshotsByProduct(candidateIds),
     medmkp.listSuppliers(),
   ])
   const supplierProduct = supplierProducts[0]
@@ -71,7 +59,7 @@ async function resolveSupplierProductPage(
   }
   const supplierProductId = supplierProduct.id
   const supplier = suppliers.find((s) => s.id === supplierProduct.supplier_id)
-  const latest = latestSnapshotsByProduct(snapshots).get(supplierProductId)
+  const latest = latestPrices.get(supplierProductId)
   const offer =
     latest && latest.price_cents > 0
       ? {
@@ -191,6 +179,24 @@ type CategoryListResult = { count: number; canonical_products: CategoryListItem[
 // category (~15s) should be paid rarely. The Vercel edge serves stale-while-
 // revalidate on top, so this is just the background-revalidation cost.
 const CATEGORY_LIST_CACHE_TTL_MS = 15 * 60 * 1000
+// Cache keys include q/limit/offset, so a crawler paging through the catalog
+// (or infinite scroll) mints unbounded distinct keys — and expired entries were
+// never removed, only skipped on read. Evict oldest-first past a cap so the
+// cache can't ratchet the heap up on an instance that runs close to V8's limit.
+const LIST_CACHE_MAX_ENTRIES = 500
+function cacheListResult(
+  cache: Map<string, { loadedAt: number; result: CategoryListResult }>,
+  key: string,
+  result: CategoryListResult
+) {
+  if (!cache.has(key) && cache.size >= LIST_CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) {
+      cache.delete(oldest)
+    }
+  }
+  cache.set(key, { loadedAt: Date.now(), result })
+}
 const categoryListCache = new Map<string, { loadedAt: number; result: CategoryListResult }>()
 const categoryListPromises = new Map<string, Promise<CategoryListResult>>()
 
@@ -212,14 +218,17 @@ async function queryCategoryProducts(
   const patternRe = pattern || null
 
   // Group size/spec variants under one card: the listing unit is the family
-  // (COALESCE(family_id, id)). The card's best offer is the cheapest by PER-UNIT
-  // price (F1), not sticker; families with no unit price fall back to sticker and
-  // rank after the priced ones. unit_price_cents comes straight from the
-  // medmkp_supplier_current_price read model (a column, not a per-row join), so
-  // this stays the one fast indexed query the listing was built around. The
-  // cross-base-unit guard (F2) lives on the product page where offers are
-  // compared side by side; a family is variants of one product, so its offers
-  // share a base unit in practice. variant_count is the family's size count.
+  // (COALESCE(family_id, id)). Only families carried by ≥2 distinct suppliers
+  // are listed, ranked by supplier count (popularity: the more suppliers stock
+  // it, the more mainstream — and comparable — the product). Within a supplier
+  // count the tiebreak is the cheapest PER-UNIT price (F1), not sticker;
+  // families with no unit price fall back to sticker and rank after the priced
+  // ones. unit_price_cents comes straight from the medmkp_supplier_current_price
+  // read model (a column, not a per-row join), so this stays the one fast
+  // indexed query the listing was built around. The cross-base-unit guard (F2)
+  // lives on the product page where offers are compared side by side; a family
+  // is variants of one product, so its offers share a base unit in practice.
+  // variant_count is the family's size count.
   const { rows } = await pool.query(
     `
     WITH cat AS (
@@ -279,7 +288,8 @@ async function queryCategoryProducts(
     JOIN best b ON b.grp = g.grp
     JOIN medmkp_supplier_product sp ON sp.id = b.supplier_product_id AND sp.deleted_at IS NULL
     LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
-    ORDER BY (b.unit_price_cents IS NULL) ASC, b.unit_price_cents ASC, b.price_cents ASC, g.any_name ASC
+    WHERE a.offer_count >= 2
+    ORDER BY a.offer_count DESC, (b.unit_price_cents IS NULL) ASC, b.unit_price_cents ASC, b.price_cents ASC, g.any_name ASC
     LIMIT $3 OFFSET $4
     `,
     [category, qLike, limit, offset, patternRe]
@@ -295,10 +305,13 @@ async function queryCategoryProducts(
 // current offer + counts) and join the supplier product for display fields of
 // just this page. The live CTE query above ranked the whole category's offer
 // graph on every cache miss (~13s for Gloves on prod); this is a single indexed
-// page read (~60ms), the category-keyed twin of querySupplierProducts. Used only
-// when there's no text/subcategory filter — the (category, unit_price, price)
-// index serves the ORDER BY + LIMIT/OFFSET directly. The category key is
-// lower(btrim(category)); the route already normalizes the param the same way.
+// page read, the category-keyed twin of querySupplierProducts. Used only when
+// there's no text/subcategory filter. Only ≥2-supplier families are listed,
+// most-suppliers first (see queryCategoryProducts for the rationale); the
+// (category_key, …) index prefix narrows to the category's rows and the
+// LIMIT bounds the popularity top-N sort, so the page read stays cheap. The
+// category key is lower(btrim(category)); the route already normalizes the
+// param the same way.
 async function queryCategoryListing(
   category: string,
   limit: number,
@@ -318,8 +331,8 @@ async function queryCategoryListing(
              any_handle, any_name, any_category, offer_count,
              price_cents, unit_price_cents, best_sp_id
       FROM medmkp_category_catalog_listing
-      WHERE category_key = $1
-      ORDER BY (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC, any_name ASC
+      WHERE category_key = $1 AND offer_count >= 2
+      ORDER BY offer_count DESC, (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC, any_name ASC
       LIMIT $2 OFFSET $3
     )
     SELECT
@@ -333,11 +346,11 @@ async function queryCategoryListing(
       sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty,
       sp.base_unit AS best_base_unit, sp.pack_basis AS best_pack_basis,
       sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
-      (SELECT count(*) FROM medmkp_category_catalog_listing WHERE category_key = $1) AS total_count
+      (SELECT count(*) FROM medmkp_category_catalog_listing WHERE category_key = $1 AND offer_count >= 2) AS total_count
     FROM page
     JOIN medmkp_supplier_product sp ON sp.id = page.best_sp_id AND sp.deleted_at IS NULL
     LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
-    ORDER BY (page.unit_price_cents IS NULL) ASC, page.unit_price_cents ASC, page.price_cents ASC, page.any_name ASC
+    ORDER BY page.offer_count DESC, (page.unit_price_cents IS NULL) ASC, page.unit_price_cents ASC, page.price_cents ASC, page.any_name ASC
     `,
     [category, limit, offset]
   )
@@ -384,6 +397,212 @@ function listRowToItem(row: any): CategoryListItem {
   }
 }
 
+// A search card is a category card that may carry NO direct offer: text search
+// keeps marketplace-only families (a non-empty "Also available on" section, no
+// priced supplier table) findable rather than dropping them, so best_offer is
+// nullable and we surface how many marketplaces carry it for a per-#597 badge.
+type SearchListItem = Omit<CategoryListItem, "best_offer"> & {
+  best_offer: CategoryListItem["best_offer"] | null
+  marketplace_offer_count: number
+}
+
+type SearchListResult = { count: number; canonical_products: SearchListItem[] }
+
+// Row → search card. Reuses the listing column aliases; when the family has only
+// marketplace listings (best_sp_id is NULL) it returns a priceless card so the
+// UI can badge "Also available on …" instead of a dead-end empty-pricing PDP.
+function searchRowToItem(row: any): SearchListItem {
+  const isFamily = Boolean(row.family_id)
+  const marketplaceOfferCount = Number(row.marketplace_offer_count) || 0
+  const base = {
+    id: row.id,
+    handle: isFamily ? row.family_handle : row.any_handle,
+    name: isFamily ? row.family_name : row.any_name,
+    category: row.any_category,
+    family_id: row.family_id ?? null,
+    variant_count: Number(row.variant_count),
+    offer_count: Number(row.offer_count) || 0,
+    offers: [] as never[],
+    price_range_cents: null,
+    marketplace_offer_count: marketplaceOfferCount,
+  }
+  if (!row.best_sp_id) {
+    return { ...base, best_offer: null, image_url: "" }
+  }
+  const image = row.best_image || ""
+  return {
+    ...base,
+    best_offer: {
+      supplier_product_id: row.best_sp_id,
+      supplier_id: row.best_supplier_id,
+      supplier_name: row.best_supplier_name ?? "Unknown supplier",
+      sku: row.best_sku,
+      name: row.best_name,
+      brand: row.best_brand,
+      image_url: image,
+      product_url: row.best_url || "",
+      price_cents: Number(row.best_price),
+      unit_price_cents: row.best_unit_price != null ? Number(row.best_unit_price) : null,
+      pack_quantity: row.best_pack_qty != null ? Number(row.best_pack_qty) : null,
+      base_unit: row.best_base_unit ?? null,
+      pack_basis: row.best_pack_basis ?? null,
+      pack_size: row.best_pack_size || "",
+      unit_comparable: row.best_unit_price != null,
+      match_status: "matched",
+    },
+    image_url: image,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Relevance-ranked text search (?q= with no category)
+//
+// The plain-search path used a bare ILIKE '%q%' with take:600 in arbitrary DB
+// order, then ranked in memory by price — so it (1) had no relevance ranking,
+// (2) returned every size/shade of a family as a separate near-identical row,
+// and (3) surfaced canonicals with zero priced offers whose PDP shows an empty
+// pricing table. This rebuilds it as the grp-grouped, priced-filtered twin of
+// queryCategoryProducts, minus the category filter: one row per family, ranked
+// by pg_trgm similarity(name, q) with priced families first, keeping only
+// families that carry at least one direct offer OR a marketplace listing (so no
+// result dead-ends into an empty PDP). The ILIKE filter is index-served by the
+// name/handle/category trigram GIN indexes (Migration20260617190000); similarity
+// is computed only over that bounded candidate set, so it needs no index.
+// ---------------------------------------------------------------------------
+const searchListCache = new Map<string, { loadedAt: number; result: SearchListResult }>()
+const searchListPromises = new Map<string, Promise<SearchListResult>>()
+
+async function querySearchProducts(
+  q: string,
+  limit: number,
+  offset: number
+): Promise<SearchListResult> {
+  const pool = getPostgresPool()
+  const qLike = `%${q}%`
+  const marketplaceIds = [...MARKETPLACE_SUPPLIER_IDS]
+  const { rows } = await pool.query(
+    `
+    WITH cand AS (
+      SELECT id, handle, name, category,
+             family_id, family_handle, family_name,
+             COALESCE(family_id, id) AS grp,
+             similarity(name, $1) AS sim
+      FROM medmkp_canonical_product
+      WHERE deleted_at IS NULL
+        AND (name ILIKE $2 OR handle ILIKE $2 OR category ILIKE $2)
+    ),
+    -- Direct (non-marketplace) priced offers: the supplier price comparison the
+    -- product page shows. Marketplace suppliers are excluded here and counted
+    -- separately below, mirroring the PDP's split.
+    direct AS (
+      SELECT cand.grp, sp.supplier_id, cp.price_cents, cp.unit_price_cents, m.supplier_product_id
+      FROM medmkp_canonical_product_match m
+      JOIN medmkp_supplier_current_price cp ON cp.supplier_product_id = m.supplier_product_id
+      JOIN medmkp_supplier_product sp ON sp.id = m.supplier_product_id
+      JOIN cand ON cand.id = m.canonical_product_id
+      WHERE m.match_status NOT IN ('unmatched', 'substitute') AND m.deleted_at IS NULL
+        AND NOT (sp.supplier_id = ANY($3::text[]))
+    ),
+    -- Marketplace listings feed the PDP's "Also available on" section (kept out of
+    -- the price comparison). A family with these but no direct offer is still
+    -- worth surfacing — its PDP is not a dead-end.
+    mkt AS (
+      SELECT grp, COUNT(DISTINCT supplier_id)::int AS marketplace_offer_count
+      FROM (
+        SELECT cand.grp, sp.supplier_id
+        FROM medmkp_canonical_product_match m
+        JOIN medmkp_supplier_product sp ON sp.id = m.supplier_product_id
+        JOIN cand ON cand.id = m.canonical_product_id
+        WHERE m.deleted_at IS NULL
+          AND m.match_status IN ('exact', 'variant', 'substitute')
+          AND sp.supplier_id = ANY($3::text[])
+      ) mm
+      GROUP BY grp
+    ),
+    agg AS (
+      SELECT grp, COUNT(DISTINCT supplier_id)::int AS offer_count FROM direct GROUP BY grp
+    ),
+    best AS (
+      SELECT DISTINCT ON (grp) grp, supplier_product_id, price_cents, unit_price_cents
+      FROM direct
+      ORDER BY grp, (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC
+    ),
+    grpinfo AS (
+      SELECT grp,
+             MAX(sim) AS sim,
+             COUNT(*)::int AS variant_count,
+             MAX(family_id) AS family_id,
+             MAX(family_handle) AS family_handle,
+             MAX(family_name) AS family_name,
+             (ARRAY_AGG(handle ORDER BY name))[1] AS any_handle,
+             (ARRAY_AGG(name ORDER BY name))[1] AS any_name,
+             (ARRAY_AGG(category ORDER BY name))[1] AS any_category
+      FROM cand GROUP BY grp
+    ),
+    keep AS (
+      SELECT g.grp, g.sim, g.variant_count, g.family_id, g.family_handle, g.family_name,
+             g.any_handle, g.any_name, g.any_category,
+             COALESCE(a.offer_count, 0) AS offer_count,
+             COALESCE(mkt.marketplace_offer_count, 0) AS marketplace_offer_count,
+             b.supplier_product_id AS best_sp_id, b.price_cents AS best_price, b.unit_price_cents AS best_unit_price,
+             (b.supplier_product_id IS NOT NULL) AS has_direct
+      FROM grpinfo g
+      LEFT JOIN agg a ON a.grp = g.grp
+      LEFT JOIN best b ON b.grp = g.grp
+      LEFT JOIN mkt ON mkt.grp = g.grp
+      WHERE b.supplier_product_id IS NOT NULL OR mkt.grp IS NOT NULL
+    )
+    SELECT
+      k.grp AS id, k.variant_count, k.family_id, k.family_handle, k.family_name,
+      k.any_handle, k.any_name, k.any_category,
+      k.offer_count, k.marketplace_offer_count,
+      k.best_price, k.best_unit_price, k.best_sp_id,
+      sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
+      sp.image_url AS best_image, sp.product_url AS best_url,
+      sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty, sp.base_unit AS best_base_unit, sp.pack_basis AS best_pack_basis,
+      sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
+      COUNT(*) OVER() AS total_count
+    FROM keep k
+    LEFT JOIN medmkp_supplier_product sp ON sp.id = k.best_sp_id AND sp.deleted_at IS NULL
+    LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
+    -- Priced families first, then by name-similarity to the query, then name.
+    ORDER BY k.has_direct DESC, k.sim DESC, k.any_name ASC
+    LIMIT $4 OFFSET $5
+    `,
+    [q, qLike, marketplaceIds, limit, offset]
+  )
+
+  const canonical_products = rows.map(searchRowToItem)
+
+  return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
+}
+
+async function listSearchProducts(
+  q: string,
+  limit: number,
+  offset: number
+): Promise<SearchListResult> {
+  const key = `${q}|${limit}|${offset}`
+  const cached = searchListCache.get(key)
+  if (cached && Date.now() - cached.loadedAt < CATEGORY_LIST_CACHE_TTL_MS) {
+    return cached.result
+  }
+
+  let promise = searchListPromises.get(key)
+  if (!promise) {
+    promise = querySearchProducts(q, limit, offset)
+    searchListPromises.set(key, promise)
+  }
+
+  try {
+    const result = await promise
+    searchListCache.set(key, { loadedAt: Date.now(), result })
+    return result
+  } finally {
+    searchListPromises.delete(key)
+  }
+}
+
 async function listCategoryProducts(
   category: string,
   q: string | undefined,
@@ -416,7 +635,7 @@ async function listCategoryProducts(
 
   try {
     const result = await promise
-    categoryListCache.set(key, { loadedAt: Date.now(), result })
+    cacheListResult(categoryListCache, key, result)
     return result
   } finally {
     categoryListPromises.delete(key)
@@ -449,7 +668,6 @@ async function querySupplierProducts(
     SELECT
       l.grp AS id, l.variant_count, l.family_id, l.family_handle, l.family_name,
       l.any_handle, l.any_name, l.any_category,
-      l.variant_count AS offer_count,
       l.price_cents AS best_price, l.unit_price_cents AS best_unit_price,
       l.best_sp_id,
       sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
@@ -469,7 +687,32 @@ async function querySupplierProducts(
     [supplier, qLike, limit, offset]
   )
 
-  const canonical_products = rows.map(listRowToItem)
+  // offer_count everywhere else means "distinct direct suppliers carrying this
+  // family" (category CTE + PDP). The supplier read model has no such column, so
+  // this listing used to alias the supplier's OWN pack-listing count
+  // (l.variant_count) as offer_count — a single-supplier number masquerading as
+  // "N suppliers" (e.g. net32 claimed 7, Amazon 1, for a family carried by 6
+  // suppliers). Since the read model holds exactly one row per (supplier, family),
+  // the true cross-supplier count is just COUNT(*) per grp; batch it for the page's
+  // families so every surface's "N suppliers" means the same thing.
+  const grps = rows.map((row) => row.id)
+  const offerCountByGrp = new Map<string, number>()
+  if (grps.length) {
+    const { rows: counts } = await pool.query(
+      `SELECT grp, COUNT(*)::int AS offer_count
+       FROM medmkp_supplier_catalog_listing
+       WHERE grp = ANY($1)
+       GROUP BY grp`,
+      [grps]
+    )
+    for (const row of counts) {
+      offerCountByGrp.set(row.grp, Number(row.offer_count))
+    }
+  }
+
+  const canonical_products = rows.map((row) =>
+    listRowToItem({ ...row, offer_count: offerCountByGrp.get(row.id) ?? 1 })
+  )
 
   return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
 }
@@ -494,7 +737,7 @@ async function listSupplierProducts(
 
   try {
     const result = await promise
-    supplierListCache.set(key, { loadedAt: Date.now(), result })
+    cacheListResult(supplierListCache, key, result)
     return result
   } finally {
     supplierListPromises.delete(key)
@@ -552,6 +795,18 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       return
     } catch (error) {
       // Fall through to the general (in-memory) supplier filter if unavailable.
+    }
+  }
+
+  // Plain text search: rank + group + page in the database (see querySearchProducts).
+  // Only the pure text case — q combined with a category/supplier is handled by the
+  // branches above (which already narrow their read model by q).
+  if (q && !handle && !category && !supplier) {
+    try {
+      res.json(await listSearchProducts(q, limit, offset))
+      return
+    } catch (error) {
+      // Fall through to the general (in-memory) search path if the query fails.
     }
   }
 
@@ -706,16 +961,13 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     ...new Set(matches.map((match) => match.supplier_product_id)),
   ]
 
-  const [supplierProducts, priceSnapshots, suppliers] = supplierProductIds.length
+  const [supplierProducts, latestPrices, suppliers] = supplierProductIds.length
     ? await Promise.all([
         medmkp.listSupplierProducts({ id: supplierProductIds }),
-        medmkp.listSupplierPriceSnapshots({
-          supplier_product_id: supplierProductIds,
-        }),
+        latestPriceSnapshotsByProduct(supplierProductIds),
         medmkp.listSuppliers(),
       ])
-    : [[], [], []]
-  const latestPrices = latestSnapshotsByProduct(priceSnapshots)
+    : [[], new Map<string, LatestPriceSnapshot>(), []]
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]))
   // Index supplier products and group matches by canonical product up front so
   // enrichment is linear. The previous nested filter()/find() per product was

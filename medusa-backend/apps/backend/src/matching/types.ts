@@ -106,10 +106,29 @@ export type FamilyInfo = {
   variantAxis: string
 }
 
+/**
+ * Aggregates over every scored candidate pair. The full pair lists used to be
+ * kept on the result, but at 400k+ products the accepted+review pairs alone
+ * (with their reason strings) were hundreds of MB — the matcher now folds each
+ * pair into these counters as it is scored and keeps only bounded samples.
+ */
+export type PairStats = {
+  candidatePairs: number
+  acceptedCount: number
+  reviewCount: number
+  /** Confidence-decile histogram of accepted pairs, e.g. { "80s": 12, "90s": 4 }. */
+  confidenceBuckets: Record<string, number>
+  /** Accepted cross-supplier pair counts keyed "supplierA <> supplierB". */
+  crossSupplierPairCounts: Record<string, number>
+}
+
 export type MatchRunResult = {
   products: NormalizedProduct[]
-  acceptedPairs: ScoredPair[]
-  reviewPairs: ScoredPair[]
+  pairStats: PairStats
+  /** Bounded reservoir sample of needs_review pairs (for the review report). */
+  reviewPairsSample: ScoredPair[]
+  /** Per supplier-product id: the best accepted decision it appeared in. */
+  decisions: Map<string, { status: string; confidence: number; reason: string }>
   clusters: Cluster[]
   substitutes: SubstituteCandidate[]
   /** Family overlay keyed by Cluster.key; clusters absent are standalone. */

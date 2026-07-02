@@ -1,39 +1,60 @@
 import { createHash } from "crypto"
-import type { Client } from "pg"
+import { Query, type Client } from "pg"
 import { classifyTaxonomy, type TaxonomyClassification } from "../catalog/taxonomy"
 import { axisLabelFor } from "./attribute-specs"
 import { clusterAttributes } from "./family"
 import type { Cluster, MatchRunResult, SupplierProductRow } from "./types"
 
+/**
+ * Run a query streaming each row to `onRow` instead of buffering the full
+ * result. pg skips row accumulation when a 'row' listener is attached and no
+ * callback is passed, so this avoids holding result.rows AND our mapped copy
+ * at once — at 400k+ products that transient double was real heap pressure on
+ * the 2GB nightly runner. Same SQL, same server-side cost.
+ */
+async function streamQuery(client: Client, text: string, onRow: (row: any) => void): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const query = client.query(new Query(text))
+    query.on("row", onRow)
+    query.on("error", reject)
+    query.on("end", () => resolve())
+  })
+}
+
 export async function loadSupplierProducts(client: Client): Promise<SupplierProductRow[]> {
-  const products = await client.query(
+  const rows: SupplierProductRow[] = []
+  const byId = new Map<string, SupplierProductRow>()
+  await streamQuery(
+    client,
     `SELECT id, supplier_id, sku, manufacturer_sku, brand, name, category,
             pack_size, unit_of_measure, product_url, image_url
      FROM medmkp_supplier_product
-     WHERE deleted_at IS NULL`
+     WHERE deleted_at IS NULL`,
+    (row) => {
+      row.price_cents = null
+      row.price_basis = null
+      rows.push(row)
+      byId.set(row.id, row)
+    }
   )
 
-  const prices = await client.query(
+  await streamQuery(
+    client,
     `SELECT DISTINCT ON (supplier_product_id)
             supplier_product_id, price_cents, price_basis
      FROM medmkp_supplier_price_snapshot
      WHERE deleted_at IS NULL
-     ORDER BY supplier_product_id, captured_at DESC`
+     ORDER BY supplier_product_id, captured_at DESC`,
+    (price) => {
+      const row = byId.get(price.supplier_product_id)
+      if (row) {
+        row.price_cents = price.price_cents
+        row.price_basis = price.price_basis
+      }
+    }
   )
 
-  const priceByProduct = new Map<string, { price_cents: number; price_basis: string }>()
-  for (const row of prices.rows) {
-    priceByProduct.set(row.supplier_product_id, {
-      price_cents: row.price_cents,
-      price_basis: row.price_basis,
-    })
-  }
-
-  return products.rows.map((row) => ({
-    ...row,
-    price_cents: priceByProduct.get(row.id)?.price_cents ?? null,
-    price_basis: priceByProduct.get(row.id)?.price_basis ?? null,
-  }))
+  return rows
 }
 
 /** Clamp to PostgreSQL int4 range so an out-of-range value can't abort a write. */
@@ -254,22 +275,23 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
     // so we can record handle aliases for any product whose handle changes this
     // run (the one-time positional->content-addressed switch, and any later
     // representative drift). Old URLs then keep resolving via the alias table.
-    const oldSnapshot = await client.query<{ id: string; handle: string; supplier_product_id: string }>(
+    const oldByCanonical = new Map<string, { handle: string; members: string[] }>()
+    await streamQuery(
+      client,
       `SELECT cp.id, cp.handle, m.supplier_product_id
        FROM medmkp_canonical_product cp
        JOIN medmkp_canonical_product_match m
          ON m.canonical_product_id = cp.id AND m.deleted_at IS NULL
-       WHERE cp.id LIKE 'mcp_auto_%' AND cp.deleted_at IS NULL`
-    )
-    const oldByCanonical = new Map<string, { handle: string; members: string[] }>()
-    for (const row of oldSnapshot.rows) {
-      let entry = oldByCanonical.get(row.id)
-      if (!entry) {
-        entry = { handle: row.handle, members: [] }
-        oldByCanonical.set(row.id, entry)
+       WHERE cp.id LIKE 'mcp_auto_%' AND cp.deleted_at IS NULL`,
+      (row) => {
+        let entry = oldByCanonical.get(row.id)
+        if (!entry) {
+          entry = { handle: row.handle, members: [] }
+          oldByCanonical.set(row.id, entry)
+        }
+        entry.members.push(row.supplier_product_id)
       }
-      entry.members.push(row.supplier_product_id)
-    }
+    )
 
     await client.query(`DELETE FROM medmkp_canonical_product_match WHERE id LIKE 'mcpm_auto_%'`)
     // Reset rows the matcher wrote, plus any rows other writers (e.g. the
@@ -311,7 +333,7 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
       familyTaxonomy.set(familyId, pickTaxonomy(products))
     }
 
-    const canonicalRows = result.clusters.map((cluster) => {
+    const canonicalRow = (cluster: Cluster): unknown[] => {
       const rep = cluster.representative
       const family = result.families.get(cluster.key) ?? null
       const rawCategory = family
@@ -374,16 +396,26 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
         // scales (×100) into the billions, well past int4 — it just sorts last.
         family ? clampInt32(Math.round(family.variantRank)) : null,
       ]
-    })
-    await batchInsert(
-      client,
-      "medmkp_canonical_product",
-      [
-        "id", "handle", "name", "category", "description", "unit_of_measure", "attributes_text",
-        "family_id", "family_handle", "family_name", "variant_label", "variant_rank",
-      ],
-      canonicalRows
-    )
+    }
+    // Built and inserted a batch at a time: materializing every canonical row
+    // up front means holding every attributes JSON string at once (hundreds of
+    // MB at 250k+ clusters) on top of the match structures still live here.
+    const canonicalColumns = [
+      "id", "handle", "name", "category", "description", "unit_of_measure", "attributes_text",
+      "family_id", "family_handle", "family_name", "variant_label", "variant_rank",
+    ]
+    let canonicalBatch: unknown[][] = []
+    for (const cluster of result.clusters) {
+      canonicalBatch.push(canonicalRow(cluster))
+      if (canonicalBatch.length === 500) {
+        await batchInsert(client, "medmkp_canonical_product", canonicalColumns, canonicalBatch)
+        canonicalBatch = []
+      }
+    }
+    if (canonicalBatch.length) {
+      await batchInsert(client, "medmkp_canonical_product", canonicalColumns, canonicalBatch)
+      canonicalBatch = []
+    }
 
     // Record handle aliases for products whose handle changed this run. Map each
     // old canonical to its successor by majority vote of its members' new
@@ -438,35 +470,11 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
       )
     }
 
-    const decisions = new Map<string, { status: string; confidence: number; reason: string }>()
-    for (const pair of result.acceptedPairs) {
-      for (const product of [pair.a, pair.b]) {
-        const existing = decisions.get(product.row.id)
-        if (!existing || pair.decision.confidence > existing.confidence) {
-          decisions.set(product.row.id, {
-            status: pair.decision.status,
-            confidence: pair.decision.confidence,
-            reason: pair.decision.reason,
-          })
-        }
-      }
-    }
+    // Per-product best accepted decision, folded incrementally by the engine
+    // while pairs streamed by (the full accepted-pair list is no longer kept).
+    const decisions = result.decisions
 
-    const identityRows: unknown[][] = []
-    for (const cluster of result.clusters) {
-      for (const member of cluster.members) {
-        const decision = decisions.get(member.row.id)
-        identityRows.push([
-          member.row.id,
-          idByClusterKey.get(cluster.key)!.id,
-          decision?.status ?? "exact",
-          decision?.confidence ?? 75,
-          decision?.reason ?? "auto:exact cluster-member",
-        ])
-      }
-    }
-    for (let offset = 0; offset < identityRows.length; offset += 500) {
-      const batch = identityRows.slice(offset, offset + 500)
+    const flushIdentityBatch = async (batch: unknown[][]) => {
       const placeholders = batch
         .map(
           (_, idx) => `($${idx * 5 + 1}, $${idx * 5 + 2}, $${idx * 5 + 3}, $${idx * 5 + 4}, $${idx * 5 + 5})`
@@ -485,6 +493,27 @@ export async function commitMatchRun(client: Client, result: MatchRunResult): Pr
            AND m.match_status = 'unmatched'`,
         batch.flat()
       )
+    }
+    let identityBatch: unknown[][] = []
+    for (const cluster of result.clusters) {
+      for (const member of cluster.members) {
+        const decision = decisions.get(member.row.id)
+        identityBatch.push([
+          member.row.id,
+          idByClusterKey.get(cluster.key)!.id,
+          decision?.status ?? "exact",
+          decision?.confidence ?? 75,
+          decision?.reason ?? "auto:exact cluster-member",
+        ])
+        if (identityBatch.length === 500) {
+          await flushIdentityBatch(identityBatch)
+          identityBatch = []
+        }
+      }
+    }
+    if (identityBatch.length) {
+      await flushIdentityBatch(identityBatch)
+      identityBatch = []
     }
 
     const substituteRows = result.substitutes.map((substitute, idx) => [

@@ -226,15 +226,157 @@ function clusterFamilyName(cluster: Cluster, axis: string): string {
   return candidates[0] || cleanFamilyName(cluster.representative.row.name, axis)
 }
 
-function duplicateAwareLabel(member: Member, duplicateLabels: Set<string>): string {
-  if (!duplicateLabels.has(member.variant.label)) {
-    return member.variant.label
+type Member = { cluster: Cluster; variant: ClusterVariant; tokenCount: number }
+
+// A product can vary on two axes (color AND size, taper AND length) while the
+// family model captures only one, so members that agree on the selected axis but
+// differ on a second share an indistinguishable chip. These patterns are the
+// measured/size vocabulary the matcher already parses — dimensions, a single
+// measure, worded sizes — and nothing else: a disambiguator built from them can
+// surface the second differentiator but can never leak a SKU or shape code.
+const DISAMBIGUATION_PATTERNS: RegExp[] = [
+  /\d+(?:\.\d+)?\s?[x×]\s?\d+(?:\.\d+)?(?:\s?(?:mm|cm))?/gi,
+  /\d+(?:\.\d+)?\s?(?:mm|cm|ml|cc|oz|gauge|ga|kg|lb|in)\b/gi,
+  /\b(?:size|no\.?)\s?\d+[a-z]?\b/gi,
+]
+
+function measuredPhrases(name: string): string[] {
+  const out: string[] = []
+  for (const re of DISAMBIGUATION_PATTERNS) {
+    re.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = re.exec(name))) {
+      out.push(match[0].replace(/\s+/g, " ").trim())
+    }
   }
-  const packSize = mostCommon(member.cluster.members.map((m) => m.row.pack_size))
-  return packSize ? `${member.variant.label} - ${packSize}` : member.variant.label
+  return out
 }
 
-type Member = { cluster: Cluster; variant: ClusterVariant; tokenCount: number }
+const normalizePhrase = (value: string): string =>
+  value.toLowerCase().replace(/\s+/g, "").replace(/×/g, "x")
+
+/**
+ * A discriminator proposes, for a still-colliding subset of a family, the value
+ * that tells those members apart (empty when it has nothing to say for a member).
+ */
+type Discriminator = (members: Member[], base: string) => Map<Member, string>
+
+// 1. The next modeled selector axis (registry-driven) that carries >=2 distinct
+//    agreed values across the subset — "0.04 Taper" + "· 21 mm".
+const byNextAxis: Discriminator = (members, _base) => {
+  const out = new Map<Member, string>()
+  for (const axis of AXIS_PRIORITY) {
+    if (axis === members[0].variant.axis) {
+      continue
+    }
+    const values = members.map((member) => agreedAxisValue(member.cluster, axis))
+    if (values.some((value) => value === null) || new Set(values).size < 2) {
+      continue
+    }
+    members.forEach((member, i) => out.set(member, formatVariant(axis, values[i]!).label))
+    return out
+  }
+  return out
+}
+
+// 2. A measured/size phrase in the name the model didn't capture as an axis
+//    (disc dimensions, an instrument size) — "Orange" + "· Size 4". Only phrases
+//    the whole subset doesn't share and the base label doesn't already carry.
+const byMeasuredPhrase: Discriminator = (members, base) => {
+  const lists = members.map((member) => measuredPhrases(member.cluster.representative.row.name))
+  const counts = new Map<string, number>()
+  for (const list of lists) {
+    for (const phrase of new Set(list.map(normalizePhrase))) {
+      counts.set(phrase, (counts.get(phrase) ?? 0) + 1)
+    }
+  }
+  const baseNorm = normalizePhrase(base)
+  const out = new Map<Member, string>()
+  members.forEach((member, i) => {
+    const seen = new Set<string>()
+    const parts: string[] = []
+    for (const phrase of lists[i]) {
+      const norm = normalizePhrase(phrase)
+      if (counts.get(norm) === members.length || norm === baseNorm || baseNorm.includes(norm) || seen.has(norm)) {
+        continue
+      }
+      seen.add(norm)
+      parts.push(phrase)
+    }
+    if (parts.length) {
+      out.set(member, parts.join(" "))
+    }
+  })
+  return out
+}
+
+// 3. The pack size, the last-resort differentiator carried over from the
+//    original disambiguator ("#331 · 10/Pkg" vs "· 100/Pkg").
+const byPackSize: Discriminator = (members) => {
+  const out = new Map<Member, string>()
+  for (const member of members) {
+    const pack = mostCommon(member.cluster.members.map((m) => m.row.pack_size))
+    if (pack) {
+      out.set(member, pack)
+    }
+  }
+  return out
+}
+
+const DISCRIMINATORS: Discriminator[] = [byNextAxis, byMeasuredPhrase, byPackSize]
+
+/**
+ * Give each member of a colliding-label group (same selected-axis value) a
+ * distinct label. A product can vary on two axes (color AND size, taper AND
+ * length) while the family selects on one, so its variants share an
+ * indistinguishable chip. Apply the discriminators in order, each only to the
+ * members still colliding and only when it actually separates some of them, so
+ * labels grow only as much as they must ("0.04 Taper · 25 mm", not more).
+ * Members no discriminator can separate keep the bare label: their clusters are
+ * genuinely indistinguishable here (an over-merge, #601), and a fabricated suffix
+ * would misrepresent the product. A group of one — every single-axis family — is
+ * returned byte-for-byte unchanged.
+ */
+function disambiguateGroup(base: string, group: Member[]): Map<Cluster, string> {
+  const labels = group.map(() => base)
+  for (const discriminate of DISCRIMINATORS) {
+    const collisions = new Map<string, number[]>()
+    labels.forEach((label, i) => {
+      const list = collisions.get(label)
+      if (list) {
+        list.push(i)
+      } else {
+        collisions.set(label, [i])
+      }
+    })
+    for (const indices of collisions.values()) {
+      if (indices.length < 2) {
+        continue
+      }
+      const values = discriminate(
+        indices.map((i) => group[i]),
+        base
+      )
+      // Only append when the value genuinely differs within the subset — never
+      // add a suffix every colliding member shares (noise that can't help).
+      if (new Set(indices.map((i) => values.get(group[i]) ?? "")).size < 2) {
+        continue
+      }
+      for (const i of indices) {
+        const value = values.get(group[i])
+        if (value) {
+          labels[i] = `${labels[i]} · ${value}`
+        }
+      }
+    }
+    if (new Set(labels).size === group.length) {
+      break
+    }
+  }
+  const out = new Map<Cluster, string>()
+  group.forEach((member, i) => out.set(member.cluster, labels[i]))
+  return out
+}
 
 /**
  * Assign display families over the matcher's clusters. Returns one entry per
@@ -347,11 +489,25 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
     if (distinctLabels.size < 2) {
       continue
     }
-    const duplicateLabels = new Set(
-      [...distinctLabels].filter(
-        (label) => members.filter((m) => m.variant.label === label).length > 1
-      )
-    )
+    // Members that share a selected-axis value get an indistinguishable chip, so
+    // extend each colliding group with the next distinguishing signal; a group of
+    // one keeps its bare label. Two-axis products (color AND size, taper AND
+    // length) are the driver — see disambiguateGroup.
+    const labelByCluster = new Map<Cluster, string>()
+    const byBaseLabel = new Map<string, Member[]>()
+    for (const member of members) {
+      const list = byBaseLabel.get(member.variant.label)
+      if (list) {
+        list.push(member)
+      } else {
+        byBaseLabel.set(member.variant.label, [member])
+      }
+    }
+    for (const [base, group] of byBaseLabel) {
+      for (const [cluster, label] of disambiguateGroup(base, group)) {
+        labelByCluster.set(cluster, label)
+      }
+    }
 
     const familyId = stableId("mcpf", key)
     // Name from the lowest-rank member (e.g. the "Small"/smallest variant) for a
@@ -365,7 +521,7 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
         familyId,
         familyHandle,
         familyName,
-        variantLabel: duplicateAwareLabel(member, duplicateLabels),
+        variantLabel: labelByCluster.get(member.cluster) ?? member.variant.label,
         variantRank: member.variant.rank,
         variantAxis: member.variant.axis,
       })
