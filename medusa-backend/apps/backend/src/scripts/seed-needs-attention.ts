@@ -85,7 +85,15 @@ async function loadProductPool(knex: any): Promise<PoolProduct[]> {
   take(await base().whereRaw("cp.name ILIKE ANY(?)", [terms]).limit(200))
   // Lean catalog — top up with any matched products so the demo still fills out.
   if (pool.length < 12) take(await base().limit(200))
-  return pool
+
+  // Deterministic shuffle (hash of id): name-ordered results cluster one product
+  // family together (all gauze, say) — spread them so the demo reads varied.
+  const hash = (s: string) => {
+    let h = 0
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+    return h
+  }
+  return pool.sort((a, b) => hash(a.canonical_product_id) - hash(b.canonical_product_id))
 }
 
 // One inventory row to lay down. `product` null ⇒ an unidentified scan.
