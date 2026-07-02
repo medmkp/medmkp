@@ -388,9 +388,35 @@ function departmentBySource(liveName) {
   )
 }
 
+// Net32's category popularity ordering, captured 2026-07-01 from the net32.com
+// homepage category browser plus the /ec/dental-supplies featured-category
+// carousel, mapped onto our departments (e.g. their Infection Control-Personal
+// → Gloves, Cements/Liners/Adhesives → Crown & Bridge, Cosmetic Dentistry →
+// Composites & Restoratives + Bonding). Departments Net32 doesn't feature fall
+// back to product-count order after the ranked ones.
+const NET32_CATEGORY_RANK = new Map(
+  [
+    "infection-control",
+    "sterilization",
+    "gloves",
+    "preventive",
+    "oral-surgery",
+    "anesthetics",
+    "impression-materials",
+    "crown-bridge",
+    "restorative",
+    "bonding-etching",
+    "xray-imaging",
+    "evacuation",
+    "endodontics",
+    "instruments",
+  ].map((slug, index) => [slug, index])
+)
+
 // Roll live category rows (from /api/catalog) up into the curated departments:
 // sum product counts, keep the highest supplier count, and the single cheapest
-// best-value offer. Returns only populated departments, richest first.
+// best-value offer. Returns only populated departments, in Net32 popularity
+// order (product-count order for the unranked tail).
 export function bucketCategories(liveCategories = []) {
   const totals = new Map()
 
@@ -414,5 +440,9 @@ export function bucketCategories(liveCategories = []) {
     ...(totals.get(category.slug) || { product_count: 0, supplier_count: 0, best_value_item: null }),
   }))
     .filter((category) => category.product_count > 0)
-    .sort((a, b) => b.product_count - a.product_count)
+    .sort((a, b) => {
+      const rankA = NET32_CATEGORY_RANK.get(a.slug) ?? Infinity
+      const rankB = NET32_CATEGORY_RANK.get(b.slug) ?? Infinity
+      return rankA === rankB ? b.product_count - a.product_count : rankA - rankB
+    })
 }
