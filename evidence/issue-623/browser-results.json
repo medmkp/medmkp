@@ -1,0 +1,248 @@
+[
+  {
+    "name": "before-desktop-app",
+    "finalURL": "http://localhost:3045/app",
+    "navLabels": [
+      "Needs Attention",
+      "Reorder list",
+      "Locations",
+      "Savings",
+      "Evidence",
+      "Reports",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nNeeds Attention\n2\nReorder list\nLocations\nSavings\nEvidence\nReports\nCatalog\nReorder history\nSettings\nCollapse\nNeeds Attention\n\nItems and issues that require your review and action to keep operations running smoothly.\n\nExpired\n1\nPast expiration\nExpiring soon\n1\nWithin 30 ",
+    "needsAttentionRequests": 3,
+    "logs": [
+      "info: %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "log: [HMR] connected"
+    ]
+  },
+  {
+    "name": "after-desktop-app",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "after-mobile-app",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "TraceDDS\nAB\nStart scanning\n\nPick a location and scan its shelves — every scan is saved as you go.\n\nScan a location\nPick a location and scan its shelves\nExact matches land straight ",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_needs-attention",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_locations",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_locations_office-layout",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_locations_new",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_locations_qr-labels",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_locations_front-desk",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_savings",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_evidence",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_evidence_review",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_evidence_viewer",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_evidence_redline",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_evidence_binder",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  },
+  {
+    "name": "redirect-_app_reports",
+    "finalURL": "http://localhost:3044/app",
+    "navLabels": [
+      "Reorder list",
+      "Catalog",
+      "Reorder history",
+      "Settings"
+    ],
+    "activeLabels": [
+      "Reorder list"
+    ],
+    "bodySample": "⌘K\nAB\nAvery Buyer\nLaunch Dental\nReorder list\nCatalog\nReorder history\nSettings\nCollapse\nReorder List\n\n·\nDraft\n\nScan Barcode\nUpload Invoice\nReview\nAll Items (0)\nMatched (0)\nNeeds Rev",
+    "needsAttentionRequests": 0
+  }
+]

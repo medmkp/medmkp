@@ -22,6 +22,7 @@ import { SettingsView } from "./settings";
 import { BillingReturnView } from "./billing";
 import StyleGuide from "./styleguide";
 import { BillingBanner, ConfirmModal, DesktopOnlyHint, PracticePaywall } from "./ui";
+import { isLive } from "./launchSurfaces";
 
 // Scan feedback (audio + haptic) lives in ./scanSound so the reorder scanner
 // here and the receiving/shelf-audit scanner in scansessions.jsx share one
@@ -29,10 +30,10 @@ import { BillingBanner, ConfirmModal, DesktopOnlyHint, PracticePaywall } from ".
 // first gesture below.
 
 // Surfaces that are a desktop management experience. On a phone they still
-// render (reached via a direct link or the bell), but show a "best on desktop"
-// hint and are never promoted in the mobile scanner hub. The on-site set
-// (scanner, locations, needs-attention dashboard, reorder list, evidence
-// VIEWER) is deliberately excluded.
+// render (reached via a direct link), but show a "best on desktop" hint and
+// are never promoted in the mobile scanner hub. The on-site set (scanner,
+// locations, needs-attention dashboard, reorder list, evidence VIEWER) is
+// deliberately excluded.
 const MANAGEMENT_VIEWS = new Set([
   "evidence", "evidenceBinder", "evidenceRedline", "evidenceReview",
   "reports", "savings", "history", "historyDetail", "plan", "handoff",
@@ -66,8 +67,6 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  // Open-issue count for the Needs Attention nav badge (null = unknown → no badge).
-  const [naCount, setNaCount] = useState(null);
   const [toast, setToast] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -173,16 +172,6 @@ export default function Home() {
     setBuyingPrefs(activeCount ? { ...DEFAULT_BUYING_PREFS, ...(saved.buyingPrefs || {}) } : savedDefaults);
     if (activeCount) setHasUploadedInvoice(true);
   };
-
-  // Keep the Needs Attention nav badge live with the real open-issue count.
-  useEffect(() => {
-    if (!isLoggedIn) { setNaCount(null); return undefined; }
-    let alive = true;
-    traceApi.getNeedsAttention()
-      .then((res) => { if (alive) setNaCount(res?.stats?.total ?? 0); })
-      .catch(() => { if (alive) setNaCount(null); });
-    return () => { alive = false; };
-  }, [isLoggedIn]);
 
   // Hydrate from localStorage first for an instant paint; the per-practice
   // server store (loaded below once auth is known) takes over for cross-device
@@ -482,6 +471,9 @@ export default function Home() {
   useEffect(() => {
     function syncViewFromLocation() {
       const nextRoute = viewFromPath(window.location.pathname + window.location.search);
+      if (nextRoute.dormantRedirect && window.location.pathname !== "/app") {
+        window.history.replaceState(null, "", "/app");
+      }
       setIsLoggedIn(nextRoute.isLoggedIn);
       setViewState(nextRoute.view);
       setHistoryId(nextRoute.historyId || null);
@@ -880,6 +872,9 @@ export default function Home() {
       window.history.pushState({}, "", path);
     }
     const next = viewFromPath(path);
+    if (next.dormantRedirect && window.location.pathname !== "/app") {
+      window.history.replaceState(null, "", "/app");
+    }
     setIsLoggedIn(next.isLoggedIn);
     setViewState(next.view);
     setHistoryId(next.historyId || null);
@@ -1644,20 +1639,14 @@ export default function Home() {
     });
   }
 
-  // New TraceDDS rail (supply-management IA). Items flagged `soon` are visible
-  // but disabled until their phase lands. Catalog + reorder history stay live so nothing
-  // from the old IA becomes unreachable (Savings is kept but demoted).
+  // Launch rail: four free surfaces. Dormant surfaces remain implemented but
+  // hidden here and filtered at the router.
   const navItems = [
-    ["home", "icon-home", "Needs Attention", false, naCount],
     ["reorderList", "icon-cart", "Reorder list"],
-    ["locations", "icon-map-pin", "Locations"],
-    ["savings", "icon-dollar-circle", "Savings"],
-    ["evidence", "icon-shield-check", "Evidence"],
-    ["reports", "icon-chart", "Reports"],
     ["catalog", "icon-store", "Catalog"],
     ["history", "icon-clock", "Reorder history"],
     ["settings", "icon-settings", "Settings"],
-  ];
+  ].filter(([target]) => isLive(target));
 
   // The scanner — scan-first mobile home (`/app`) and the `/app/scan-session`
   // route both render it. With a location it scans straight onto it; without one
@@ -1894,9 +1883,9 @@ export default function Home() {
                       <button
                         className="topbar-alerts-cta"
                         type="button"
-                        onClick={() => { setAlertsOpen(false); navigate("/app/needs-attention"); }}
+                        onClick={() => { setAlertsOpen(false); navigate("/app"); }}
                       >
-                        {alerts.length > 6 ? `View all ${alerts.length} in Needs Attention` : "Open Needs Attention"}
+                        {alerts.length > 6 ? `View all ${alerts.length} on the reorder list` : "Open reorder list"}
                         <Icon name="icon-arrow-right" className="button-icon" />
                       </button>
                     </>
@@ -1941,7 +1930,7 @@ export default function Home() {
             {navItems.map(([target, icon, label, soon, count]) => (
               <button
                 key={target}
-                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "home" && view === "dashboard") || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels" || view === "officeLayout")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer" || view === "evidenceReview" || view === "evidenceRedline")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
+                className={`nav-tab ${target === "settings" ? "nav-tab-bottom" : ""} ${view === target || (target === "reorderList" && view === "home") || (target === "home" && view === "dashboard") || (target === "locations" && (view === "locationAdd" || view === "locationDetail" || view === "qrLabels" || view === "officeLayout")) || (target === "evidence" && (view === "evidenceBinder" || view === "evidenceViewer" || view === "evidenceReview" || view === "evidenceRedline")) ? "active" : ""} ${soon ? "nav-tab-soon" : ""}`}
                 type="button"
                 onClick={() => { if (!soon) setView(target); }}
                 disabled={soon}
@@ -1989,9 +1978,7 @@ export default function Home() {
               // Locations / Reorder / More are their own routes via the bottom nav;
               // the center Scan FAB returns here.
               scanStartEl
-            ) : (
-              <NeedsAttentionView onToast={showToast} onNavigate={navigate} />
-            )
+            ) : reorderListEl
           )}
 
           {view === "dashboard" && <NeedsAttentionView onToast={showToast} onNavigate={navigate} />}
