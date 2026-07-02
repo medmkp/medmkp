@@ -5,6 +5,7 @@
     "build": "next build",
     "start": "next start",
     "deploy:airflow": "scripts/deploy-airflow-nuc.sh",
+    "ingest:supplier": "scripts/trigger-supplier-ingest.sh",
     "wt:setup": "bash scripts/worktree-setup.sh",
     "wt:init": "bash scripts/worktree-init.sh",
     "wt:prod": "bash scripts/worktree-db.sh prod",

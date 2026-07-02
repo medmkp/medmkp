@@ -118,51 +118,41 @@ describe("loadShopifyConfigs (real vetting files)", () => {
   })
 })
 
-describe("adapterForCandidate routes migrated Shopify vendors (origin + distributor)", () => {
-  const cases: Array<{ name: string; origin: ProductPageCandidate; distributor: ProductPageCandidate }> = [
-    {
-      name: "DDI Supply (thedentaldistributors.com + ddisupply.com alias)",
-      origin: candidate({ url: "https://ddisupply.com/products/implacare-ii" }),
-      distributor: candidate({ distributor: "Dental Distributors, Inc.", url: "https://supplier.test/x" }),
-    },
-    {
-      name: "amerdental",
-      origin: candidate({ distributor: "Whoever", url: "https://amerdental.com/products/test-product" }),
-      distributor: candidate({ distributor: "American Dental Accessories", url: "https://supplier.test/x" }),
-    },
-    {
-      name: "carolinadental",
-      origin: candidate({ distributor: "Whoever", url: "https://carolinadental.com/products/test-product" }),
-      distributor: candidate({ distributor: "Carolina Dental Supply", url: "https://supplier.test/x" }),
-    },
-    {
-      name: "davisdentalsupply (CF-fronted)",
-      origin: candidate({ distributor: "Whoever", url: "https://www.davisdentalsupply.com/products/x" }),
-      distributor: candidate({ distributor: "Davis Dental Supply", url: "https://supplier.test/x" }),
-    },
-    {
-      name: "bite supply (CF-fronted)",
-      origin: candidate({ distributor: "Whoever", url: "https://bitesupply.com/products/x" }),
-      distributor: candidate({ distributor: "Bite Supply", url: "https://supplier.test/x" }),
-      name: "wisdomdentalsupply (CF-fronted)",
-      origin: candidate({ distributor: "Whoever", url: "https://www.wisdomdentalsupply.com/products/x" }),
-      distributor: candidate({ distributor: "Wisdom Dental Supply", url: "https://supplier.test/x" }),
-      name: "primodentalproducts",
-      origin: candidate({ distributor: "Whoever", url: "https://primodentalproducts.com/products/primo-powder-free-nitrile-gloves" }),
-      distributor: candidate({ distributor: "Primo Dental Products", url: "https://supplier.test/x" }),
-      name: "jmu-dental (CF-fronted)",
-      origin: candidate({ distributor: "Whoever", url: "https://www.jmudental.com/products/x" }),
-      distributor: candidate({ distributor: "JMU Dental", url: "https://supplier.test/x" }),
-    },
-  ]
+describe("adapterForCandidate routes every registered Shopify vendor (origin + aliases)", () => {
+  // Cases derive from the registry itself, so onboarding a vendor needs no
+  // hand-written case here — only the expected-ids receipt list above.
+  const configs = loadShopifyConfigs()
 
-  for (const { name, origin, distributor } of cases) {
-    it(`routes ${name} to the Shopify adapter via origin`, () => {
-      expect(adapterForCandidate(origin).id).toBe("shopify")
+  it("has registry entries to route (guards against an empty glob)", () => {
+    expect(configs.length).toBeGreaterThan(0)
+  })
+
+  for (const config of configs) {
+    it(`routes ${config.supplier_id} to the Shopify adapter via origin`, () => {
+      expect(
+        adapterForCandidate(
+          candidate({ distributor: "Whoever", url: `${config.origin.replace(/\/$/, "")}/products/x` })
+        ).id
+      ).toBe("shopify")
     })
-    it(`routes ${name} to the Shopify adapter via distributor alias`, () => {
-      expect(adapterForCandidate(distributor).id).toBe("shopify")
-    })
+
+    for (const alias of config.origin_aliases ?? []) {
+      it(`routes ${config.supplier_id} to the Shopify adapter via origin alias ${alias}`, () => {
+        expect(
+          adapterForCandidate(
+            candidate({ distributor: "Whoever", url: `${alias.replace(/\/$/, "")}/products/x` })
+          ).id
+        ).toBe("shopify")
+      })
+    }
+
+    for (const alias of config.distributor_aliases ?? []) {
+      it(`routes ${config.supplier_id} to the Shopify adapter via distributor alias "${alias}"`, () => {
+        expect(
+          adapterForCandidate(candidate({ distributor: alias, url: "https://supplier.test/x" })).id
+        ).toBe("shopify")
+      })
+    }
   }
 
   it("does not route unrelated suppliers to the Shopify adapter", () => {

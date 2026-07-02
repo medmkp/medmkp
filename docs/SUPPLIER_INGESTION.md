@@ -236,10 +236,34 @@ Do not use generated debug CSVs as long-term source files.
 
 ## Scheduled Refresh (Airflow)
 
-`airflow/dags/supplier_catalog_ingestion.py` refreshes proven-adapter suppliers
-weekly on Sunday by running `supplier:ingest:db --commit` per supplier with tuned
-concurrency flags. Henry Schein has a dedicated `henry_schein` DAG at 16:00 UTC
-that runs `henryschein:ingest --commit`, including public web-price enrichment.
+Shopify suppliers are **registry-driven** — no per-supplier DAG entry.
+`airflow/dags/shopify_supplier_ingestion.py` reads
+`data/supplier-vetting/*-catalog-sources.json` (entries flagged
+`platform: "shopify"`) at DAG-parse time and provides two DAGs for the whole
+fleet:
+
+- `shopify_supplier_ingest` — manual trigger for any one supplier, picked from
+  a dropdown in the Airflow Trigger UI, or from your dev machine:
+
+  ```bash
+  npm run ingest:supplier -- --list      # registered Shopify suppliers
+  npm run ingest:supplier -- <slug>      # trigger ingestion on the NUC
+  ```
+
+- `shopify_catalog_refresh` — weekly fleet refresh (Sun 04:00 by default; tune
+  with the `medmkp_shopify_refresh_schedule` Variable), one mapped task per
+  registered supplier.
+
+Both pass `--ensure-supplier`, which auto-creates the `medmkp_supplier` row
+from the vetting entry on first run — no manual seed step for Shopify vendors.
+Onboarding a Shopify supplier is therefore just the vetting JSON (plus its
+test receipt line); see `SHOPIFY_CATALOG_CONFIG.md`.
+
+For everything else, `airflow/dags/supplier_catalog_ingestion.py` refreshes
+proven-adapter suppliers weekly by running `supplier:ingest:db --commit` per
+supplier with tuned concurrency flags. Henry Schein has a dedicated
+`henry_schein` DAG at 16:00 UTC that runs `henryschein:ingest --commit`,
+including public web-price enrichment.
 The DAGs need the `tracedds_backend_dir` Airflow Variable and an env file with the
 target `DATABASE_URL` (Render Postgres: `DB_SSL=true`) — set the
 `tracedds_env_file` Variable to `.env.production` on hosts that target the remote

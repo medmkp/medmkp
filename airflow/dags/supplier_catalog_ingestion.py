@@ -64,13 +64,18 @@ STAGES = ["discover", "index", "extract", "commit"]
 STATE_DIR_TEMPLATE = STATE_ROOT + "/{{ dag.dag_id }}/{{ ts_nodash }}"
 
 # Day-staggered weekly schedules (cron: m h * * DOW; DOW 0=Sun..6=Sat). The four
-# heaviest crawls get their own day; mediums and light Shopify stores share the
-# lighter days, hours apart. The NUC ingest pool is size 1, so same-day jobs run
-# serially regardless — the hour offsets are for clear retry windows.
+# heaviest crawls get their own day; mediums share the lighter days, hours
+# apart. The NUC ingest pool is size 1, so same-day jobs run serially
+# regardless — the hour offsets are for clear retry windows.
 #   Mon: patterson        Tue: dc_dental       Wed: darby
 #   Thu: henry_schein     Fri: dental_city, pearson
 #   Sat: shasta, sky, safco
-#   Sun: amerdental, carolina, unimedusa, young_specialties, zirc
+#   Sun: shopify_catalog_refresh (see shopify_supplier_ingestion.py),
+#        unimedusa, young_specialties, zirc
+#
+# Shopify storefronts (amerdental, carolina, DDI, Davis, ...) are NOT listed
+# here: they are registry-driven from data/supplier-vetting/*-catalog-sources.json
+# by shopify_supplier_ingestion.py (weekly fleet DAG + manual trigger DAG).
 SUPPLIERS = [
     {
         "name": "dc_dental",
@@ -85,32 +90,6 @@ SUPPLIERS = [
             "--source-concurrency=3",
             "--sitemap-concurrency=4",
             "--product-concurrency=12",
-            "--timeout-ms=30000",
-        ],
-    },
-    {
-        "name": "amerdental",
-        "supplier_id": "msup_amerdental_com",
-        "schedule": "0 4 * * 0",
-        "args": [
-            "--max-sitemaps-per-supplier=3",
-            "--sitemap-concurrency=4",
-            # Shopify storefront throttles per IP; per-page extraction is only
-            # the fallback behind products.json, keep it gentle.
-            "--product-concurrency=6",
-            "--timeout-ms=30000",
-        ],
-    },
-    {
-        "name": "carolina_dental",
-        "supplier_id": "msup_carolinadental_com",
-        "schedule": "0 6 * * 0",
-        "args": [
-            "--max-sitemaps-per-supplier=10",
-            "--sitemap-concurrency=4",
-            # Shopify storefront throttles per IP; per-page extraction is only
-            # the fallback behind products.json, keep it gentle.
-            "--product-concurrency=6",
             "--timeout-ms=30000",
         ],
     },

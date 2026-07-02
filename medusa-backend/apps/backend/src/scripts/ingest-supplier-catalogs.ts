@@ -20,6 +20,7 @@ import type {
   SupplierSitemapSummary,
   SupplierSourceUrl,
 } from "../ingestion/supplier-pipeline/types"
+import { findUsableSupplierCatalogSource } from "../ingestion/supplier-vetting"
 import { MEDMKP_MODULE } from "../modules/medmkp"
 import type MedMKPModuleService from "../modules/medmkp/service"
 import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
@@ -49,6 +50,7 @@ type CliOptions = {
   commit: boolean
   allowEmptyCommit: boolean
   allowCatalogShrink: boolean
+  ensureSupplier: boolean
 }
 
 function optionValue(arg: string) {
@@ -123,6 +125,7 @@ function parseOptions(): CliOptions {
     commit: process.env.SUPPLIER_INGESTION_COMMIT === "1",
     allowEmptyCommit: process.env.SUPPLIER_INGESTION_ALLOW_EMPTY_COMMIT === "1",
     allowCatalogShrink: process.env.SUPPLIER_INGESTION_ALLOW_CATALOG_SHRINK === "1",
+    ensureSupplier: process.env.SUPPLIER_INGESTION_ENSURE_SUPPLIER === "1",
   }
 
   for (const arg of process.argv.slice(2)) {
@@ -137,6 +140,9 @@ function parseOptions(): CliOptions {
     }
     if (arg === "--allow-catalog-shrink") {
       options.allowCatalogShrink = true
+    }
+    if (arg === "--ensure-supplier") {
+      options.ensureSupplier = true
     }
     if (arg.startsWith("--supplier-id=")) {
       options.supplierId = optionValue(arg)
@@ -386,6 +392,79 @@ async function replaceSupplierCatalog(
   )
 }
 
+/**
+ * Create-if-missing DB provisioning from the vetting registry, so a scheduled
+ * or ad-hoc ingest of a newly onboarded supplier does not require a manual
+ * `supplier:seed-usable` run first. Mirrors that seeder's field mapping but is
+ * strictly additive: it never deletes or overwrites an existing supplier row
+ * (re-seeding an edited vetting entry is still `supplier:seed-usable`'s job).
+ */
+async function ensureSupplierFromVetting(
+  medmkp: MedMKPModuleService,
+  options: CliOptions
+) {
+  if (!options.supplierId) {
+    throw new Error("--ensure-supplier requires --supplier-id")
+  }
+
+  const existing = await medmkp.listSuppliers()
+  if (existing.some((supplier) => supplier.id === options.supplierId)) {
+    return
+  }
+
+  const entry = findUsableSupplierCatalogSource(options.supplierId)
+  if (!entry) {
+    throw new Error(
+      `--ensure-supplier: no vetting entry with supplier_id "${options.supplierId}" ` +
+        "under data/supplier-vetting/*-catalog-sources.json"
+    )
+  }
+
+  await medmkp.createSuppliers([
+    {
+      id: entry.supplier_id,
+      name: entry.supplier_name,
+      slug: entry.slug,
+      website_url: entry.website_url,
+      support_email: "",
+      onboarding_status: "in_review" as const,
+      ein_last_four: "",
+      certification_summary: `Usable dental supplier lead from research CSV. ${entry.notes}`,
+      default_lead_time_days: 0,
+      ach_enabled: false,
+      catalog_source_urls: JSON.stringify([entry.source_url]),
+      catalog_source_notes: `Seeded from vetted supplier CSV. Source company row: ${entry.source_company_name}. ${entry.notes}`,
+    },
+  ])
+
+  const sources = await medmkp.listSupplierCatalogSources()
+  const hasSource = sources.some(
+    (source) =>
+      source.supplier_id === entry.supplier_id &&
+      source.source_catalog === entry.source_catalog
+  )
+  if (!hasSource) {
+    await medmkp.createSupplierCatalogSources([
+      {
+        id: `mscs_${entry.slug.replace(/-/g, "_")}`,
+        supplier_id: entry.supplier_id,
+        source_type: entry.source_type,
+        source_catalog: entry.source_catalog,
+        source_url: entry.source_url,
+        auth_required: false,
+        refresh_frequency: "manual" as const,
+        last_crawled_at: new Date().toISOString(),
+        status: "active" as const,
+        notes: `Seeded from vetted supplier CSV. Source company row: ${entry.source_company_name}.`,
+      },
+    ])
+  }
+
+  console.log(
+    `[supplier-ingestion] ensured supplier ${entry.supplier_id} (${entry.supplier_name}) from the vetting registry`
+  )
+}
+
 export default async function ingestSupplierCatalogs({
   container,
 }: {
@@ -418,6 +497,11 @@ export default async function ingestSupplierCatalogs({
       : undefined
 
   const medmkp = container.resolve<MedMKPModuleService>(MEDMKP_MODULE)
+
+  if (options.ensureSupplier) {
+    await ensureSupplierFromVetting(medmkp, options)
+  }
+
   const dbSuppliers = await medmkp.listSuppliers()
   const suppliers = dbSuppliers
     .filter((supplier) => !options.supplierId || supplier.id === options.supplierId)
