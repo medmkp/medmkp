@@ -6,6 +6,13 @@ import { AGENT_SUPPLIERS, ARCHIVED_LISTS, CRL_STATUS, STRATEGY_LABELS, availabil
 import { BuyingPreferencesCard, ListStatusPill, MatchSupplier, ProductThumb } from "./ui";
 import { MatchPanel, ReorderRow, ReorderTableHead } from "./reorder";
 
+// The supplier SKU for a row's carted offer: slim handoff rows pin it at
+// row.sku; live match rows carry it on the selected offer. The cart paths key
+// variant lookups on it (multi-variant products share one product URL).
+function cartRowSku(row) {
+  return row.sku || (row.offers || []).find((offer) => offer.key === row.selectedOfferKey)?.sku || "";
+}
+
 export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, onSwitchOffer, onOrderSubmitted, submitted = false, onToast }) {
   const [state, setState] = useState({ status: "loading", result: null });
   const rows = group.rows || [];
@@ -28,6 +35,7 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
           name: row.matchName || row.canonicalName || "",
           qty: row.qty,
           productUrl: row.productUrl,
+          sku: cartRowSku(row),
         })),
       }),
     })
@@ -105,7 +113,7 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
           name: row.matchName || row.canonicalName || "",
           qty: row.qty,
           productUrl: row.productUrl,
-          sku: row.sku || "",
+          sku: cartRowSku(row),
         })),
         ...(creds ? { username: creds.username, password: creds.password, save: creds.save } : {}),
       }),
@@ -129,7 +137,8 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
   }
 
   const result = state.result;
-  const isShopify = state.status === "ready" && result?.kind === "shopify-cart";
+  const isAmazon = state.status === "ready" && result?.kind === "amazon-cart";
+  const isPrefill = state.status === "ready" && (result?.kind === "shopify-cart" || isAmazon);
 
   // Best-effort multi-tab open for the page-by-page path. Browsers block all but
   // the first pop-up, so we nudge the buyer to allow them (per-item links below
@@ -148,7 +157,7 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
         <header className="crl-modal-head">
           <div>
             <h3 id="cartModalTitle">Build cart · {group.supplier}</h3>
-            <p>{isShopify
+            <p>{isPrefill
               ? "We can prefill this supplier’s cart in one click — quantities included."
               : "Open each product on the supplier’s site and add it to your cart."}</p>
           </div>
@@ -238,11 +247,11 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
             <div className="cart-status">Couldn’t reach {group.supplier} to prefill the cart — open each product below instead.</div>
           )}
 
-          {isShopify && (
+          {isPrefill && (
             <div className="cart-prefill">
               <div className="cart-prefill-icon"><Icon name="icon-cart" /></div>
               <strong>Your {group.supplier} cart is ready</strong>
-              <small>{result.count} item{result.count === 1 ? "" : "s"} with quantities, added to the cart on {group.supplier}.</small>
+              <small>{result.count} item{result.count === 1 ? "" : "s"} with quantities, added to the cart on {group.supplier}.{isAmazon ? " Amazon may ask you to sign in first — your items land in the cart right after." : ""}</small>
               <a className="primary-action compact" href={result.url} target="_blank" rel="noreferrer" onClick={() => onToast(`Opening your ${group.supplier} cart`)}>
                 <Icon name="icon-cart" className="button-icon" />Open prefilled cart
               </a>
@@ -252,7 +261,7 @@ export function CartBuilderModal({ group, buyingPrefs, onClose, onStockResults, 
             </div>
           )}
 
-          {(state.status === "error" || (state.status === "ready" && !isShopify && !result?.stock?.length)) && linkable.length > 0 && (
+          {(state.status === "error" || (state.status === "ready" && !isPrefill && !result?.stock?.length)) && linkable.length > 0 && (
             <button className="primary-action compact cart-openall" type="button" onClick={openAll}>
               <Icon name="icon-link" className="button-icon" />Open all {linkable.length} product page{linkable.length === 1 ? "" : "s"}
             </button>

@@ -38,6 +38,7 @@
     "catalog:purge-soft-deleted": "medusa exec ./src/scripts/purge-soft-deleted-catalog.ts --",
     "catalog:clean-names": "medusa exec ./src/scripts/clean-product-names.ts --",
     "catalog:backfill-category": "medusa exec ./src/scripts/backfill-supplier-category-from-canonical.ts --",
+    "catalog:backfill-variant-ids": "medusa exec ./src/scripts/backfill-external-variant-id.ts --",
     "catalog:refresh-read-models": "ts-node ./src/scripts/refresh-catalog-read-models.ts",
     "catalog:refresh-match-index": "ts-node ./src/scripts/refresh-match-index.ts",
     "products:match": "ts-node ./src/scripts/match-canonical-products.ts",

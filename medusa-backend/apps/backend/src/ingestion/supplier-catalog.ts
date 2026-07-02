@@ -92,6 +92,20 @@ function stringArray(value: unknown) {
     : []
 }
 
+// The platform's own id for the exact purchasable variant, when the adapter
+// captured one (Shopify adapters stash the numeric variant id in raw). Cart
+// permalinks are built from this stored id, so it must survive as a real
+// column instead of staying buried in raw_text.
+function externalVariantId(row: SupplierCatalogRow) {
+  const raw = row.raw && typeof row.raw === "object"
+    ? row.raw as Record<string, unknown>
+    : undefined
+  const id = raw?.variant_id
+  if (typeof id === "number" && Number.isFinite(id)) return String(id)
+  if (typeof id === "string" && id.trim()) return id.trim()
+  return null
+}
+
 function firstImageUrl(row: SupplierCatalogRow) {
   if (row.image_url?.trim()) {
     return row.image_url.trim()
@@ -192,6 +206,7 @@ export function buildSupplierCatalogIngestion(
       sku,
       manufacturer_sku: row.manufacturer_sku ?? "",
       barcode: row.barcode?.trim() || null,
+      external_variant_id: externalVariantId(row),
       brand: row.brand ?? "",
       name,
       description,
