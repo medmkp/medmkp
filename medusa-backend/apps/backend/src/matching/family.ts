@@ -30,16 +30,39 @@ function familyTokens(coreTokens: string[], axis: string): string[] {
   return coreTokens.filter((token) => !isFamilyStripToken(token, axis))
 }
 
-function familyKey(rep: NormalizedProduct, axis: string): string {
+const MIN_UNBRANDED_FAMILY_TOKENS = 5
+const MAX_FAMILY_MEMBERS = 50
+
+function familyKey(rep: NormalizedProduct, axis: string, brandKey = rep.brandKey ?? null): string {
   const tokens = [...new Set(familyTokens(rep.coreTokens, axis))].sort().join(" ")
-  return `${rep.brandKey ?? ""}|${tokens}|${axis}`
+  return `${brandKey ?? ""}|${tokens}|${axis}`
 }
 
-// Two brand keys can share a family when neither contradicts the other: an
-// absent brand (an identity-only supplier that never tagged one) is unknown, not
-// a conflict; two different stated brands are a hard conflict.
-function brandsCompatible(a: string | null, b: string | null): boolean {
-  return !a || !b || a === b
+function clusterBrandKeys(cluster: Cluster): Set<string> {
+  return new Set(
+    cluster.members
+      .map((member) => member.brandKey)
+      .filter((brandKey): brandKey is string => Boolean(brandKey))
+  )
+}
+
+function agreedClusterBrandKey(cluster: Cluster): string | null {
+  const brands = clusterBrandKeys(cluster)
+  return brands.size === 1 ? [...brands][0] : null
+}
+
+function agreedClusterBrandTokens(cluster: Cluster, brandKey: string | null): string[] {
+  if (!brandKey) {
+    return []
+  }
+  return (
+    cluster.members.find((member) => member.brandKey === brandKey)?.brandTokens.filter((token) => token.length >= 2) ??
+    []
+  )
+}
+
+function hasBrandConflict(cluster: Cluster): boolean {
+  return clusterBrandKeys(cluster).size > 1
 }
 
 function stableId(prefix: string, key: string): string {
@@ -221,7 +244,7 @@ function clusterFamilyName(cluster: Cluster, axis: string): string {
     if (score !== 0) {
       return score
     }
-    return b.length - a.length
+    return a.length - b.length
   })
   return candidates[0] || cleanFamilyName(cluster.representative.row.name, axis)
 }
@@ -393,7 +416,7 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
   // brand, the family token set, and the variant axis. Drives the bridge pass.
   const groupMeta = new Map<
     string,
-    { brandKey: string | null; tokens: Set<string>; axis: string }
+    { brandKey: string | null; brandTokens: string[]; tokens: Set<string>; axis: string }
   >()
 
   for (const cluster of clusters) {
@@ -402,21 +425,25 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
       continue
     }
     const rep = cluster.representative
+    if (hasBrandConflict(cluster)) {
+      continue
+    }
+    const brandKey = agreedClusterBrandKey(cluster)
     const tokens = new Set(familyTokens(rep.coreTokens, variant.axis))
     if (tokens.size === 0) {
       continue
     }
-    if (!rep.brandKey && tokens.size < 3) {
+    if (!brandKey && tokens.size < MIN_UNBRANDED_FAMILY_TOKENS) {
       // No brand and a generic short name — too weak to group safely.
       continue
     }
-    const key = familyKey(rep, variant.axis)
+    const key = familyKey(rep, variant.axis, brandKey)
     const list = groups.get(key)
     if (list) {
       list.push({ cluster, variant, tokenCount: tokens.size })
     } else {
       groups.set(key, [{ cluster, variant, tokenCount: tokens.size }])
-      groupMeta.set(key, { brandKey: rep.brandKey ?? null, tokens, axis: variant.axis })
+      groupMeta.set(key, { brandKey, brandTokens: agreedClusterBrandTokens(cluster, brandKey), tokens, axis: variant.axis })
     }
   }
 
@@ -440,6 +467,29 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
     const sizeDiff = groups.get(b)!.length - groups.get(a)!.length
     return sizeDiff !== 0 ? sizeDiff : a < b ? -1 : 1
   })
+  const bridgeBucketKey = (axis: string, brandKey: string | null) => `${axis}\0${brandKey ?? ""}`
+  const targetKeysByBridgeBucket = new Map<string, string[]>()
+  const targetKeysByAxis = new Map<string, string[]>()
+  for (const targetKey of targetKeys) {
+    const target = groups.get(targetKey)
+    if (!target || target.length < 2) {
+      continue
+    }
+    const targetMeta = groupMeta.get(targetKey)!
+    const bucket = bridgeBucketKey(targetMeta.axis, targetMeta.brandKey)
+    const list = targetKeysByBridgeBucket.get(bucket)
+    if (list) {
+      list.push(targetKey)
+    } else {
+      targetKeysByBridgeBucket.set(bucket, [targetKey])
+    }
+    const axisList = targetKeysByAxis.get(targetMeta.axis)
+    if (axisList) {
+      axisList.push(targetKey)
+    } else {
+      targetKeysByAxis.set(targetMeta.axis, [targetKey])
+    }
+  }
   for (const orphanKey of orphanKeys) {
     const orphanList = groups.get(orphanKey)
     if (!orphanList || orphanList.length !== 1) {
@@ -448,7 +498,23 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
     const orphan = orphanList[0]
     const orphanMeta = groupMeta.get(orphanKey)!
     const orphanCore = new Set(orphan.cluster.representative.coreTokens)
-    for (const targetKey of targetKeys) {
+    const exactBridgeTargets = targetKeysByBridgeBucket.get(
+      bridgeBucketKey(orphanMeta.axis, orphanMeta.brandKey)
+    ) ?? []
+    const inferredBrandTargets =
+      orphanMeta.brandKey === null
+        ? (targetKeysByAxis.get(orphanMeta.axis) ?? []).filter((targetKey) => {
+            const targetMeta = groupMeta.get(targetKey)!
+            return (
+              targetMeta.brandKey !== null &&
+              targetMeta.brandTokens.length > 0 &&
+              (targetMeta.brandTokens.every((token) => orphanCore.has(token)) ||
+                orphanCore.has(targetMeta.brandTokens[0]))
+            )
+          })
+        : []
+    const bridgeTargets = [...exactBridgeTargets, ...inferredBrandTargets]
+    for (const targetKey of bridgeTargets) {
       if (targetKey === orphanKey) {
         continue
       }
@@ -457,12 +523,6 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
         continue
       }
       const targetMeta = groupMeta.get(targetKey)!
-      if (targetMeta.axis !== orphanMeta.axis) {
-        continue
-      }
-      if (!brandsCompatible(targetMeta.brandKey, orphanMeta.brandKey)) {
-        continue
-      }
       // Anchor on a specific (>=3 token) family so a generic two-word name can't
       // vacuum up unrelated listings, and require full containment.
       if (targetMeta.tokens.size < 3) {
@@ -483,6 +543,9 @@ export function assignFamilies(clusters: Cluster[]): Map<number, FamilyInfo> {
   const result = new Map<number, FamilyInfo>()
   for (const [key, members] of groups) {
     if (members.length < 2) {
+      continue
+    }
+    if (members.length > MAX_FAMILY_MEMBERS) {
       continue
     }
     const distinctLabels = new Set(members.map((m) => m.variant.label))
