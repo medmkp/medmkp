@@ -423,7 +423,7 @@ export function CatalogSearchView({ query, onNavigate }) {
                     <span className="cat-pcard-path">{summary}</span>
                     <div className="cat-pcard-foot">
                       <CatBestPrice best={best} showBadge={false} />
-                      <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
+                      <span className="cat-pcard-suppliers">{product.offer_count} supplier{product.offer_count === 1 ? "" : "s"}</span>
                     </div>
                   </div>
                 </article>
@@ -1003,7 +1003,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                         <button type="button" className="cat-pcard-name" onClick={open}>{product.name}</button>
                         <div className="cat-pcard-foot">
                           <CatBestPrice best={best} showBadge={product.id === cheapest?.id && !sub} />
-                          <span className="cat-pcard-suppliers">{product.offer_count} suppliers</span>
+                          <span className="cat-pcard-suppliers">{product.offer_count} supplier{product.offer_count === 1 ? "" : "s"}</span>
                         </div>
                       </div>
                       {product.variant_count > 1 && (
