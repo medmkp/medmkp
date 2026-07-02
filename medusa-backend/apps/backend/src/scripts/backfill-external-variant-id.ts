@@ -31,9 +31,11 @@ export default async function backfillExternalVariantId({ container, args }: { c
     // Extract in SQL so raw_text never crosses the wire; the LIKE prefilter
     // keeps each batch to rows that can actually match. Handles both numeric
     // ("variant_id":51368978121025) and string ("variant_id":"513...") forms.
+    // The regex's optional quote is written \\? — knex.raw treats a bare ? as
+    // a bind placeholder and would mangle the pattern.
     const rows: Array<{ id: string; vid: string | null }> = await knex("medmkp_supplier_product")
       .select("id")
-      .select(knex.raw(`substring(raw_text from '"variant_id":\\s*"?([0-9]+)') as vid`))
+      .select(knex.raw(`substring(raw_text from '"variant_id":\\s*"\\?([0-9]+)') as vid`))
       .where("id", ">", lastId)
       .whereNull("external_variant_id")
       .whereNull("deleted_at")
