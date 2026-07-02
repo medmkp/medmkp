@@ -106,6 +106,7 @@ describe("loadShopifyConfigs (real vetting files)", () => {
       "msup_davisdentalsupply_com",
       "msup_bitesupply_com",
       "msup_wisdomdentalsupply_com",
+      "msup_primodentalproducts_com",
     ]) {
       expect(bySupplier.has(id)).toBe(true)
     }
@@ -145,6 +146,9 @@ describe("adapterForCandidate routes migrated Shopify vendors (origin + distribu
       name: "wisdomdentalsupply (CF-fronted)",
       origin: candidate({ distributor: "Whoever", url: "https://www.wisdomdentalsupply.com/products/x" }),
       distributor: candidate({ distributor: "Wisdom Dental Supply", url: "https://supplier.test/x" }),
+      name: "primodentalproducts",
+      origin: candidate({ distributor: "Whoever", url: "https://primodentalproducts.com/products/primo-powder-free-nitrile-gloves" }),
+      distributor: candidate({ distributor: "Primo Dental Products", url: "https://supplier.test/x" }),
     },
   ]
 
