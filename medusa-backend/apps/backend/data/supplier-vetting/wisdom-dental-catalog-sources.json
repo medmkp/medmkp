@@ -1,0 +1,18 @@
+[
+  {
+    "supplier_id": "msup_wisdomdentalsupply_com",
+    "supplier_name": "Wisdom Dental Supply",
+    "slug": "wisdom-dental-supply",
+    "website_url": "https://wisdomdentalsupply.com",
+    "source_catalog": "wisdom-dental-supply-website-public",
+    "source_type": "website",
+    "source_url": "https://wisdomdentalsupply.com",
+    "classification": "catalog_candidate",
+    "confidence_score": 0.9,
+    "source_company_name": "Wisdom Dental Supply",
+    "platform": "shopify",
+    "origin": "https://wisdomdentalsupply.com",
+    "distributor_aliases": ["wisdom dental supply"],
+    "notes": "Shopify store (Cloudflare-fronted; www variant serves the same store, apex canonical). Config-driven Shopify routing (adapters/shopify-config.ts): matched by origin host wisdomdentalsupply.com OR distributor alias, then extracted via the shared /products.json catalog path (shopify-catalog-extraction.ts) with the per-page HTML adapter (adapters/shopify.ts) as the fallback tier. variant.sku (brand-prefixed, e.g. DCI-7247, PRK-S343, RPI-DSF012) -> supplier SKU, product.vendor -> brand, variant.price (dollars string) -> price, variant.available -> stock. Shopify strips variant.barcode from the public list /products.json, so expect no GTIN/UPC (no lot/expiry barcode hook) and no unit_of_measure, same limitation as our other Shopify-sourced suppliers. Net32 winning seller (227 wins, rank ~#16 in the winning-seller census). Catalog discovered via /sitemap.xml -> sitemap_products_1..3.xml then pulled in full from /products.json?limit=250&page=N (~7,309 products across ~30 pages); throttle paging (~350ms between pages) to avoid tripping the Cloudflare challenge. Verified live 2026-07-01: products.json 200 logged-out, 250/250 variants carried a price, 249/250 a SKU, 0/250 a barcode."
+  }
+]

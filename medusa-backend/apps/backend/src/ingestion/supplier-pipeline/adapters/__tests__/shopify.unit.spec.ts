@@ -105,6 +105,7 @@ describe("loadShopifyConfigs (real vetting files)", () => {
       "msup_thedentaldistributors_com",
       "msup_davisdentalsupply_com",
       "msup_bitesupply_com",
+      "msup_wisdomdentalsupply_com",
     ]) {
       expect(bySupplier.has(id)).toBe(true)
     }
@@ -141,6 +142,9 @@ describe("adapterForCandidate routes migrated Shopify vendors (origin + distribu
       name: "bite supply (CF-fronted)",
       origin: candidate({ distributor: "Whoever", url: "https://bitesupply.com/products/x" }),
       distributor: candidate({ distributor: "Bite Supply", url: "https://supplier.test/x" }),
+      name: "wisdomdentalsupply (CF-fronted)",
+      origin: candidate({ distributor: "Whoever", url: "https://www.wisdomdentalsupply.com/products/x" }),
+      distributor: candidate({ distributor: "Wisdom Dental Supply", url: "https://supplier.test/x" }),
     },
   ]
 
