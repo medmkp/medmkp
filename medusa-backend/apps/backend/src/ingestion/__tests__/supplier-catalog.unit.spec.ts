@@ -135,6 +135,26 @@ describe("buildSupplierCatalogIngestion", () => {
     expect(ingestion.canonicalProductMatches).toHaveLength(1)
   })
 
+  it("drops scraper-artifact rows whose cleaned name is junk (#606)", () => {
+    const ingestion = buildSupplierCatalogIngestion(
+      baseInput([
+        { sku: "JUNK-1", name: "Debug info copied.", price_cents: 100 },
+        { sku: "JUNK-2", name: "Ea", price_cents: 200 },
+        { sku: "JUNK-3", name: "Box", price_cents: 300 },
+        { sku: "REAL-1", name: "Cotton Gauze Sponge 4x4", price_cents: 400 },
+      ]),
+      []
+    )
+    // Only the real listing survives — no supplier product, match, or price
+    // snapshot is emitted for any junk row.
+    expect(ingestion.supplierProducts).toHaveLength(1)
+    expect((ingestion.supplierProducts[0] as { name: string }).name).toBe(
+      "Cotton Gauze Sponge 4x4"
+    )
+    expect(ingestion.canonicalProductMatches).toHaveLength(1)
+    expect(ingestion.priceSnapshots).toHaveLength(1)
+  })
+
   it("keeps distinct ids for SKUs that slugify identically (e.g. 809-151 vs 809-151+)", () => {
     // Real DC Dental collision that aborted a full-catalog commit on a duplicate
     // primary key: the '+' is stripped by slugification.

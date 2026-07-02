@@ -121,6 +121,37 @@ export function cleanProductName(value: string) {
   return stripRedundantVariantSuffix(repairLostSymbols(decodeHtml(value)))
 }
 
+// Bare unit-of-measure / packaging tokens some scrapes emit as the WHOLE product
+// name when the real title failed to extract ("Ea", "Each", "Box", "Pkg"). These
+// are never a usable product title on their own.
+const JUNK_UOM_TOKENS = new Set([
+  "ea", "each", "bx", "box", "pk", "pkg", "pack", "cs", "case", "kt", "kit",
+  "ct", "doz", "dz", "dozen", "gal", "roll", "tube", "vial", "unit", "units",
+  "set", "pr", "pair",
+])
+
+// Exact scraper-artifact strings that leak in as a product "name" — page chrome
+// and debug widgets rather than a real title.
+const JUNK_NAME_DENYLIST = new Set([
+  "debug info copied",
+])
+
+// A scraped "name" that is not a real product title: empty/too-short, a bare
+// unit-of-measure token, or a known scraper-artifact string. Applied at the
+// ingest boundary (skip the listing) and in the matcher (never mint a canonical
+// from it) so junk like "Ea" ×644 / "Debug info copied." ×264 stops becoming a
+// live canonical product. See issue #606.
+export function isJunkProductName(value: string) {
+  const cleaned = cleanProductName(value ?? "").trim()
+  // <4 chars is too short to be a real dental product title and is overwhelmingly
+  // a scrape artifact ("Ea", "Bx", "Kit", "KT", bare model fragments).
+  if (cleaned.length < 4) {
+    return true
+  }
+  const key = cleaned.toLowerCase().replace(/[.\s]+$/, "")
+  return JUNK_NAME_DENYLIST.has(key) || JUNK_UOM_TOKENS.has(key)
+}
+
 export function stripTags(value: string) {
   return decodeHtml(value.replace(/<[^>]*>/g, " "))
 }

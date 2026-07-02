@@ -1,6 +1,6 @@
 import { boundedId } from "../supplier-catalog"
 import { parsePack, unitPriceCents } from "../pack"
-import { cleanProductName } from "../supplier-pipeline/html"
+import { cleanProductName, isJunkProductName } from "../supplier-pipeline/html"
 import type { MarketplaceCatalogRow } from "./search"
 
 type SourceType = "website" | "pdf" | "csv" | "manual" | "api" | "email" | "agent"
@@ -57,6 +57,11 @@ export function buildMarketplaceIngestion(input: MarketplaceIngestionInput) {
       96
     )
     const name = cleanProductName(row.name?.trim() || row.sku)
+    // Skip scraper artifacts (e.g. Amazon's "Debug info copied." ×264) before
+    // they become a supplier product / canonical match. See #606.
+    if (isJunkProductName(name)) {
+      return
+    }
     const category = row.category?.trim() || "Dental supplies"
     const pack = parsePack(row.pack_size, name, category)
 

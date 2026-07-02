@@ -3,6 +3,7 @@ import { Client } from "pg"
 import { commitMatchRun, loadSupplierProducts } from "../matching/db"
 import { runMatching } from "../matching/engine"
 import { normalizeProduct } from "../matching/normalize"
+import { isJunkProductName } from "../ingestion/supplier-pipeline/html"
 import { writeReports } from "../matching/report"
 import { assertDestructiveDbOperationAllowed } from "../utils/db-safety"
 import { resolveDatabaseUrl } from "../utils/database-url"
@@ -31,8 +32,17 @@ async function main() {
 
   try {
     console.log("Loading supplier products and latest prices...")
-    const rows = await loadSupplierProducts(client)
-    console.log(`Loaded ${rows.length} supplier products`)
+    const allRows = await loadSupplierProducts(client)
+    // Exclude scraper artifacts ("Ea", "Debug info copied.", bare UOM tokens) so
+    // they never mint a canonical product. The commit step rebuilds all mcp_auto_*
+    // canonicals from this run, so dropping the junk rows here also purges the
+    // junk canonicals already in the DB on the next --commit. See #606.
+    const rows = allRows.filter((row) => !isJunkProductName(row.name))
+    const skipped = allRows.length - rows.length
+    console.log(
+      `Loaded ${allRows.length} supplier products` +
+        (skipped > 0 ? ` (skipped ${skipped} junk-named artifacts)` : "")
+    )
 
     console.log("Normalizing...")
     const products = rows.map(normalizeProduct)

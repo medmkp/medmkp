@@ -1,6 +1,6 @@
 import { createHash } from "crypto"
 import { parsePack, unitPriceCents } from "./pack"
-import { cleanProductName } from "./supplier-pipeline/html"
+import { cleanProductName, isJunkProductName } from "./supplier-pipeline/html"
 
 type SourceType = "website" | "pdf" | "csv" | "manual" | "api" | "email" | "agent"
 type RefreshFrequency = "weekly" | "monthly" | "quarterly" | "manual"
@@ -170,6 +170,11 @@ export function buildSupplierCatalogIngestion(
     // weird characters (leftover HTML entities, smart punctuation, U+FFFD from
     // bad-charset pages) never reach the DB no matter which adapter produced it.
     const name = cleanProductName(row.name?.trim() || row.description?.trim() || sku)
+    // Drop scraper artifacts before they land as supplier products: a name that
+    // is empty/too-short, a bare unit-of-measure token ("Ea", "Box"), or a known
+    // junk string ("Debug info copied.") is not a real listing. Skipping it here
+    // stops the matcher from ever minting a junk canonical from it. See #606.
+    if (isJunkProductName(name)) return
     const description = row.description?.trim() || name
     const category = row.category?.trim() || "Dental supplies"
     const pack = parsePack(row.pack_size, name, category)
