@@ -286,6 +286,14 @@ export type ProximityCardOptions = {
   detailUrlPattern: RegExp
   /** characters of HTML to scan around each link for image/title/price. */
   windowRadius?: number
+  /**
+   * Last-resort name recovery from the detail URL, tried only when the card's
+   * inner text (and its title=/alt= attributes) is just the price block. The URL
+   * slug often carries the real product name (Amazon's "/<slug>/dp/<ASIN>"), so
+   * this rescues a listing that would otherwise be dropped. Returns undefined
+   * when the URL yields no usable name, leaving the card to be dropped.
+   */
+  titleFromUrl?: (url: string) => string | undefined
 }
 
 /**
@@ -364,6 +372,16 @@ export function parseProximityCards(
         attrNear(firstWindow, "title") || attrNear(firstWindow, "alt") || ""
       if (fallback) {
         title = fallback
+      }
+    }
+
+    // Still only a price string? The detail URL's slug is the last chance at the
+    // real name (Amazon's "/<slug>/dp/<ASIN>"). Recovering it turns a card that
+    // would be dropped — or shipped named "$11.50" — into a real listing.
+    if ((!title || looksLikePriceOnly(title)) && options.titleFromUrl) {
+      const fromUrl = options.titleFromUrl(group[0].url)
+      if (fromUrl) {
+        title = fromUrl
       }
     }
 
