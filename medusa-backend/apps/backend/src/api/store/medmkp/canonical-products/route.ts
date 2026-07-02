@@ -384,6 +384,212 @@ function listRowToItem(row: any): CategoryListItem {
   }
 }
 
+// A search card is a category card that may carry NO direct offer: text search
+// keeps marketplace-only families (a non-empty "Also available on" section, no
+// priced supplier table) findable rather than dropping them, so best_offer is
+// nullable and we surface how many marketplaces carry it for a per-#597 badge.
+type SearchListItem = Omit<CategoryListItem, "best_offer"> & {
+  best_offer: CategoryListItem["best_offer"] | null
+  marketplace_offer_count: number
+}
+
+type SearchListResult = { count: number; canonical_products: SearchListItem[] }
+
+// Row → search card. Reuses the listing column aliases; when the family has only
+// marketplace listings (best_sp_id is NULL) it returns a priceless card so the
+// UI can badge "Also available on …" instead of a dead-end empty-pricing PDP.
+function searchRowToItem(row: any): SearchListItem {
+  const isFamily = Boolean(row.family_id)
+  const marketplaceOfferCount = Number(row.marketplace_offer_count) || 0
+  const base = {
+    id: row.id,
+    handle: isFamily ? row.family_handle : row.any_handle,
+    name: isFamily ? row.family_name : row.any_name,
+    category: row.any_category,
+    family_id: row.family_id ?? null,
+    variant_count: Number(row.variant_count),
+    offer_count: Number(row.offer_count) || 0,
+    offers: [] as never[],
+    price_range_cents: null,
+    marketplace_offer_count: marketplaceOfferCount,
+  }
+  if (!row.best_sp_id) {
+    return { ...base, best_offer: null, image_url: "" }
+  }
+  const image = row.best_image || ""
+  return {
+    ...base,
+    best_offer: {
+      supplier_product_id: row.best_sp_id,
+      supplier_id: row.best_supplier_id,
+      supplier_name: row.best_supplier_name ?? "Unknown supplier",
+      sku: row.best_sku,
+      name: row.best_name,
+      brand: row.best_brand,
+      image_url: image,
+      product_url: row.best_url || "",
+      price_cents: Number(row.best_price),
+      unit_price_cents: row.best_unit_price != null ? Number(row.best_unit_price) : null,
+      pack_quantity: row.best_pack_qty != null ? Number(row.best_pack_qty) : null,
+      base_unit: row.best_base_unit ?? null,
+      pack_basis: row.best_pack_basis ?? null,
+      pack_size: row.best_pack_size || "",
+      unit_comparable: row.best_unit_price != null,
+      match_status: "matched",
+    },
+    image_url: image,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Relevance-ranked text search (?q= with no category)
+//
+// The plain-search path used a bare ILIKE '%q%' with take:600 in arbitrary DB
+// order, then ranked in memory by price — so it (1) had no relevance ranking,
+// (2) returned every size/shade of a family as a separate near-identical row,
+// and (3) surfaced canonicals with zero priced offers whose PDP shows an empty
+// pricing table. This rebuilds it as the grp-grouped, priced-filtered twin of
+// queryCategoryProducts, minus the category filter: one row per family, ranked
+// by pg_trgm similarity(name, q) with priced families first, keeping only
+// families that carry at least one direct offer OR a marketplace listing (so no
+// result dead-ends into an empty PDP). The ILIKE filter is index-served by the
+// name/handle/category trigram GIN indexes (Migration20260617190000); similarity
+// is computed only over that bounded candidate set, so it needs no index.
+// ---------------------------------------------------------------------------
+const searchListCache = new Map<string, { loadedAt: number; result: SearchListResult }>()
+const searchListPromises = new Map<string, Promise<SearchListResult>>()
+
+async function querySearchProducts(
+  q: string,
+  limit: number,
+  offset: number
+): Promise<SearchListResult> {
+  const pool = getPostgresPool()
+  const qLike = `%${q}%`
+  const marketplaceIds = [...MARKETPLACE_SUPPLIER_IDS]
+  const { rows } = await pool.query(
+    `
+    WITH cand AS (
+      SELECT id, handle, name, category,
+             family_id, family_handle, family_name,
+             COALESCE(family_id, id) AS grp,
+             similarity(name, $1) AS sim
+      FROM medmkp_canonical_product
+      WHERE deleted_at IS NULL
+        AND (name ILIKE $2 OR handle ILIKE $2 OR category ILIKE $2)
+    ),
+    -- Direct (non-marketplace) priced offers: the supplier price comparison the
+    -- product page shows. Marketplace suppliers are excluded here and counted
+    -- separately below, mirroring the PDP's split.
+    direct AS (
+      SELECT cand.grp, sp.supplier_id, cp.price_cents, cp.unit_price_cents, m.supplier_product_id
+      FROM medmkp_canonical_product_match m
+      JOIN medmkp_supplier_current_price cp ON cp.supplier_product_id = m.supplier_product_id
+      JOIN medmkp_supplier_product sp ON sp.id = m.supplier_product_id
+      JOIN cand ON cand.id = m.canonical_product_id
+      WHERE m.match_status NOT IN ('unmatched', 'substitute') AND m.deleted_at IS NULL
+        AND NOT (sp.supplier_id = ANY($3::text[]))
+    ),
+    -- Marketplace listings feed the PDP's "Also available on" section (kept out of
+    -- the price comparison). A family with these but no direct offer is still
+    -- worth surfacing — its PDP is not a dead-end.
+    mkt AS (
+      SELECT grp, COUNT(DISTINCT supplier_id)::int AS marketplace_offer_count
+      FROM (
+        SELECT cand.grp, sp.supplier_id
+        FROM medmkp_canonical_product_match m
+        JOIN medmkp_supplier_product sp ON sp.id = m.supplier_product_id
+        JOIN cand ON cand.id = m.canonical_product_id
+        WHERE m.deleted_at IS NULL
+          AND m.match_status IN ('exact', 'variant', 'substitute')
+          AND sp.supplier_id = ANY($3::text[])
+      ) mm
+      GROUP BY grp
+    ),
+    agg AS (
+      SELECT grp, COUNT(DISTINCT supplier_id)::int AS offer_count FROM direct GROUP BY grp
+    ),
+    best AS (
+      SELECT DISTINCT ON (grp) grp, supplier_product_id, price_cents, unit_price_cents
+      FROM direct
+      ORDER BY grp, (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC
+    ),
+    grpinfo AS (
+      SELECT grp,
+             MAX(sim) AS sim,
+             COUNT(*)::int AS variant_count,
+             MAX(family_id) AS family_id,
+             MAX(family_handle) AS family_handle,
+             MAX(family_name) AS family_name,
+             (ARRAY_AGG(handle ORDER BY name))[1] AS any_handle,
+             (ARRAY_AGG(name ORDER BY name))[1] AS any_name,
+             (ARRAY_AGG(category ORDER BY name))[1] AS any_category
+      FROM cand GROUP BY grp
+    ),
+    keep AS (
+      SELECT g.grp, g.sim, g.variant_count, g.family_id, g.family_handle, g.family_name,
+             g.any_handle, g.any_name, g.any_category,
+             COALESCE(a.offer_count, 0) AS offer_count,
+             COALESCE(mkt.marketplace_offer_count, 0) AS marketplace_offer_count,
+             b.supplier_product_id AS best_sp_id, b.price_cents AS best_price, b.unit_price_cents AS best_unit_price,
+             (b.supplier_product_id IS NOT NULL) AS has_direct
+      FROM grpinfo g
+      LEFT JOIN agg a ON a.grp = g.grp
+      LEFT JOIN best b ON b.grp = g.grp
+      LEFT JOIN mkt ON mkt.grp = g.grp
+      WHERE b.supplier_product_id IS NOT NULL OR mkt.grp IS NOT NULL
+    )
+    SELECT
+      k.grp AS id, k.variant_count, k.family_id, k.family_handle, k.family_name,
+      k.any_handle, k.any_name, k.any_category,
+      k.offer_count, k.marketplace_offer_count,
+      k.best_price, k.best_unit_price, k.best_sp_id,
+      sp.sku AS best_sku, sp.name AS best_name, sp.brand AS best_brand,
+      sp.image_url AS best_image, sp.product_url AS best_url,
+      sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty, sp.base_unit AS best_base_unit, sp.pack_basis AS best_pack_basis,
+      sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
+      COUNT(*) OVER() AS total_count
+    FROM keep k
+    LEFT JOIN medmkp_supplier_product sp ON sp.id = k.best_sp_id AND sp.deleted_at IS NULL
+    LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
+    -- Priced families first, then by name-similarity to the query, then name.
+    ORDER BY k.has_direct DESC, k.sim DESC, k.any_name ASC
+    LIMIT $4 OFFSET $5
+    `,
+    [q, qLike, marketplaceIds, limit, offset]
+  )
+
+  const canonical_products = rows.map(searchRowToItem)
+
+  return { count: rows.length ? Number(rows[0].total_count) : 0, canonical_products }
+}
+
+async function listSearchProducts(
+  q: string,
+  limit: number,
+  offset: number
+): Promise<SearchListResult> {
+  const key = `${q}|${limit}|${offset}`
+  const cached = searchListCache.get(key)
+  if (cached && Date.now() - cached.loadedAt < CATEGORY_LIST_CACHE_TTL_MS) {
+    return cached.result
+  }
+
+  let promise = searchListPromises.get(key)
+  if (!promise) {
+    promise = querySearchProducts(q, limit, offset)
+    searchListPromises.set(key, promise)
+  }
+
+  try {
+    const result = await promise
+    searchListCache.set(key, { loadedAt: Date.now(), result })
+    return result
+  } finally {
+    searchListPromises.delete(key)
+  }
+}
+
 async function listCategoryProducts(
   category: string,
   q: string | undefined,
@@ -552,6 +758,18 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       return
     } catch (error) {
       // Fall through to the general (in-memory) supplier filter if unavailable.
+    }
+  }
+
+  // Plain text search: rank + group + page in the database (see querySearchProducts).
+  // Only the pure text case — q combined with a category/supplier is handled by the
+  // branches above (which already narrow their read model by q).
+  if (q && !handle && !category && !supplier) {
+    try {
+      res.json(await listSearchProducts(q, limit, offset))
+      return
+    } catch (error) {
+      // Fall through to the general (in-memory) search path if the query fails.
     }
   }
 
