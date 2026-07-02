@@ -46,6 +46,36 @@ export type ParsedMoney = {
 const PER_UNIT_SUFFIX_RE =
   /^\s*\/\s*(?:count|ct|each|ea|piece|pcs?|pair|sheet|load|wash|oz|fl\s?oz|g|gram|grams|kg|mg|ml|l|m|ft|sq\s?ft|capsule|tablet)\b/i
 
+// A currency marker at the very start of a string — the precision guard for
+// looksLikePriceOnly below. Real product names don't lead with a price.
+const LEADING_PRICE_RE = /^\s*(?:US\s*\$|USD|RMB|CNY|\$|€|£|¥)\s*[0-9]/i
+
+// Words that legitimately appear inside a price block (comparison labels and the
+// per-unit denominators) but carry no product identity on their own. A "title"
+// left with only these after its prices are stripped is really a price string.
+const PRICE_CONTEXT_WORDS = new Set([
+  "typical", "list", "sale", "was", "now", "off", "reg", "price",
+  "count", "ct", "each", "ea", "piece", "pieces", "pcs", "pc", "pair",
+  "sheet", "sheets", "load", "loads", "wash", "washes", "oz", "fl", "fluid",
+  "ounce", "ounces", "gram", "grams", "kg", "mg", "ml", "capsule", "capsules",
+  "tablet", "tablets", "per", "and", "of", "the",
+])
+
+// True when a card "title" is really the price block, not a product name — e.g.
+// an Amazon /dp/ link that wraps only the split-span price yields inner text like
+// "$11.50 $ 11 . 50" or "$27.95 ( $1.50 /fluid ounce)". Ingesting those verbatim
+// produced garbage catalog listings (244 Amazon canonicals named "$11.50"). We
+// require the string to LEAD with a price (so a real name that merely mentions
+// one is never dropped) and to carry no word beyond price-context labels/units.
+export function looksLikePriceOnly(title: string): boolean {
+  const trimmed = title.trim()
+  if (!trimmed || !LEADING_PRICE_RE.test(trimmed)) {
+    return false
+  }
+  const words = trimmed.replace(PRICE_TOKEN_RE, " ").toLowerCase().match(/[a-z]{2,}/g)
+  return !words || words.every((word) => PRICE_CONTEXT_WORDS.has(word))
+}
+
 /**
  * Parse the headline price out of a chunk of text. Returns the FIRST
  * currency-marked price that isn't a per-unit derived price. For a range
@@ -325,14 +355,22 @@ export function parseProximityCards(
       }
     }
 
-    if (!title) {
+    // The anchor text is missing, or is really the price block (an Amazon /dp/
+    // link that wraps only the price) — try the card's title=/alt= attribute for
+    // the real product name before giving up.
+    if (!title || looksLikePriceOnly(title)) {
       const firstWindow = html.slice(group[0].index, group[0].index + radius)
-      title =
+      const fallback =
         attrNear(firstWindow, "title") || attrNear(firstWindow, "alt") || ""
+      if (fallback) {
+        title = fallback
+      }
     }
 
     title = title.trim()
-    if (!title) {
+    // Drop a card whose only usable "title" is a price string — better no listing
+    // than a product named "$11.50".
+    if (!title || looksLikePriceOnly(title)) {
       continue
     }
     // Drop non-product variant/refinement links ("9 Sizes", "See more") that
