@@ -7,6 +7,36 @@ import { CatalogSupplierAvatar, QtyStepper } from "./ui";
 import { bucketCategories, categoryBySlug, departmentForCategory } from "./catalogData";
 import { pickComparables } from "./comparables";
 
+// Grow a listing on scroll instead of behind a "Load more" button. Returns a
+// callback ref to place on a sentinel element at the bottom of the list; when
+// that sentinel scrolls near the viewport (600px early, so the next page is
+// already fetching before the user hits the end) and there's more to load,
+// `onLoadMoreRef.current` fires. Callback-ref based so the observer re-attaches
+// when the sentinel unmounts/remounts (e.g. grid⇄list toggle), and the load
+// callback is passed by ref so callers can wire it up after their loadMore is
+// defined. It keeps firing while the sentinel stays in view (short first pages
+// fill the viewport), guarded by `loading` so only one page is in flight.
+function useInfiniteScroll({ hasMore, loading, onLoadMoreRef }) {
+  const [sentinel, setSentinel] = useState(null);
+  const [nearViewport, setNearViewport] = useState(false);
+
+  useEffect(() => {
+    if (!sentinel) return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => setNearViewport(entry.isIntersecting),
+      { rootMargin: "600px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sentinel]);
+
+  useEffect(() => {
+    if (nearViewport && hasMore && !loading) onLoadMoreRef.current?.();
+  }, [nearViewport, hasMore, loading, onLoadMoreRef]);
+
+  return setSentinel;
+}
+
 export function SearchResults({ results, query = "", loading, onNavigate }) {
   const headerLabel = loading && !results.length
     ? "Searching…"
@@ -557,6 +587,21 @@ export function CatalogSupplierView({ supplierId, onNavigate }) {
       .finally(() => setLoadingMore(false));
   };
 
+  const hasMore = products.length < total;
+  const loadMoreRef = useRef(loadMore);
+  loadMoreRef.current = loadMore;
+  const sentinelRef = useInfiniteScroll({ hasMore, loading: loadingMore, onLoadMoreRef: loadMoreRef });
+  // One trailing sentinel for both layouts (only one is mounted at a time). It
+  // sits below the grid/table and auto-fetches the next page as it nears view.
+  const trailing = hasMore ? (
+    <div className="cat-scroll-more">
+      <div ref={sentinelRef} className="cat-scroll-sentinel" aria-hidden="true" />
+      {loadingMore && (
+        <span className="cat-scroll-loading"><span className="cart-spinner" />Loading more…</span>
+      )}
+    </div>
+  ) : null;
+
   const name = supplier?.name || "Supplier";
 
   return (
@@ -633,12 +678,7 @@ export function CatalogSupplierView({ supplierId, onNavigate }) {
               })}
             </div>
           </div>
-          {products.length < total && (
-            <button type="button" className="cat-pt-all" onClick={loadMore} disabled={loadingMore}>
-              {loadingMore ? "Loading…" : `Load more (${(total - products.length).toLocaleString()} more)`}
-              <Icon name="icon-chevron-right" className="button-icon" />
-            </button>
-          )}
+          {trailing}
         </>
       ) : (
         <>
@@ -691,12 +731,7 @@ export function CatalogSupplierView({ supplierId, onNavigate }) {
               </tbody>
             </table>
           </div>
-          {products.length < total && (
-            <button type="button" className="cat-pt-all" onClick={loadMore} disabled={loadingMore}>
-              {loadingMore ? "Loading…" : `Load more (${(total - products.length).toLocaleString()} more)`}
-              <Icon name="icon-chevron-right" className="button-icon" />
-            </button>
-          )}
+          {trailing}
         </>
       )}
     </div>
@@ -903,6 +938,16 @@ export function CatalogCategoryView({ slug, onNavigate }) {
     return () => controller.abort();
   }, [slug, sub, category]);
 
+  // Products still unfetched beyond what's loaded. Computed here (from state
+  // only) so the infinite-scroll hook can stay above the early return below.
+  const remaining = typeof productCount === "number" ? Math.max(productCount - products.length, 0) : 0;
+  const loadMoreRef = useRef();
+  const sentinelRef = useInfiniteScroll({
+    hasMore: showAllProducts && remaining > 0,
+    loading: loadingMore,
+    onLoadMoreRef: loadMoreRef,
+  });
+
   if (!category) {
     return (
       <div className="cat">
@@ -971,6 +1016,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
       })
       .finally(() => setLoadingMore(false));
   };
+  loadMoreRef.current = loadMore;
   const visibleProducts = showAllProducts ? products : products.slice(0, 8);
   // The grid is image-biased, so the first card isn't necessarily the cheapest.
   // Derive the lowest offer explicitly for the "Best price" card badge.
@@ -981,20 +1027,21 @@ export function CatalogCategoryView({ slug, onNavigate }) {
   }, null);
   const productsTitle = sub ? `Products in ${sub}` : `Popular products in ${category.name}`;
   const fmt = (value) => (typeof value === "number" ? value.toLocaleString() : "—");
-  // Products still unfetched beyond what's loaded. The listing pages the full
-  // department: first "View all N" reveals the loaded page, then "Load more"
-  // offset-fetches the rest until the grid reaches the real productCount.
-  const remaining = typeof productCount === "number" ? Math.max(productCount - products.length, 0) : 0;
-  const moreBtn = !showAllProducts && products.length > 8 ? (
+  // Trailing control under the listing. The department pages in two steps: the
+  // first "View all N" reveals the loaded page, then the grid grows on scroll —
+  // a sentinel auto-fetches the rest until it reaches the real productCount.
+  const trailing = !showAllProducts && products.length > 8 ? (
     <button type="button" className="cat-pt-all" onClick={() => setShowAllProducts(true)}>
       View all {fmt(productCount)} products in {category.name}
       <Icon name="icon-chevron-right" className="button-icon" />
     </button>
   ) : showAllProducts && remaining > 0 ? (
-    <button type="button" className="cat-pt-all" onClick={loadMore} disabled={loadingMore}>
-      {loadingMore ? "Loading…" : `Load more (${fmt(remaining)} more)`}
-      <Icon name="icon-chevron-right" className="button-icon" />
-    </button>
+    <div className="cat-scroll-more">
+      <div ref={sentinelRef} className="cat-scroll-sentinel" aria-hidden="true" />
+      {loadingMore && (
+        <span className="cat-scroll-loading"><span className="cart-spinner" />Loading more…</span>
+      )}
+    </div>
   ) : null;
 
   return (
@@ -1096,7 +1143,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                   );
                 })}
               </div>
-              {moreBtn}
+              {trailing}
             </div>
             ) : (
             <div className="cat-ptable-wrap">
@@ -1146,7 +1193,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
                   })}
                 </tbody>
               </table>
-              {moreBtn}
+              {trailing}
             </div>
             )
           ) : (

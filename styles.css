@@ -10277,6 +10277,14 @@ th {
 .cat-pt-skeleton { height: 53px; border-top: 1px solid var(--line); background: linear-gradient(100deg, var(--surface-2) 30%, #eef2fa 50%, var(--surface-2) 70%); background-size: 200% 100%; animation: catShimmer 1.2s infinite; }
 .cat-pt-skeleton:first-child { border-top: 0; }
 
+/* Infinite-scroll trailing region: an invisible sentinel that auto-fetches the
+   next page as it nears the viewport, plus a muted "Loading more…" indicator
+   shown only while a page is in flight (replaces the old "Load more" button). */
+.cat-scroll-more { position: relative; }
+.cat-scroll-sentinel { height: 1px; }
+.cat-scroll-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px; color: var(--muted); font-size: 13px; }
+.cat-scroll-loading .cart-spinner { width: 15px; height: 15px; }
+
 /* Popular products — card grid (View as: grid) */
 .cat-products-controls { display: flex; align-items: center; gap: 12px; }
 .cat-pgrid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
