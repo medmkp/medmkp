@@ -271,8 +271,17 @@ function findBatchToken(flat, barcode) {
     const tok = tokens[i];
     if (/[+*$]/.test(tok)) continue;            // part of a barcode / HIBC string
     if (/[()]/.test(tok)) continue;             // GS1 AI parens, e.g. "17)291019"
+    // A catalog/reference/serial marker names this token as an identifier, not a
+    // batch — skip it. Serial numbers (SN / S/N / SERIAL) sit on device/equipment
+    // labels (a curing light, a handpiece) exactly where a bare digit run would
+    // otherwise be mistaken for the lot, and a serial on a recall pull-list is as
+    // wrong as any other fabricated batch. Look back through an optional
+    // "NO"/"NUMBER"/"#" filler so "SERIAL NO 20451178" / "REF NO 660360" are caught
+    // as well as the bare "SN 20451178". (A genuine "LOT NO <value>" never reaches
+    // here — the keyword path claims it first.)
     const prev = tokens[i - 1] || "";
-    if (/(?:^|\b)(?:REF|REORDER|CAT|CATALOG|MODEL|SKU|REV)\b/.test(prev)) continue;
+    const marker = /^(?:N[O0]\.?|NUMBER|#)$/.test(prev) ? (tokens[i - 2] || "") : prev;
+    if (/(?:^|\b)(?:REF|REORDER|CAT|CATALOG|MODEL|SKU|REV|S\/?N|SERIAL)\b/.test(marker)) continue;
     if (/^[A-Z]\d{5,8}$/.test(tok)) return tok; // letter + digits stamp (A00626)
     const run = tok.match(/(?:^|[^0-9A-Z])(\d{6,14})(?:$|[^0-9A-Z])/);
     if (run && !isDateLikeDigits(run[1]) && !/\d-\d/.test(tok)) {

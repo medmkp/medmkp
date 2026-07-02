@@ -19,7 +19,14 @@ const FIXTURES = {
   // Henry Schein exam-gloves carton side (test/photos/IMG_0776.jpg), AUTO read.
   // The ISO boxed "LOT" symbol OCRs to "[or]" (no readable LOT letters), the batch
   // is a bare 11-digit run, and the expiry's hourglass symbol reads as "|".
-  "glovesBoxedLotSymbol": "[or] 24140121021\n\n| 2024-12-12\n\n"
+  "glovesBoxedLotSymbol": "[or] 24140121021\n\n| 2024-12-12\n\n",
+  // A dental curing-light device label, SPARSE_TEXT read of a rendered label run
+  // through the production pipeline. Devices carry a SERIAL number (SN), not a lot;
+  // there is no LOT on the carton. The bare serial "20451178" sits right where a
+  // batch run would, so without a serial-marker exclusion the numeric fallback
+  // surfaced it as the lot — a fabricated batch. "Mfg Date 2025-03" is a
+  // manufacture date, never an expiry.
+  "deviceSerialNoLot": "DentCure LED\n\nCordless Curing Light\n\nMODEL: DC-800\n\nREF 660360\n\nSN 20451178\n\nMfg Date 2025-03\n\nKerr Corporation Orange, CA USA\n"
 };
 
 test("reads a bare numeric lot when OCR drops the boxed LOT marker (HS gloves, 24015414)", () => {
@@ -57,6 +64,25 @@ test("does not surface an OCR fragment of the scanned HIBC code as a lot (Patter
   const r = parseLotExpiry(FIXTURES.pattersonHibcFragment, { barcode: "+D5207089953427" });
   assert.equal(r.lot, undefined);
   assert.equal(r.expiry, "2016-01-31");
+});
+
+test("does not surface a device serial number as a lot (SN / S/N / SERIAL)", () => {
+  // A curing-light carton carries a serial, not a batch — the bare "20451178" after
+  // "SN" must not be read as the lot (a serial on a recall pull-list is as wrong as
+  // any other fabricated batch), and the manufacture date is not an expiry.
+  const r = parseLotExpiry(FIXTURES.deviceSerialNoLot);
+  assert.equal(r.lot, undefined);
+  assert.equal(r.expiry, undefined);
+  // The marker's other spellings, and its "NO"/"NUMBER" filler, are all excluded.
+  assert.equal(parseLotExpiry("S/N 12345678").lot, undefined);
+  assert.equal(parseLotExpiry("SERIAL NO 12345678").lot, undefined);
+  assert.equal(parseLotExpiry("SERIAL: 24015414").lot, undefined);
+  // ...and the same "REF NO <value>" filler lookback catches a bare catalog number.
+  assert.equal(parseLotExpiry("REF NO 660360").lot, undefined);
+  // A genuine lot printed beside a serial still wins (keyword path), and a bare
+  // batch with no serial marker still reads.
+  assert.equal(parseLotExpiry("SN 99887766 LOT 24015414").lot, "24015414");
+  assert.equal(parseLotExpiry("24015414").lot, "24015414");
 });
 
 test("keyword path: plain LOT, NO. variant, and alphanumeric value", () => {
