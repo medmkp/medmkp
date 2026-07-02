@@ -15,6 +15,10 @@ services:
         value: production
       - key: MEDUSA_ADMIN_ONBOARDING_TYPE
         value: default
+      # Admin dashboard needs ~2GB RAM to build/serve; keep it off this 512MB
+      # Starter instance so `medusa start` doesn't heap-OOM. /admin/* API stays up.
+      - key: DISABLE_ADMIN
+        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: medmkp-postgres
