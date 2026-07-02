@@ -51,22 +51,32 @@ const categoriesPromise = new Map<number, Promise<CategoriesResponse>>()
 async function loadCategories(limit: number): Promise<CategoriesResponse> {
   const pool = getPostgresPool()
 
-  // The matview's product_count counts raw supplier SKUs (priced or not), which
-  // massively overstates what a buyer can actually open: the drill-down
-  // (/medmkp/canonical-products?category=) lists deduped, family-grouped
-  // canonical products that have at least one priced offer. Showing the SKU
-  // count on the landing made the two pages disagree wildly (Laboratory read
-  // 1,577 SKUs but only 84 browsable products). The priced canonical-family
-  // count per category — the same set, counted the same way as the drill-down
-  // query — is precomputed in the medmkp_category_priced_count read model
-  // (refreshed by refresh-catalog-read-models). Computing it live here meant a
-  // join over the full match + current-price tables on every request, which at
-  // prod's tiny work_mem spilled to disk and timed out the catalog landing.
-  const categories = await pool.query<CategoryRow>(
-    `SELECT category, product_count
-     FROM medmkp_category_priced_count
-     WHERE product_count > 0`
-  )
+  // The landing count must match what the drill-down actually lists, or the two
+  // pages disagree wildly (Laboratory once read 1,577 SKUs but only 84 browsable
+  // products). The drill-down (/medmkp/canonical-products?category=) now lists
+  // only families carried by ≥2 distinct suppliers, so count the same rows from
+  // the same read model it pages (medmkp_category_catalog_listing). The count is
+  // a narrow scan over the matview, cached 15 min below. Falls back to the older
+  // ≥1-priced-offer family count (medmkp_category_priced_count) while the
+  // listing matview is unpopulated (it's created WITH NO DATA on deploy and
+  // filled by the off-deploy refresh) — the drill-down's live fallback query is
+  // filtered the same way, so the fallback counts briefly overstate, matching
+  // the pre-refresh transitional state, not a steady-state mismatch.
+  let categories: { rows: CategoryRow[] }
+  try {
+    categories = await pool.query<CategoryRow>(
+      `SELECT category_key AS category, count(*)::int AS product_count
+       FROM medmkp_category_catalog_listing
+       WHERE offer_count >= 2
+       GROUP BY category_key`
+    )
+  } catch {
+    categories = await pool.query<CategoryRow>(
+      `SELECT category, product_count
+       FROM medmkp_category_priced_count
+       WHERE product_count > 0`
+    )
+  }
 
   // Supplier coverage is now derived from the normalized canonical category
   // carried by medmkp_supplier_catalog_listing.any_category. The older

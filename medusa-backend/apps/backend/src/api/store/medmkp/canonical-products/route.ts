@@ -230,14 +230,17 @@ async function queryCategoryProducts(
   const patternRe = pattern || null
 
   // Group size/spec variants under one card: the listing unit is the family
-  // (COALESCE(family_id, id)). The card's best offer is the cheapest by PER-UNIT
-  // price (F1), not sticker; families with no unit price fall back to sticker and
-  // rank after the priced ones. unit_price_cents comes straight from the
-  // medmkp_supplier_current_price read model (a column, not a per-row join), so
-  // this stays the one fast indexed query the listing was built around. The
-  // cross-base-unit guard (F2) lives on the product page where offers are
-  // compared side by side; a family is variants of one product, so its offers
-  // share a base unit in practice. variant_count is the family's size count.
+  // (COALESCE(family_id, id)). Only families carried by ≥2 distinct suppliers
+  // are listed, ranked by supplier count (popularity: the more suppliers stock
+  // it, the more mainstream — and comparable — the product). Within a supplier
+  // count the tiebreak is the cheapest PER-UNIT price (F1), not sticker;
+  // families with no unit price fall back to sticker and rank after the priced
+  // ones. unit_price_cents comes straight from the medmkp_supplier_current_price
+  // read model (a column, not a per-row join), so this stays the one fast
+  // indexed query the listing was built around. The cross-base-unit guard (F2)
+  // lives on the product page where offers are compared side by side; a family
+  // is variants of one product, so its offers share a base unit in practice.
+  // variant_count is the family's size count.
   const { rows } = await pool.query(
     `
     WITH cat AS (
@@ -297,7 +300,8 @@ async function queryCategoryProducts(
     JOIN best b ON b.grp = g.grp
     JOIN medmkp_supplier_product sp ON sp.id = b.supplier_product_id AND sp.deleted_at IS NULL
     LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
-    ORDER BY (b.unit_price_cents IS NULL) ASC, b.unit_price_cents ASC, b.price_cents ASC, g.any_name ASC
+    WHERE a.offer_count >= 2
+    ORDER BY a.offer_count DESC, (b.unit_price_cents IS NULL) ASC, b.unit_price_cents ASC, b.price_cents ASC, g.any_name ASC
     LIMIT $3 OFFSET $4
     `,
     [category, qLike, limit, offset, patternRe]
@@ -313,10 +317,13 @@ async function queryCategoryProducts(
 // current offer + counts) and join the supplier product for display fields of
 // just this page. The live CTE query above ranked the whole category's offer
 // graph on every cache miss (~13s for Gloves on prod); this is a single indexed
-// page read (~60ms), the category-keyed twin of querySupplierProducts. Used only
-// when there's no text/subcategory filter — the (category, unit_price, price)
-// index serves the ORDER BY + LIMIT/OFFSET directly. The category key is
-// lower(btrim(category)); the route already normalizes the param the same way.
+// page read, the category-keyed twin of querySupplierProducts. Used only when
+// there's no text/subcategory filter. Only ≥2-supplier families are listed,
+// most-suppliers first (see queryCategoryProducts for the rationale); the
+// (category_key, …) index prefix narrows to the category's rows and the
+// LIMIT bounds the popularity top-N sort, so the page read stays cheap. The
+// category key is lower(btrim(category)); the route already normalizes the
+// param the same way.
 async function queryCategoryListing(
   category: string,
   limit: number,
@@ -336,8 +343,8 @@ async function queryCategoryListing(
              any_handle, any_name, any_category, offer_count,
              price_cents, unit_price_cents, best_sp_id
       FROM medmkp_category_catalog_listing
-      WHERE category_key = $1
-      ORDER BY (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC, any_name ASC
+      WHERE category_key = $1 AND offer_count >= 2
+      ORDER BY offer_count DESC, (unit_price_cents IS NULL) ASC, unit_price_cents ASC, price_cents ASC, any_name ASC
       LIMIT $2 OFFSET $3
     )
     SELECT
@@ -351,11 +358,11 @@ async function queryCategoryListing(
       sp.pack_size AS best_pack_size, sp.pack_quantity AS best_pack_qty,
       sp.base_unit AS best_base_unit, sp.pack_basis AS best_pack_basis,
       sp.supplier_id AS best_supplier_id, s.name AS best_supplier_name,
-      (SELECT count(*) FROM medmkp_category_catalog_listing WHERE category_key = $1) AS total_count
+      (SELECT count(*) FROM medmkp_category_catalog_listing WHERE category_key = $1 AND offer_count >= 2) AS total_count
     FROM page
     JOIN medmkp_supplier_product sp ON sp.id = page.best_sp_id AND sp.deleted_at IS NULL
     LEFT JOIN medmkp_supplier s ON s.id = sp.supplier_id AND s.deleted_at IS NULL
-    ORDER BY (page.unit_price_cents IS NULL) ASC, page.unit_price_cents ASC, page.price_cents ASC, page.any_name ASC
+    ORDER BY page.offer_count DESC, (page.unit_price_cents IS NULL) ASC, page.unit_price_cents ASC, page.price_cents ASC, page.any_name ASC
     `,
     [category, limit, offset]
   )
