@@ -366,9 +366,14 @@ export function parseLotExpiry(text, { barcode } = {}) {
   }
 
   let expiry;
-  // Prefer a keyword-tagged date (EXP / USE BY / BEST BEFORE), which is
-  // unambiguous — trusted even if it's in the past, since an expired item on the
-  // shelf is exactly what we want to surface.
+  // Prefer a keyword-tagged date (EXP / USE BY / USE BEFORE / BEST BEFORE / BEST
+  // BY), which is unambiguous — trusted even if it's in the past, since an expired
+  // item on the shelf is exactly what we want to surface. "USE BEFORE" and "BEST
+  // BY" are the everyday shelf-life phrasings a carton stamps instead of "USE BY" /
+  // "BEST BEFORE" (US OTC + dental cartons print both), so the marker accepts either
+  // word after "USE"/"BEST"; without them their compact "MM/YY" date is dropped —
+  // the bare-date fallback below reads only 4-digit years, so a keyword-vouched
+  // "USE BEFORE 09/26" loses its expiry entirely.
   // The value window is wide enough for a fully-spelled month *with* a day and a
   // 4-digit year ("SEPTEMBER 15, 2027" / "15 SEPTEMBER 2027" are 18/17 chars);
   // normalizeExpiry still finds the date inside, so a longer capture just gives it
@@ -386,7 +391,7 @@ export function parseLotExpiry(text, { barcode } = {}) {
   // rather than grabbing the lot/Mfg date that sits right after the header. shortYear
   // lets this trusted, keyword-vouched path read a 2-digit-year MM/YY ("09/21") that
   // the bare fallback deliberately won't.
-  const expKw = flat.match(/\b(?:EXP(?:IR(?:Y|ES|ATION))?|USE BY|BEST BEFORE|BB)\b[\s:.]*(?:DATE\b[\s:.]*(?=\d{1,2}\s*[-/.]))?([0-9A-Z][0-9A-Z\-/., ]{4,18})/);
+  const expKw = flat.match(/\b(?:EXP(?:IR(?:Y|ES|ATION))?|USE (?:BY|BEFORE)|BEST (?:BEFORE|BY)|BB)\b[\s:.]*(?:DATE\b[\s:.]*(?=\d{1,2}\s*[-/.]))?([0-9A-Z][0-9A-Z\-/., ]{4,18})/);
   if (expKw) expiry = normalizeExpiry(expKw[1], { shortYear: true });
   if (!expiry) {
     const aiExp = flat.match(/\(17\)\s*(\d{6})\b/);
