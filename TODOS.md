@@ -2,6 +2,16 @@
 
 Deferred work. Each item is written down so it isn't a vague intention.
 
+## Relaunch dormant surfaces
+
+Launch trim keeps the code, backend routes, and data in place, but hides these surfaces from the rail and routes them back to `/app` through `app/launchSurfaces.js`:
+
+- [ ] **Needs Attention** — relight by changing `dashboard` from `dormant` to `live`; restore a launch-appropriate CTA if it should be promoted again.
+- [ ] **Locations** — relight `locations`, `locationDetail`, `locationAdd`, `officeLayout`, and `qrLabels` together so board/detail/layout/QR links do not strand users.
+- [ ] **Savings** — relight `savings` when the launch pricing story includes savings proof again.
+- [ ] **Evidence** — relight `evidence`, `evidenceReview`, `evidenceViewer`, `evidenceRedline`, and `evidenceBinder` together; scan evidence writes are paused for launch and need the scanner issue's relaunch decision before this becomes active.
+- [ ] **Reports** — relight `reports` once evidence/reporting is back in the product surface.
+
 ## Paid accounts — deferred past first-dollar (from /plan-ceo-review 2026-06-30)
 
 These do not block taking the first real payment (the thin paid path ships without them).

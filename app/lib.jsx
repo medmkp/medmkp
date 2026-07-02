@@ -1,5 +1,6 @@
 "use client";
 
+import { isDormant } from "./launchSurfaces";
 
 export const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
@@ -75,6 +76,11 @@ export function viewFromPath(pathname = "/") {
   const [rawPath, rawQuery = ""] = pathname.split("#")[0].split("?");
   const path = rawPath.replace(/\/+$/, "") || "/";
   const query = new URLSearchParams(rawQuery);
+  const authRoute = (route) => (
+    isDormant(route.view)
+      ? { view: "home", isLoggedIn: true, dormantRedirect: true }
+      : route
+  );
 
   // Public site
   if (path === "/") return { view: "landing", isLoggedIn: false };
@@ -93,24 +99,23 @@ export function viewFromPath(pathname = "/") {
   if (path === "/styleguide") return { view: "styleguide", isLoggedIn: false };
 
   // Authenticated app
-  if (path === "/app") return { view: "home", isLoggedIn: true };
-  // The Needs Attention dashboard is its own destination, reachable on every
-  // device (the mobile scanner hub and the bell CTA link here). Desktop /app
-  // also renders this content via the "home" view.
-  if (path === "/app/needs-attention") return { view: "dashboard", isLoggedIn: true };
-  if (path === "/app/reorder-list") return { view: "reorderList", isLoggedIn: true };
-  if (path === "/app/scan") return { view: "home", isLoggedIn: true, mobileAddItemRoute: true };
+  if (path === "/app") return authRoute({ view: "home", isLoggedIn: true });
+  // The Needs Attention dashboard is dormant for launch. Keep resolving the
+  // legacy path here, then let the launch-surface registry send it home.
+  if (path === "/app/needs-attention") return authRoute({ view: "dashboard", isLoggedIn: true });
+  if (path === "/app/reorder-list") return authRoute({ view: "reorderList", isLoggedIn: true });
+  if (path === "/app/scan") return authRoute({ view: "home", isLoggedIn: true, mobileAddItemRoute: true });
   // The session-less scanner. /app/scan-session is canonical; /app/scan-sessions
   // (and any legacy /app/scan-sessions/:id deep link) resolve to the same surface.
   if (path === "/app/scan-session" || path === "/app/scan-sessions")
-    return { view: "scanner", isLoggedIn: true, scanLocationId: query.get("location") || "", scanMode: query.get("mode") || "" };
-  if (path.startsWith("/app/scan-sessions/")) return { view: "scanner", isLoggedIn: true };
+    return authRoute({ view: "scanner", isLoggedIn: true, scanLocationId: query.get("location") || "", scanMode: query.get("mode") || "" });
+  if (path.startsWith("/app/scan-sessions/")) return authRoute({ view: "scanner", isLoggedIn: true });
   // Read-only on-site presentation mode. Query params filter the viewer to one
   // context: a location, a tracked item (optionally a lot), or a single document.
   // No params = the whole-practice view. Unknown ids fall through to an honest
   // not-found state in the viewer, so any param value is safe to route.
   if (path === "/app/evidence/viewer")
-    return {
+    return authRoute({
       view: "evidenceViewer",
       isLoggedIn: true,
       evidenceContext: {
@@ -119,46 +124,46 @@ export function viewFromPath(pathname = "/") {
         lot: query.get("lot") || "",
         doc: query.get("doc") || "",
       },
-    };
-  if (path === "/app/evidence/redline") return { view: "evidenceRedline", isLoggedIn: true };
-  if (path === "/app/evidence/binder") return { view: "evidenceBinder", isLoggedIn: true };
+    });
+  if (path === "/app/evidence/redline") return authRoute({ view: "evidenceRedline", isLoggedIn: true });
+  if (path === "/app/evidence/binder") return authRoute({ view: "evidenceBinder", isLoggedIn: true });
   // Evidence Match Review — confirm an ambiguous upload before it's linked.
   // `?sample=empty` previews the no-candidate state (manual-link / review-later).
   if (path === "/app/evidence/review")
-    return { view: "evidenceReview", isLoggedIn: true, evidenceSample: query.get("sample") || "" };
-  if (path === "/app/evidence") return { view: "evidence", isLoggedIn: true };
-  if (path === "/app/reports") return { view: "reports", isLoggedIn: true };
+    return authRoute({ view: "evidenceReview", isLoggedIn: true, evidenceSample: query.get("sample") || "" });
+  if (path === "/app/evidence") return authRoute({ view: "evidence", isLoggedIn: true });
+  if (path === "/app/reports") return authRoute({ view: "reports", isLoggedIn: true });
   // /app/plan is the former name — kept so old links/bookmarks still resolve.
-  if (path === "/app/review/handoff" || path === "/app/plan/handoff") return { view: "handoff", isLoggedIn: true, handoffId: query.get("ho") || "" };
-  if (path === "/app/review" || path === "/app/plan") return { view: "plan", isLoggedIn: true };
-  if (path === "/app/history") return { view: "history", isLoggedIn: true };
-  if (path.startsWith("/app/history/")) return { view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" };
-  if (path === "/app/locations/new") return { view: "locationAdd", isLoggedIn: true };
-  if (path === "/app/locations/qr-labels") return { view: "qrLabels", isLoggedIn: true };
-  if (path === "/app/office-layout") return { view: "officeLayout", isLoggedIn: true };
-  if (path === "/app/locations/layout") return { view: "officeLayout", isLoggedIn: true };
-  if (path === "/app/locations/office-layout") return { view: "officeLayout", isLoggedIn: true };
-  if (path.startsWith("/app/locations/")) return { view: "locationDetail", isLoggedIn: true, locationId: decodeURIComponent(path.split("/")[3] || "") };
-  if (path === "/app/locations") return { view: "locations", isLoggedIn: true };
-  if (path === "/app/savings") return { view: "savings", isLoggedIn: true };
-  if (path === "/app/catalog") return { view: "catalog", isLoggedIn: true };
-  if (path === "/app/catalog/search") return { view: "catalogSearch", isLoggedIn: true, searchQuery: query.get("q") || "" };
-  if (path.startsWith("/app/catalog/supplier/")) return { view: "catalogSupplier", isLoggedIn: true, supplierId: decodeURIComponent(path.split("/")[4] || "") };
-  if (path.startsWith("/app/catalog/")) return { view: "catalogCategory", isLoggedIn: true, categorySlug: decodeURIComponent(path.split("/")[3] || "") };
-  if (path.startsWith("/app/product/")) return { view: "productDetail", isLoggedIn: true, productHandle: decodeURIComponent(path.split("/")[3] || "") };
-  if (path === "/app/settings") return { view: "settings", isLoggedIn: true };
+  if (path === "/app/review/handoff" || path === "/app/plan/handoff") return authRoute({ view: "handoff", isLoggedIn: true, handoffId: query.get("ho") || "" });
+  if (path === "/app/review" || path === "/app/plan") return authRoute({ view: "plan", isLoggedIn: true });
+  if (path === "/app/history") return authRoute({ view: "history", isLoggedIn: true });
+  if (path.startsWith("/app/history/")) return authRoute({ view: "historyDetail", isLoggedIn: true, historyId: path.split("/")[3] || "" });
+  if (path === "/app/locations/new") return authRoute({ view: "locationAdd", isLoggedIn: true });
+  if (path === "/app/locations/qr-labels") return authRoute({ view: "qrLabels", isLoggedIn: true });
+  if (path === "/app/office-layout") return authRoute({ view: "officeLayout", isLoggedIn: true });
+  if (path === "/app/locations/layout") return authRoute({ view: "officeLayout", isLoggedIn: true });
+  if (path === "/app/locations/office-layout") return authRoute({ view: "officeLayout", isLoggedIn: true });
+  if (path.startsWith("/app/locations/")) return authRoute({ view: "locationDetail", isLoggedIn: true, locationId: decodeURIComponent(path.split("/")[3] || "") });
+  if (path === "/app/locations") return authRoute({ view: "locations", isLoggedIn: true });
+  if (path === "/app/savings") return authRoute({ view: "savings", isLoggedIn: true });
+  if (path === "/app/catalog") return authRoute({ view: "catalog", isLoggedIn: true });
+  if (path === "/app/catalog/search") return authRoute({ view: "catalogSearch", isLoggedIn: true, searchQuery: query.get("q") || "" });
+  if (path.startsWith("/app/catalog/supplier/")) return authRoute({ view: "catalogSupplier", isLoggedIn: true, supplierId: decodeURIComponent(path.split("/")[4] || "") });
+  if (path.startsWith("/app/catalog/")) return authRoute({ view: "catalogCategory", isLoggedIn: true, categorySlug: decodeURIComponent(path.split("/")[3] || "") });
+  if (path.startsWith("/app/product/")) return authRoute({ view: "productDetail", isLoggedIn: true, productHandle: decodeURIComponent(path.split("/")[3] || "") });
+  if (path === "/app/settings") return authRoute({ view: "settings", isLoggedIn: true });
   // Landing spot after Stripe hosted Checkout. `status` (success|canceled) is set
   // by the checkout route's success_url/cancel_url; `returnTo` is where to drop the
   // buyer once their plan activates (defaults to the app home).
   if (path === "/app/billing/return")
-    return {
+    return authRoute({
       view: "billingReturn",
       isLoggedIn: true,
       billingReturnStatus: query.get("status") || "",
       billingReturnTo: query.get("returnTo") || "",
-    };
+    });
 
-  return { view: "home", isLoggedIn: true };
+  return authRoute({ view: "home", isLoggedIn: true });
 }
 
 
