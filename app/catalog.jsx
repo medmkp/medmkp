@@ -714,6 +714,7 @@ export function CatalogCategoryView({ slug, onNavigate }) {
   const [products, setProducts] = useState([]);
   const [productCount, setProductCount] = useState(null);
   const [topSuppliers, setTopSuppliers] = useState([]);
+  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
   const [status, setStatus] = useState("loading");
   const [sub, setSub] = useState("");
   const [productLayout, setProductLayout] = useState("grid");
@@ -1179,17 +1180,25 @@ export function CatalogCategoryView({ slug, onNavigate }) {
             <section className="cat-panel">
               <header><h3>Top suppliers</h3></header>
               <ul className="cat-supplier-list">
-                {topSuppliers.slice(0, 5).map((supplier) => (
+                {(showAllSuppliers ? topSuppliers : topSuppliers.slice(0, 5)).map((supplier) => (
                   <li key={supplier.id}>
-                    <CatalogSupplierAvatar name={supplier.name} />
-                    <span className="cat-supplier-name">{supplier.name}</span>
-                    <em>{(supplier.product_count || 0).toLocaleString()}</em>
+                    <button
+                      type="button"
+                      className="cat-supplier-link"
+                      onClick={() => onNavigate(`/app/catalog/supplier/${encodeURIComponent(supplier.id)}`)}
+                    >
+                      <CatalogSupplierAvatar name={supplier.name} />
+                      <span className="cat-supplier-name">{supplier.name}</span>
+                      <em>{(supplier.product_count || 0).toLocaleString()}</em>
+                    </button>
                   </li>
                 ))}
               </ul>
-              <button type="button" className="cat-panel-action" onClick={() => onNavigate("/app/settings")}>
-                View all {topSuppliers.length} suppliers
-              </button>
+              {topSuppliers.length > 5 && (
+                <button type="button" className="cat-panel-action" onClick={() => setShowAllSuppliers((open) => !open)}>
+                  {showAllSuppliers ? "Show fewer suppliers" : `View all ${topSuppliers.length} suppliers`}
+                </button>
+              )}
             </section>
           )}
 
