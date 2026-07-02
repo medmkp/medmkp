@@ -2,24 +2,12 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { MEDMKP_MODULE } from "../../../../modules/medmkp"
 import type MedMKPModuleService from "../../../../modules/medmkp/service"
 import { getPostgresPool } from "../../../../utils/postgres"
+import {
+  latestPriceSnapshotsByProduct,
+  type LatestPriceSnapshot,
+} from "../../../../utils/latest-price-snapshots"
 import { analyzeOffers, compareOffers, isUnitComparable } from "../../../../matching/offers"
 import { MARKETPLACE_SUPPLIER_IDS } from "../../../../ingestion/marketplace/suppliers"
-
-function latestSnapshotsByProduct(snapshots: Awaited<ReturnType<MedMKPModuleService["listSupplierPriceSnapshots"]>>) {
-  return snapshots.reduce((acc, snapshot) => {
-    const existing = acc.get(snapshot.supplier_product_id)
-
-    if (
-      !existing ||
-      new Date(snapshot.captured_at).getTime() >
-        new Date(existing.captured_at).getTime()
-    ) {
-      acc.set(snapshot.supplier_product_id, snapshot)
-    }
-
-    return acc
-  }, new Map<string, (typeof snapshots)[number]>())
-}
 
 function normalize(value: string | null) {
   return value?.trim().toLowerCase() || ""
@@ -60,9 +48,9 @@ async function resolveSupplierProductPage(
   // the model id, not an added marker). Fall back to a stripped variant in case
   // a caller prepended the prefix to a bare id.
   const candidateIds = [handle, handle.slice("msp_".length)]
-  const [supplierProducts, snapshots, suppliers] = await Promise.all([
+  const [supplierProducts, latestPrices, suppliers] = await Promise.all([
     medmkp.listSupplierProducts({ id: candidateIds }),
-    medmkp.listSupplierPriceSnapshots({ supplier_product_id: candidateIds }),
+    latestPriceSnapshotsByProduct(candidateIds),
     medmkp.listSuppliers(),
   ])
   const supplierProduct = supplierProducts[0]
@@ -71,7 +59,7 @@ async function resolveSupplierProductPage(
   }
   const supplierProductId = supplierProduct.id
   const supplier = suppliers.find((s) => s.id === supplierProduct.supplier_id)
-  const latest = latestSnapshotsByProduct(snapshots).get(supplierProductId)
+  const latest = latestPrices.get(supplierProductId)
   const offer =
     latest && latest.price_cents > 0
       ? {
@@ -755,16 +743,13 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     ...new Set(matches.map((match) => match.supplier_product_id)),
   ]
 
-  const [supplierProducts, priceSnapshots, suppliers] = supplierProductIds.length
+  const [supplierProducts, latestPrices, suppliers] = supplierProductIds.length
     ? await Promise.all([
         medmkp.listSupplierProducts({ id: supplierProductIds }),
-        medmkp.listSupplierPriceSnapshots({
-          supplier_product_id: supplierProductIds,
-        }),
+        latestPriceSnapshotsByProduct(supplierProductIds),
         medmkp.listSuppliers(),
       ])
-    : [[], [], []]
-  const latestPrices = latestSnapshotsByProduct(priceSnapshots)
+    : [[], new Map<string, LatestPriceSnapshot>(), []]
   const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]))
   // Index supplier products and group matches by canonical product up front so
   // enrichment is linear. The previous nested filter()/find() per product was
