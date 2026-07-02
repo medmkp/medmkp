@@ -1182,7 +1182,7 @@ export function RedlineView({ data = REDLINE_MOCK, onBack, onToast }) {
           {/* Detected changes */}
           <section className={s.rlCard}>
             <div className={s.rlCardHead}>
-              <h2 className={s.rlCardTitle}><span className={s.rlStep}>1</span>Detected changes ({material.length})</h2>
+              <h2 className={s.rlCardTitle}><span className={s.rlStep}>1</span>Detected changes ({visibleChanges.length})</h2>
               {minor.length > 0 && (
                 <label className={s.rlToggle}>
                   <span>Show minor changes ({minor.length})</span>
