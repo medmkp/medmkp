@@ -95,7 +95,7 @@ describe("buildSupplierCatalogIngestion", () => {
     expect(name).toBe('Calset Quik-Tip™ 5.5" Tray')
   })
 
-  const baseInput = (rows: { sku?: string; name?: string; price_cents?: number }[]) => ({
+  const baseInput = (rows: { sku?: string; name?: string; price_cents?: number; raw?: unknown }[]) => ({
     supplier_id: "msup_pearson",
     source_type: "website" as const,
     source_catalog: "pearson-dental-website-public",
@@ -183,5 +183,29 @@ describe("buildSupplierCatalogIngestion", () => {
     expect((ingestion.supplierProducts[0] as { id: string }).id).toBe(
       "msp_msup_pearson_pearson_dental_website_public_809_151"
     )
+  })
+
+  it("persists the adapter's variant id (raw.variant_id) as external_variant_id", () => {
+    // Shopify adapters capture the numeric variant id in raw; cart permalinks
+    // are built from the stored column, so it must survive ingestion.
+    const ingestion = buildSupplierCatalogIngestion(
+      baseInput([
+        { sku: "VAR-1", name: "Prophy Paste Mint", price_cents: 100, raw: { variant_id: 51368978121025 } },
+        { sku: "VAR-2", name: "Prophy Paste Grape", price_cents: 100, raw: { variant_id: "51368978121026" } },
+        { sku: "NOVAR-1", name: "Cotton Gauze Sponge", price_cents: 100, raw: { extracted_by: "practicon" } },
+        { sku: "NOVAR-2", name: "Nitrile Gloves Medium", price_cents: 100 },
+      ]),
+      []
+    )
+    const byId = new Map(
+      ingestion.supplierProducts.map((p) => {
+        const row = p as { sku: string; external_variant_id: string | null }
+        return [row.sku, row.external_variant_id]
+      })
+    )
+    expect(byId.get("VAR-1")).toBe("51368978121025")
+    expect(byId.get("VAR-2")).toBe("51368978121026")
+    expect(byId.get("NOVAR-1")).toBeNull()
+    expect(byId.get("NOVAR-2")).toBeNull()
   })
 })

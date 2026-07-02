@@ -17,6 +17,11 @@ const SupplierProduct = model.define("medmkp_supplier_product", {
   // Where the barcode came from: null/"supplier" for an ingested one, "gudid"
   // when borrowed from the FDA GUDID reference via a brand+MPN join.
   barcode_source: model.text().nullable(),
+  // The supplier platform's own id for this exact purchasable variant (e.g. the
+  // numeric Shopify variant id). Cart deep links need it: Shopify's
+  // /cart/{variant}:{qty} permalink only accepts variant ids, and resolving one
+  // live per product is what forced the wrong-variant "first available" guess.
+  external_variant_id: model.text().nullable(),
   brand: model.text().searchable(),
   name: model.text().searchable(),
   description: model.text().searchable(),
