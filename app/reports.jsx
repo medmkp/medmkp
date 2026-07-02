@@ -23,13 +23,7 @@ const MATCH_TONE = { exact: "ok", details: "warn", review: "bad" };
 
 const MOCK = {
   scope: "All locations · Last 30 days",
-  stats: [
-    { key: "scanned", icon: "icon-package", tint: "blue", value: 37, label: "Scanned" },
-    { key: "confirmed", icon: "icon-check-circle", tint: "green", value: 29, label: "Confirmed" },
-    { key: "details", icon: "icon-alert-triangle", tint: "amber", value: 6, label: "Need details" },
-    { key: "review", icon: "icon-x-circle", tint: "red", value: 2, label: "Need review" },
-    { key: "reorder", icon: "icon-cart", tint: "teal", value: 8, label: "Reorder candidates" },
-  ],
+  totalScanned: 37,
   // Action Required — grouped by issue, compliance issues above reorder noise.
   actionGroups: [
     {
@@ -90,18 +84,6 @@ const MOCK = {
     { id: "n5", title: "Export final PDF", sub: "Generate and share report", icon: "icon-file-text" },
   ],
 };
-
-function StatCard({ icon, label, value, tint }) {
-  return (
-    <div className={s.stat}>
-      <span className={`${s.statIcon} ${s[`stat_${tint}`]}`}><Icon name={icon} /></span>
-      <div className={s.statBody}>
-        <strong className={s.statValue}>{value}</strong>
-        <span className={s.statLabel}>{label}</span>
-      </div>
-    </div>
-  );
-}
 
 // Small product placeholder tile (no real product imagery in the FE mock).
 function ProdGlyph() {
@@ -176,10 +158,6 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
         </div>
       </header>
 
-      <section className={s.stats}>
-        {data.stats.map((st) => <StatCard key={st.key} icon={st.icon} tint={st.tint} value={st.value} label={st.label} />)}
-      </section>
-
       <div className={s.main}>
         <div className={s.col}>
           {/* Action Required */}
@@ -236,7 +214,7 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
           <section className={s.tableCard}>
             <div className={s.cardHead}>
               <h2 className={s.cardTitle}>Scanned inventory</h2>
-              <span className={s.cardMeta}>{filteredScanned.length} of {data.stats[0].value} records</span>
+              <span className={s.cardMeta}>{filteredScanned.length} of {data.totalScanned} records</span>
             </div>
             <div className={s.toolbar}>
               <label className={s.search}>
@@ -296,7 +274,7 @@ export function ReportsView({ data = MOCK, onToast, onNavigate }) {
               </table>
             </div>
             <div className={s.pagination}>
-              <span className={s.pageInfo}>Showing 1 to {filteredScanned.length} of {data.stats[0].value} records</span>
+              <span className={s.pageInfo}>Showing 1 to {filteredScanned.length} of {data.totalScanned} records</span>
               <div className={s.pager}>
                 <button type="button" className={s.pageBtn} aria-label="Previous" onClick={() => soon("Pagination")}><Icon name="icon-chevron-left" /></button>
                 {["1", "2", "3", "…", "7"].map((n, i) => (

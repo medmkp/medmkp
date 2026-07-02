@@ -78,32 +78,6 @@ const TONE = { blue: s.tBlue, green: s.tGreen, amber: s.tAmber, red: s.tRed, vio
 // Text/foreground tone (no background) for inline icons + status labels.
 const TONE_TEXT = { blue: s.txBlue, green: s.txGreen, amber: s.txAmber, red: s.txRed };
 
-function Stat({ icon, tint, tone, label, value, meta, compact }) {
-  // Mobile renders the compact KPI card used by the scan Review screen: icon +
-  // number share one line, a short label sits centered below, meta is dropped.
-  if (compact) {
-    return (
-      <div className={s.statMini}>
-        <div className={`${s.statMiniTop} ${tone}`}>
-          <Icon name={icon} />
-          <span className={s.statMiniVal}>{value}</span>
-        </div>
-        <span className={s.statMiniLabel}>{label}</span>
-      </div>
-    );
-  }
-  return (
-    <div className={s.stat}>
-      <span className={`${s.statIcon} ${tint}`}><Icon name={icon} /></span>
-      <div className={s.statBody}>
-        <span className={s.statLabel}>{label}</span>
-        <strong className={s.statValue}>{value}</strong>
-        {meta ? <span className={s.statMeta}>{meta}</span> : null}
-      </div>
-    </div>
-  );
-}
-
 // Custom dropdown: the native <select> popup is rendered by the OS and can't be
 // styled, so we render our own trigger + menu in the app font. Closes on
 // outside-click or Escape, matching the Needs Attention filters and the topbar
@@ -327,23 +301,6 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
     [locations],
   );
 
-  const stats = useMemo(() => {
-    const list = locations || [];
-    const total = list.length;
-    const denom = total || 1;
-    const scanned = list.filter((l) => l.last_scanned_at).length;
-    const tracked = list.reduce((sum, l) => sum + (l.item_count || 0), 0);
-    const needAttention = list.filter((l) => (l.needs_attention_count || 0) > 0).length;
-    return {
-      total,
-      tracked,
-      scanned,
-      scannedPct: Math.round((scanned / denom) * 100),
-      needAttention,
-      needAttentionPct: Math.round((needAttention / denom) * 100),
-    };
-  }, [locations]);
-
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     let rows = cards.filter((l) => {
@@ -394,13 +351,6 @@ export function LocationsBoardView({ onStartScan, onAddLocation, onOpenLocation,
           Track rooms, cabinets, and scan coverage across the office. Start scanning, resolve issues, and monitor location health.
         </p>
       </header>
-
-      <div className={isMobile ? s.statsMini : s.stats}>
-        <Stat compact={isMobile} icon="icon-map-pin" tint={s.tBlue} tone={s.txBlue} label="Total locations" value={stats.total} />
-        <Stat compact={isMobile} icon="icon-package" tint={s.tBlue} tone={s.txBlue} label="Items tracked" value={stats.tracked} />
-        <Stat compact={isMobile} icon="icon-alert-triangle" tint={s.tAmber} tone={s.txAmber} label="Need attention" value={stats.needAttention} meta={`${stats.needAttentionPct}% of locations`} />
-        <Stat compact={isMobile} icon="icon-scan" tint={s.tGreen} tone={s.txGreen} label="Locations scanned" value={stats.scanned} meta={`${stats.scannedPct}% of locations`} />
-      </div>
 
       <div className={s.toolbar}>
         {!isMobile && (
@@ -1239,7 +1189,7 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
     const traced = items.filter((it) => it.lot_number && it.expiration_date).length;
     const expiring = active.filter((it) => (it.lifecycle || deriveLifecycleClient(it)) === "expiring").length;
     const expired = active.filter((it) => (it.lifecycle || deriveLifecycleClient(it)) === "expired").length;
-    return { tracked: items.length, traced, expiring, expired };
+    return { traced, expiring, expired };
   }, [items]);
 
   const visibleItems = useMemo(() => {
@@ -1523,13 +1473,6 @@ export function LocationDetailView({ locationId, onBack, onStartScan, onToast, o
 
       <div className={s.detailGrid}>
         <div className={s.detailMain}>
-          <div className={s.stats}>
-            <Stat icon="icon-package" tint={s.tBlue} label="Tracked items" value={top.tracked} />
-            <Stat icon="icon-shield-check" tint={s.tGreen} label="Lot &amp; expiry captured" value={`${tracePct}%`} />
-            <Stat icon="icon-clock" tint={s.tAmber} label="Expiring soon" value={top.expiring} />
-            <Stat icon="icon-alert-triangle" tint={s.tRed} label="Expired (pull now)" value={top.expired} />
-          </div>
-
           <section className={s.locHeader}>
             <div className={s.locHeadMain}>
               <span className={`${s.cardIcon} ${meta.tint}`}><Icon name={meta.icon} /></span>

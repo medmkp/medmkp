@@ -45,82 +45,11 @@
   line-height: 1.5;
 }
 
-/* ── Stat row ───────────────────────────────────────────────────────── */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-}
-
-.stat {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #fff;
-  border: 1px solid #e6ebf2;
-  border-radius: 14px;
-  padding: 16px;
-}
-
-.statIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.statIcon svg {
-  width: 25px;
-  height: 25px;
-}
-
-.statBody {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.statLabel {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: #6b7888;
-}
-
-.statValue {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--ink);
-  line-height: 1.1;
-}
-
-.statMeta {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-}
-
-/* Tone tints, shared by stat icons + mini-stats + activity dots. */
+/* Tone tints, shared by mini-stats + activity dots. */
 .tBlue { color: #155dfc; background: #eaf1ff; }
 .tGreen { color: #0a9861; background: #e5f6ec; }
 .tAmber { color: #c2710c; background: #fff3db; }
 .tRed { color: var(--red); background: rgba(209, 53, 43, 0.1); }
-
-/* Compact KPI cards (mobile only) — mirrors the scan Review screen's statGrid
-   so the Location Board header matches the just-merged Shelf Audit review. */
-.statsMini { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.statMini {
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 10px 4px 9px; border-radius: 12px;
-  border: 1px solid #e7ecf3; background: #fff;
-}
-.statMini svg { width: 17px; height: 17px; }
-.statMiniTop { display: flex; align-items: center; gap: 6px; }
-.statMiniVal { font-size: 19px; font-weight: 600; color: #14202E; line-height: 1; }
-.statMiniLabel { font-size: 11px; color: #6a7889; text-align: center; line-height: 1.15; }
 .tViolet { color: #7c3aed; background: #f1ecff; }
 .tIndigo { color: #4f46e5; background: #ebecff; }
 .tTeal { color: #0d9488; background: #e1f6f1; }
@@ -1356,13 +1285,11 @@
 }
 
 @media (max-width: 1024px) {
-  .stats { grid-template-columns: repeat(2, 1fr); }
   .useGrid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 720px) {
   .cards { grid-template-columns: 1fr; }
-  .stats { grid-template-columns: 1fr; }
   .toolbarSpacer { display: none; }
   .formRow { grid-template-columns: 1fr; }
   .useGrid { grid-template-columns: 1fr; }

@@ -524,19 +524,6 @@ function Donut({ data, total, size = 122 }) {
   );
 }
 
-function StatCard({ icon, label, value, sub, tint }) {
-  return (
-    <div className={s.stat}>
-      <span className={`${s.statIcon} ${s[`stat_${tint}`]}`}><Icon name={icon} /></span>
-      <div className={s.statBody}>
-        <span className={s.statLabel}>{label}</span>
-        <strong className={s.statValue}>{value}</strong>
-        {sub && <span className={s.statSub}>{sub}</span>}
-      </div>
-    </div>
-  );
-}
-
 // File-type logo keyed off the filename extension (PDF / Word / Excel / image),
 // falling back to a generic sheet for records with no underlying file.
 function FileGlyph({ name = "" }) {
@@ -633,14 +620,6 @@ export function EvidenceView({ data = EVIDENCE_MOCK, onToast, onBuildPacket, onR
           </button>
         </div>
       </header>
-
-      {/* Headline counts */}
-      <section className={s.stats}>
-        <StatCard icon="icon-folder" tint="blue" label="Total evidence files" value={data.stats.total} sub={`Across ${data.stats.locations} locations`} />
-        <StatCard icon="icon-shield-check" tint="green" label="Verified" value={data.stats.verified} sub="Ready for audits" />
-        <StatCard icon="icon-alert-triangle" tint="amber" label="Missing proof" value={data.stats.missing} sub="Needs follow-up" />
-        <StatCard icon="icon-link" tint="blue" label="Linked to tracked items" value={data.stats.linked} sub="Connected to inventory" />
-      </section>
 
       {/* A supplier published a newer version of a document on file — surface the
           review entry point (the redline surface). Honest: it's a detected diff
