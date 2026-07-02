@@ -209,6 +209,37 @@ describe("parseProximityCards (Amazon shape)", () => {
       price_cents: 4599,
     })
   })
+
+  it("drops a card whose only detail link wraps the price block (no product name)", () => {
+    // Amazon sometimes makes the price itself a /dp/ link; its inner text is the
+    // split-span price ("$11.50 $ 11 . 50"), which was being ingested verbatim as
+    // the product name — 244 such Amazon canonicals shipped to the catalog.
+    const priceAsTitle = `
+      <a class="a-link-normal" href="/dp/B0PRICE0001/ref=sr_1_1"><span class="a-offscreen">$11.50</span><span class="a-price-symbol">$</span><span class="a-price-whole">11<span class="a-price-decimal">.</span></span><span class="a-price-fraction">50</span></a>
+    `
+    const results = parseProximityCards(priceAsTitle, baseUrl, {
+      detailUrlPattern: AMAZON_DETAIL_PATTERN,
+    })
+
+    expect(results).toHaveLength(0)
+  })
+
+  it("recovers the real name from title=/alt= when the link wraps only the price", () => {
+    const priceLinkWithAltName = `
+      <div data-asin="B0PRICE0002">
+        <a class="a-link-normal" title="Prophy Paste Medium Mint 200/Box" href="/dp/B0PRICE0002/ref=sr_1_1"><span class="a-price-symbol">$</span><span class="a-price-whole">27<span class="a-price-decimal">.</span></span><span class="a-price-fraction">95</span><span class="a-size-base"> ( $1.50 /fluid ounce)</span></a>
+      </div>
+    `
+    const results = parseProximityCards(priceLinkWithAltName, baseUrl, {
+      detailUrlPattern: AMAZON_DETAIL_PATTERN,
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({
+      title: "Prophy Paste Medium Mint 200/Box",
+      price_cents: 2795,
+    })
+  })
 })
 
 describe("parseJsonLdResults", () => {
