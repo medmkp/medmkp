@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import type { MedusaContainer } from "@medusajs/framework"
-import { buildSupplierCatalogIngestion } from "../ingestion/supplier-catalog"
+import { boundedId, buildSupplierCatalogIngestion } from "../ingestion/supplier-catalog"
 import {
   reconcileSupplierCatalog,
   type ReconcileInput,
@@ -420,22 +420,31 @@ async function ensureSupplierFromVetting(
     )
   }
 
-  await medmkp.createSuppliers([
-    {
-      id: entry.supplier_id,
-      name: entry.supplier_name,
-      slug: entry.slug,
-      website_url: entry.website_url,
-      support_email: "",
-      onboarding_status: "in_review" as const,
-      ein_last_four: "",
-      certification_summary: `Usable dental supplier lead from research CSV. ${entry.notes}`,
-      default_lead_time_days: 0,
-      ach_enabled: false,
-      catalog_source_urls: JSON.stringify([entry.source_url]),
-      catalog_source_notes: `Seeded from vetted supplier CSV. Source company row: ${entry.source_company_name}. ${entry.notes}`,
-    },
-  ])
+  try {
+    await medmkp.createSuppliers([
+      {
+        id: entry.supplier_id,
+        name: entry.supplier_name,
+        slug: entry.slug,
+        website_url: entry.website_url,
+        support_email: "",
+        onboarding_status: "in_review" as const,
+        ein_last_four: "",
+        certification_summary: `Usable dental supplier lead from research CSV. ${entry.notes}`,
+        default_lead_time_days: 0,
+        ach_enabled: false,
+        catalog_source_urls: JSON.stringify([entry.source_url]),
+        catalog_source_notes: `Seeded from vetted supplier CSV. Source company row: ${entry.source_company_name}. ${entry.notes}`,
+      },
+    ])
+  } catch (error) {
+    // Lost a create race against a concurrent ingest of the same supplier
+    // (manual DAG + weekly fleet can overlap): the row existing is the goal.
+    const rows = await medmkp.listSuppliers()
+    if (!rows.some((supplier) => supplier.id === entry.supplier_id)) {
+      throw error
+    }
+  }
 
   const sources = await medmkp.listSupplierCatalogSources()
   const hasSource = sources.some(
@@ -444,20 +453,34 @@ async function ensureSupplierFromVetting(
       source.source_catalog === entry.source_catalog
   )
   if (!hasSource) {
-    await medmkp.createSupplierCatalogSources([
-      {
-        id: `mscs_${entry.slug.replace(/-/g, "_")}`,
-        supplier_id: entry.supplier_id,
-        source_type: entry.source_type,
-        source_catalog: entry.source_catalog,
-        source_url: entry.source_url,
-        auth_required: false,
-        refresh_frequency: "manual" as const,
-        last_crawled_at: new Date().toISOString(),
-        status: "active" as const,
-        notes: `Seeded from vetted supplier CSV. Source company row: ${entry.source_company_name}.`,
-      },
-    ])
+    try {
+      await medmkp.createSupplierCatalogSources([
+        {
+          // Same id scheme as the commit-path reconcile, so the first commit
+          // updates this row in place instead of soft-deleting it as stale.
+          id: boundedId("mscs", [entry.supplier_id, entry.source_catalog]),
+          supplier_id: entry.supplier_id,
+          source_type: entry.source_type,
+          source_catalog: entry.source_catalog,
+          source_url: entry.source_url,
+          auth_required: false,
+          refresh_frequency: "manual" as const,
+          last_crawled_at: new Date().toISOString(),
+          status: "active" as const,
+          notes: `Seeded from vetted supplier CSV. Source company row: ${entry.source_company_name}.`,
+        },
+      ])
+    } catch (error) {
+      const rows = await medmkp.listSupplierCatalogSources()
+      const nowExists = rows.some(
+        (source) =>
+          source.supplier_id === entry.supplier_id &&
+          source.source_catalog === entry.source_catalog
+      )
+      if (!nowExists) {
+        throw error
+      }
+    }
   }
 
   console.log(

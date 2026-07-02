@@ -80,6 +80,14 @@ fi
 QUERY="$1"
 DRY_RUN="${2:-}"
 
+# Fail closed on a flag typo (--dryrun, -n, ...): anything unrecognized must
+# not fall through to a live trigger against the prod-committing NUC Airflow.
+if [[ -n "$DRY_RUN" && "$DRY_RUN" != "--dry-run" ]]; then
+  echo "Unknown argument: $DRY_RUN (did you mean --dry-run?)" >&2
+  usage >&2
+  exit 1
+fi
+
 if ! SUPPLIER_ID="$(resolve_supplier_id "$QUERY")"; then
   list_suppliers >&2
   exit 1
@@ -89,7 +97,9 @@ CONF="{\"supplier_id\": \"$SUPPLIER_ID\"}"
 REMOTE_CMD="cd '$NUC_REPO_DIR/airflow' && docker compose exec -T airflow airflow dags trigger $DAG_ID --conf '$CONF'"
 
 if [[ "$DRY_RUN" == "--dry-run" ]]; then
-  echo "ssh $NUC_HOST \"$REMOTE_CMD\""
+  # %q so the printed line, copy-pasted, passes ssh exactly the same argument
+  # the script would (a plain echo would mangle the --conf JSON quoting).
+  printf 'ssh %q %q\n' "$NUC_HOST" "$REMOTE_CMD"
   exit 0
 fi
 

@@ -34,6 +34,14 @@ echo "Rebuilding and restarting Airflow..."
 cd airflow
 docker compose up -d --build
 
+# Idempotent: creates or resizes the single-slot ingest pool every ingestion
+# DAG queues through (referenced via the medmkp_supplier_ingest_pool Variable).
+# Strict on purpose: tasks referencing a missing pool are never scheduled, so a
+# failed creation must fail the deploy, not pass silently.
+echo "Ensuring the single-slot ingest pool exists..."
+docker compose exec -T airflow airflow pools set medmkp_supplier_ingest 1 \
+  "Single-slot pool serializing supplier crawls on this one box"
+
 echo "Airflow status:"
 docker compose ps
 REMOTE

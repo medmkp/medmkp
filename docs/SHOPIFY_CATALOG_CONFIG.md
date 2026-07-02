@@ -44,7 +44,10 @@ from the same file:
 - **Airflow** (`airflow/dags/shopify_supplier_ingestion.py`) reads the registry
   at parse time: the vendor joins the weekly `shopify_catalog_refresh` fleet
   DAG and the `shopify_supplier_ingest` trigger dropdown automatically after
-  `npm run deploy:airflow`.
+  `npm run deploy:airflow`. Note: `shopify_catalog_refresh` lands **paused** on
+  first creation (fleet convention — dormant until customer onboarding);
+  unpause it once on the NUC to activate the weekly schedule. The manual
+  `shopify_supplier_ingest` DAG is unpaused and works immediately.
 - **Trigger a run** from your dev machine (resolves slug or `msup_` id against
   the registry, then fires the DAG on the NUC over ssh):
 

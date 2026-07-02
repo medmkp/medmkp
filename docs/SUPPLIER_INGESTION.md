@@ -252,7 +252,10 @@ fleet:
 
 - `shopify_catalog_refresh` — weekly fleet refresh (Sun 04:00 by default; tune
   with the `medmkp_shopify_refresh_schedule` Variable), one mapped task per
-  registered supplier.
+  registered supplier. It lands **paused** on first deploy (fleet convention —
+  dormant until customer onboarding); unpause it once to activate the weekly
+  schedule. The manual `shopify_supplier_ingest` DAG is unpaused and works
+  immediately.
 
 Both pass `--ensure-supplier`, which auto-creates the `medmkp_supplier` row
 from the vetting entry on first run — no manual seed step for Shopify vendors.
@@ -264,25 +267,28 @@ proven-adapter suppliers weekly by running `supplier:ingest:db --commit` per
 supplier with tuned concurrency flags. Henry Schein has a dedicated
 `henry_schein` DAG at 16:00 UTC that runs `henryschein:ingest --commit`,
 including public web-price enrichment.
-The DAGs need the `tracedds_backend_dir` Airflow Variable and an env file with the
+The DAGs need the `medmkp_backend_dir` Airflow Variable and an env file with the
 target `DATABASE_URL` (Render Postgres: `DB_SSL=true`) — set the
-`tracedds_env_file` Variable to `.env.production` on hosts that target the remote
+`medmkp_env_file` Variable to `.env.production` on hosts that target the remote
 database (`.env` is reserved for local development). Ingestion commands export
 `ALLOW_REMOTE_DB_DESTRUCTIVE=true` to pass the db-safety guard that otherwise
 blocks destructive scripts on non-local databases.
 
 The supported deployment is Docker: `airflow/docker-compose.yml` runs Airflow
 standalone (LocalExecutor + Postgres metadata DB) from a custom image with
-Node 20 (`airflow/Dockerfile`), bind-mounts the repo at `/opt/tracedds`, and sets
-the DAG's Airflow Variables via `AIRFLOW_VAR_*` environment entries — commits
-are disabled by default until `AIRFLOW_VAR_TRACEDDS_SUPPLIER_INGEST_COMMIT` is
-flipped to `true`. Setup commands are documented at the top of the compose file.
+Node 20 (`airflow/Dockerfile`), bind-mounts the repo at `/opt/medmkp`, and sets
+the DAG's Airflow Variables via `AIRFLOW_VAR_*` environment entries — the
+compose file ships `AIRFLOW_VAR_MEDMKP_SUPPLIER_INGEST_COMMIT: "true"`; set it
+to `"false"` there for dry runs. Setup commands are documented at the top of
+the compose file.
 
 After committing and pushing changes, deploy the NUC instance from your
 development machine with `npm run deploy:airflow` at the repo root. The deploy
-helper SSHes to `nuc`, fast-forwards `/opt/tracedds` from the current branch,
-and runs `docker compose up -d --build` in `airflow/`. Override defaults with
-`NUC_HOST`, `NUC_REPO_DIR`, or `BRANCH` when needed.
+helper SSHes to `nuc`, fast-forwards `/opt/medmkp` from the current branch,
+runs `docker compose up -d --build` in `airflow/`, and idempotently creates the
+single-slot `medmkp_supplier_ingest` pool that serializes all crawls on the
+box. Override defaults with `NUC_HOST`, `NUC_REPO_DIR`, or `BRANCH` when
+needed.
 
 Before a supplier can be scheduled it must exist in `tracedds_supplier`. Sky
 Dental and Shasta Dental seed rows are tracked in

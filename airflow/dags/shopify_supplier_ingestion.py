@@ -31,7 +31,13 @@ Expected Airflow Variables (same keys as supplier_catalog_ingestion.py):
   medmkp_supplier_ingest_commit, medmkp_supplier_ingest_state_root
 - medmkp_shopify_refresh_schedule: cron for the fleet refresh, defaults to
   "0 4 * * 0" (Sun 04:00, the slot the hand-written Shopify entries used);
-  set to "none" to make the fleet manual-only.
+  "none"/"manual"/"" makes the fleet manual-only.
+
+The fleet DAG also caps itself at one mapped task at a time
+(max_active_tis_per_dag=1) so it stays serial even where the ingest pool
+Variable/pool is missing — 8 concurrent Node crawls would OOM the 4g NUC
+container. shopify_catalog_refresh lands paused (fleet convention: dormant
+until customer onboarding) — unpause it once to activate the weekly schedule.
 """
 
 from __future__ import annotations
@@ -54,6 +60,12 @@ STATE_ROOT = Variable.get(
     default_var=f"{BACKEND_DIR}/.medmkp/ingestion/airflow",
 )
 REFRESH_SCHEDULE = Variable.get("medmkp_shopify_refresh_schedule", default_var="0 4 * * 0")
+
+
+def parse_schedule(raw: str) -> str | None:
+    # Same semantics as the marketplace/net32/amazon DAGs: ""/"none"/"manual"
+    # all mean manual-trigger only.
+    return None if raw.strip().lower() in ("", "none", "manual") else raw
 
 # The registry lives in the same bind-mounted checkout as this DAG file, so a
 # path relative to __file__ resolves both on the NUC and in local dev.
@@ -127,6 +139,19 @@ npm run supplier:ingest:db -- {arg_string}
 """.strip()
 
 
+# The manual DAG's commit refuses to run while the weekly fleet is active:
+# commits are delete-and-replace per supplier, and a manual commit *retry* that
+# interleaves with a fleet run of the same supplier would re-commit an older
+# extract snapshot over the fleet's fresher one. Checked in the commit task
+# itself (not at trigger time) so the guard also covers retries.
+FLEET_GUARD = """
+if airflow dags list-runs -d shopify_catalog_refresh --state running -o plain 2>/dev/null | grep -q running; then
+  echo "shopify_catalog_refresh is running; refusing to commit over it. Retry after it finishes." >&2
+  exit 1
+fi
+""".strip()
+
+
 def stage_command(stage: str) -> str:
     args = [
         "--supplier-id={{ params.supplier_id }}",
@@ -138,7 +163,10 @@ def stage_command(stage: str) -> str:
     if stage == "commit" and COMMIT_ENABLED:
         args.append("--commit")
     args.extend(SHOPIFY_ARGS)
-    return bash_ingest_command(args)
+    command = bash_ingest_command(args)
+    if stage == "commit":
+        command = FLEET_GUARD + "\n" + command
+    return command
 
 
 def refresh_command(supplier: dict[str, str]) -> str:
@@ -163,8 +191,10 @@ with DAG(
     # of queueing behind a pause toggle.
     is_paused_upon_creation=False,
     params={
+        # No default: a conf-less trigger is rejected instead of silently
+        # ingesting whichever supplier's vetting file sorts first (defaults are
+        # re-resolved per task, so they can even drift mid-run as files land).
         "supplier_id": Param(
-            SUPPLIER_IDS[0],
             type="string",
             enum=SUPPLIER_IDS,
             description="Supplier to ingest (from data/supplier-vetting/*-catalog-sources.json).",
@@ -204,7 +234,7 @@ with DAG(
         "task per supplier; the shared ingest pool serializes them)."
     ),
     start_date=datetime(2026, 1, 1),
-    schedule=None if REFRESH_SCHEDULE.lower() == "none" else REFRESH_SCHEDULE,
+    schedule=parse_schedule(REFRESH_SCHEDULE),
     catchup=False,
     max_active_runs=1,
     is_paused_upon_creation=True,
@@ -214,6 +244,10 @@ with DAG(
         task_id="ingest_supplier",
         pool=POOL,
         retries=1,
+        # Serialize the mapped crawls even if the ingest pool Variable/pool is
+        # missing (POOL then falls back to the 128-slot default_pool): 8
+        # concurrent Node ingests would OOM the 4g single-box container.
+        max_active_tis_per_dag=1,
         append_env=True,
         map_index_template="{{ task.env['MEDMKP_SUPPLIER_SLUG'] }}",
     ).expand_kwargs(
