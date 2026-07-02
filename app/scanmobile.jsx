@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogoMark, Icon, QrScanGlyph } from "./icons";
-import { formatExpiryDate, isQrUrl, money, parseLocationQr } from "./lib";
+import { formatExpiryDate, isQrUrl, money, parseLocationQr, pickBestOffer } from "./lib";
 import { ProductSearchResults, useBarcodeScanner, useProductSearch } from "./ui";
 import s from "./scanmobile.module.css";
 
@@ -859,9 +859,12 @@ function ReorderScanSheet({ result, onPersist, onDismiss, onViewProduct }) {
   const handle = item.canonicalHandle || "";
   const supplierCount = new Set((item.offers || []).map((o) => o?.supplier).filter(Boolean)).size;
   const canView = matched && typeof onViewProduct === "function" && Boolean(handle);
-  // The best offer the catalog lookup attached — the immediate "what should I
-  // pay" answer. A price of 0 means no purchasable offer (price-gated supplier).
-  const best = item.bestOffer && item.bestOffer.price > 0 ? item.bestOffer : null;
+  // The recommended offer — availability-aware best per-unit price across the
+  // item's supplier offers (the same ranking the comparison sheet leads with),
+  // not merely the first offer the lookup returned. A price of 0 means no
+  // purchasable offer (price-gated supplier).
+  const bestOffer = pickBestOffer(item.offers, null, item) || item.bestOffer;
+  const best = bestOffer && bestOffer.price > 0 ? bestOffer : null;
   const initialLot = item.lot || "";
   const initialExp = item.expirationDate ? String(item.expirationDate).slice(0, 10) : "";
   const [lot, setLot] = useState(initialLot);
