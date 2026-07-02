@@ -104,6 +104,7 @@ describe("loadShopifyConfigs (real vetting files)", () => {
       "msup_carolinadental_com",
       "msup_thedentaldistributors_com",
       "msup_davisdentalsupply_com",
+      "msup_bitesupply_com",
     ]) {
       expect(bySupplier.has(id)).toBe(true)
     }
@@ -135,6 +136,11 @@ describe("adapterForCandidate routes migrated Shopify vendors (origin + distribu
       name: "davisdentalsupply (CF-fronted)",
       origin: candidate({ distributor: "Whoever", url: "https://www.davisdentalsupply.com/products/x" }),
       distributor: candidate({ distributor: "Davis Dental Supply", url: "https://supplier.test/x" }),
+    },
+    {
+      name: "bite supply (CF-fronted)",
+      origin: candidate({ distributor: "Whoever", url: "https://bitesupply.com/products/x" }),
+      distributor: candidate({ distributor: "Bite Supply", url: "https://supplier.test/x" }),
     },
   ]
 
