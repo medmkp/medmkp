@@ -24,12 +24,12 @@ const MIN_GRID_ROWS = 3;
 
 // Per-type icon + tint, reusing the shared icon sprite and stat-tint classes.
 const TYPE_META = {
-  operatory: { icon: "icon-grid", tint: "blue", label: "Operatory" },
-  cabinet: { icon: "icon-archive-down", tint: "indigo", label: "Cabinet" },
+  operatory: { icon: "icon-dental-chair", tint: "blue", label: "Operatory" },
+  cabinet: { icon: "icon-cabinet", tint: "indigo", label: "Cabinet" },
   sterilization: { icon: "icon-shield-check", tint: "teal", label: "Sterilization" },
-  lab: { icon: "icon-bolt", tint: "violet", label: "Lab" },
+  lab: { icon: "icon-flask", tint: "violet", label: "Lab" },
   storage: { icon: "icon-package", tint: "slate", label: "Storage" },
-  emergency_kit: { icon: "icon-alert-triangle", tint: "rose", label: "Emergency kit" },
+  emergency_kit: { icon: "icon-first-aid", tint: "rose", label: "Emergency kit" },
   other: { icon: "icon-map-pin", tint: "sky", label: "Location" },
 };
 
