@@ -34,6 +34,31 @@ of vetting objects; an entry opts into config-driven Shopify routing by adding:
 - Configs are validated **fail-closed**: a `platform: "shopify"` entry with a
   missing/invalid `origin` throws at load, so a typo fails loudly instead of
   silently dropping the vendor to the generic adapter.
+- Add the new `supplier_id` to the expected-ids receipt list in
+  `adapters/__tests__/shopify.unit.spec.ts` (the routing test cases themselves
+  derive from the registry — no hand-written case needed).
+
+That's the whole onboarding. Scheduling, triggering, and DB seeding all derive
+from the same file:
+
+- **Airflow** (`airflow/dags/shopify_supplier_ingestion.py`) reads the registry
+  at parse time: the vendor joins the weekly `shopify_catalog_refresh` fleet
+  DAG and the `shopify_supplier_ingest` trigger dropdown automatically after
+  `npm run deploy:airflow`. Note: `shopify_catalog_refresh` lands **paused** on
+  first creation (fleet convention — dormant until customer onboarding);
+  unpause it once on the NUC to activate the weekly schedule. The manual
+  `shopify_supplier_ingest` DAG is unpaused and works immediately.
+- **Trigger a run** from your dev machine (resolves slug or `msup_` id against
+  the registry, then fires the DAG on the NUC over ssh):
+
+  ```bash
+  npm run ingest:supplier -- --list        # see registered vendors
+  npm run ingest:supplier -- <slug>        # trigger ingestion
+  ```
+
+- **DB seeding is automatic**: the DAGs pass `--ensure-supplier`, so the first
+  run creates the `medmkp_supplier` row from the vetting entry (create-only —
+  editing an existing supplier is still `supplier:seed-usable`'s job).
 
 ## Field reality — what Shopify vendors will and won't have
 
@@ -64,10 +89,10 @@ of vetting objects; an entry opts into config-driven Shopify routing by adding:
   through the candidate.
 - **Price seam:** `shopify-catalog-extraction.ts:140-150` (dollars passthrough) vs
   `adapters/shopify.ts` `price()` (cents ÷ 100).
-- **Airflow one-DAG-per-supplier array:** `airflow/dags/supplier_catalog_ingestion.py`
-  `SUPPLIERS = [...]` (still present — DAG generalization is future work; note this
-  array also drives non-Shopify suppliers, so it cannot be replaced by a
-  Shopify-only glob wholesale).
+- **Airflow registry-driven DAGs:** `airflow/dags/shopify_supplier_ingestion.py`
+  globs the same vetting JSONs at parse time. The legacy
+  `supplier_catalog_ingestion.py` `SUPPLIERS = [...]` array now carries only
+  non-Shopify suppliers.
 
 ## Remaining work (tracked by the parent issue)
 
@@ -76,4 +101,8 @@ of vetting objects; an entry opts into config-driven Shopify routing by adding:
 2. Golden-fixture harness (offline CI replay with field-level assertions).
 3. Config→discovery runtime consumer in `runSupplierIngestionPipeline` (seed
    `platform:"shopify"` origins into discovery; origin-level fetch bypass).
-4. Airflow DAG generalization (per-vendor cron/args in config `fetch`).
+4. ~~Airflow DAG generalization~~ — done: registry-driven
+   `shopify_supplier_ingest` (manual, supplier dropdown) +
+   `shopify_catalog_refresh` (weekly fleet) in
+   `airflow/dags/shopify_supplier_ingestion.py`, triggered from a dev machine
+   via `npm run ingest:supplier -- <slug>`.

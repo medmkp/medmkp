@@ -83,6 +83,11 @@ services:
       AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
       AIRFLOW_VAR_MEDMKP_BACKEND_DIR: /opt/medmkp/medusa-backend/apps/backend
       AIRFLOW_VAR_MEDMKP_SUPPLIER_INGEST_COMMIT: "true"
+      # Single-slot pool that serializes all supplier crawls on this one box.
+      # The pool itself is created idempotently by scripts/deploy-airflow-nuc.sh
+      # (`airflow pools set`); without this Variable the DAGs silently fall
+      # back to the 128-slot default_pool and crawls can run concurrently.
+      AIRFLOW_VAR_MEDMKP_SUPPLIER_INGEST_POOL: medmkp_supplier_ingest
       # The DAG defaults NODE_OPTIONS to an 8GB heap cap; keep ingestion tasks
       # within reach of a small host (the DAG runs up to 3 suppliers at once).
       NODE_OPTIONS: --max-old-space-size=2048

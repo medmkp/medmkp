@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "fs"
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs"
 import { dirname, resolve } from "path"
 import { parseCsv } from "./csv"
 
@@ -501,4 +501,56 @@ export function writeSupplierVettingOutputs(
 
 export function defaultSupplierVettingOutputDir() {
   return resolve(dirname(__dirname), "../data/supplier-vetting")
+}
+
+/**
+ * Load every vetting entry from `data/supplier-vetting/*-catalog-sources.json`.
+ * These per-supplier files are the supplier registry: the same entries drive
+ * Shopify adapter routing (`adapters/shopify-config.ts`), the registry-driven
+ * Airflow DAGs (`airflow/dags/shopify_supplier_ingestion.py`), and DB seeding.
+ */
+export function loadUsableSupplierCatalogSources(
+  dir: string = defaultSupplierVettingOutputDir()
+): UsableSupplierCatalogSource[] {
+  const entries: UsableSupplierCatalogSource[] = []
+
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith("-catalog-sources.json")) {
+      continue
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(readFileSync(resolve(dir, file), "utf8"))
+    } catch (error) {
+      throw new Error(
+        `Supplier vetting file ${file}: invalid JSON (${(error as Error).message})`
+      )
+    }
+
+    if (!Array.isArray(parsed)) {
+      continue
+    }
+
+    for (const entry of parsed) {
+      if (
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as Record<string, unknown>).supplier_id === "string"
+      ) {
+        entries.push(entry as UsableSupplierCatalogSource)
+      }
+    }
+  }
+
+  return entries
+}
+
+export function findUsableSupplierCatalogSource(
+  supplierId: string,
+  dir?: string
+): UsableSupplierCatalogSource | undefined {
+  return loadUsableSupplierCatalogSources(dir).find(
+    (entry) => entry.supplier_id === supplierId
+  )
 }
