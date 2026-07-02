@@ -9836,6 +9836,10 @@ th {
 
 .pdp-layout { display: grid; grid-template-columns: minmax(0, 1fr) 324px; gap: 20px; align-items: start; }
 .pdp-main { display: grid; gap: 16px; min-width: 0; }
+/* Without this, the pricing table's 760px min-width propagates through the
+   cards' min-content and pushes every card under the sticky rail at narrow
+   two-column widths; with it, the table scrolls inside .pdp-table-wrap. */
+.pdp-main > * { min-width: 0; }
 .pdp-rail { display: grid; gap: 16px; position: sticky; top: 26px; }
 
 /* Hero */
@@ -10015,7 +10019,9 @@ th {
 .pdp-help .secondary-action { width: 100%; margin-top: 12px; }
 .pdp-help .secondary-action .button-icon { width: 16px; height: 16px; }
 
-@media (max-width: 1080px) {
+/* Below ~1280px the main column can't fit the hero (300px image + body) next
+   to the 324px rail — drop to one column before it gets that tight. */
+@media (max-width: 1280px) {
   .pdp-layout { grid-template-columns: minmax(0, 1fr); }
   .pdp-rail { position: static; }
 }
